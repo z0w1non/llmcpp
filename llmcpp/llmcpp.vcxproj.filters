@@ -15,11 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-<<<<<<< HEAD
     <ClCompile Include="main.cpp">
-=======
-    <ClCompile Include="..\main.cpp">
->>>>>>> a6e871155728ab8addfebc07cb31fbce450953bc
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
