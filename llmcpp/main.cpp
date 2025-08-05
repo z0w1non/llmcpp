@@ -1283,7 +1283,7 @@ void set_seed(config& config)
     }
 }
 
-int itereate(config& config, prompts& prompts)
+int iterate(config& config, prompts& prompts)
 {
     int iteration_count = 0;
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
@@ -1319,7 +1319,7 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    if (itereate(config, prompts))
+    if (iterate(config, prompts))
     {
         return -1;
     }
