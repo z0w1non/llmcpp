@@ -63,7 +63,7 @@ class command_line_syntax_exception : public base_exception {};
 namespace error_info
 {
     using stacktrace = boost::error_info<struct tag_stacktrace, boost::stacktrace::stacktrace>;
-    using description = boost::error_info<struct description_tag, std::string>;
+    using description = boost::error_info<struct tag_description, std::string>;
     using path = boost::error_info<struct tag_file_path, std::filesystem::path>;
     using string = boost::error_info<struct tag_string, std::string>;
 
