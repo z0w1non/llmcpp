@@ -616,10 +616,10 @@ llm_response send_oobabooga_completions_request(
                 result.completion_tokens = choices.front().second.get<int>("completion_tokens", 0);
                 result.total_tokens = choices.front().second.get<int>("total_tokens", 0);
             }
-            catch (const pt::ptree_bad_path& e)
+            catch (const pt::ptree_bad_path& exception)
             {
                 // Could not parse response text.
-                throw socket_exception{} << error_info::description{ std::string{ "Error parsing response: " } + e.what() };
+                throw socket_exception{} << error_info::description{ std::string{ "Error parsing response: " } + exception.what() };
             }
         }
         else
