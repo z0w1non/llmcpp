@@ -1221,7 +1221,7 @@ std::string prompts::to_string(const config& config) const
     return result;
 }
 
-int read_prompts(const config& config, prompts& prompts)
+void read_prompts(const config& config, prompts& prompts)
 {
     read_file_to_string(prompts.system_prompts, config.system_prompts_file);
     read_file_to_container(prompts.examples, config.examples_file);
@@ -1229,22 +1229,18 @@ int read_prompts(const config& config, prompts& prompts)
     std::filesystem::path history_file_path{ config.history_directory };
     history_file_path /= config.history_file;
     read_file_to_container(prompts.history, history_file_path);
-
-    return 0;
 }
 
-int write_response(const config& config, const std::string& response)
+void write_response(const config& config, const std::string& response)
 {
     std::filesystem::path output_file_path{ config.output_directory };
     output_file_path /= config.output_file;
 
     boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
     ofs << response;
-
-    return 0;
 }
 
-int generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
+void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
 {
     std::string prompts_string = prompts.to_string(config);
     prompts_string = expand_macro(prompts_string, config.macros);
@@ -1255,12 +1251,10 @@ int generate_and_output(const config& config, prompts& prompts, const std::strin
     if (config.split_task)
     {
         split_task(config, response);
-        return 0;
+        return;
     }
 
     write_response(config, response);
-
-    return 0;
 }
 
 int generate_random_seed()
