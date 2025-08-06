@@ -19,11 +19,15 @@
 #include <boost/log/utility/setup/file.hpp>
 #include <boost/log/utility/setup/console.hpp>
 #include <boost/log/support/date_time.hpp>
+#include <boost/log/sources/severity_logger.hpp>
 #include <boost/nowide/args.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/iostream.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
+#include <boost/stacktrace.hpp>
+#include <boost/exception/all.hpp>
+#include <system_error>
 #include <string>
 #include <sstream>
 #include <cstdio>
@@ -38,6 +42,47 @@
 #include <map>
 #include <deque>
 #include <memory>
+#include <stdexcept>
+
+
+class base_exception
+    : public boost::exception
+{
+public:
+    explicit base_exception();
+};
+
+class base_exception;
+class io_exception : public base_exception {};
+class file_open_exception : public io_exception {};
+class socket_exception : public io_exception {};
+class text_generation_exception : public base_exception {};
+class syntax_exception : public base_exception {};
+class command_line_syntax_exception : public base_exception {};
+
+namespace error_info
+{
+    using stacktrace = boost::error_info<struct tag_stacktrace, boost::stacktrace::stacktrace>;
+    using description = boost::error_info<struct description_tag, std::string>;
+    using path = boost::error_info<struct tag_file_path, std::filesystem::path>;
+    using string = boost::error_info<struct tag_string, std::string>;
+
+    namespace http
+    {
+        namespace response
+        {
+            using result_int = boost::error_info<struct tag_result_int, unsigned int>;
+            using reason = boost::error_info<struct tag_result_int, std::string>;
+            using body = boost::error_info<struct tag_body, std::string>;
+        }
+    }
+}
+
+base_exception::base_exception()
+{
+    *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
+}
+
 
 struct completions_parameters
 {
@@ -171,8 +216,6 @@ struct llm_response
     int prompt_tokens{};
     int completion_tokens{};
     int total_tokens{};
-
-    int error_code{};
 };
 
 struct prompts
@@ -212,7 +255,7 @@ void split_string_by_new_line(const std::string& str, Container& container)
 }
 
 template <typename Container>
-int read_file_to_container(Container& container, const std::filesystem::path& file)
+void read_file_to_container(Container& container, const std::filesystem::path& file)
 {
     container.clear();
     if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
@@ -220,17 +263,14 @@ int read_file_to_container(Container& container, const std::filesystem::path& fi
         boost::nowide::ifstream ifs{ file };
         if (!ifs.is_open())
         {
-            BOOST_LOG_TRIVIAL(error) << "File open error. " << file;
-            return 1;
+            throw file_open_exception{} << error_info::path{ file };
         }
         const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
         split_string_by_new_line(file_content, container);
     }
-
-    return 0;
 }
 
-int read_file_to_string(std::string& result, const std::filesystem::path& file)
+void read_file_to_string(std::string& result, const std::filesystem::path& file)
 {
     result.clear();
     if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
@@ -238,14 +278,11 @@ int read_file_to_string(std::string& result, const std::filesystem::path& file)
         boost::nowide::ifstream ifs{ file };
         if (!ifs.is_open())
         {
-            BOOST_LOG_TRIVIAL(error) << "File open error. " << file;
-            return 1;
+            throw file_open_exception{} << error_info::path{ file };
         }
         const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
         result = file_content;
     }
-
-    return 0;
 }
 
 std::string include_predefiend_macro(const std::string& right)
@@ -277,7 +314,7 @@ std::string expand_predefined_macro(
         return found->second(right);
     }
 
-    BOOST_LOG_TRIVIAL(error) << "Undefined  predefined macro: " << left;
+    BOOST_LOG_TRIVIAL(warning) << "Undefined predefined macro: " << left;
     return {};
 }
 
@@ -387,36 +424,28 @@ std::vector<item> parse_item_list(const std::string& str)
     return result;
 }
 
-int split_task(const config& config, const std::string& task)
+void split_task(const config& config, const std::string& task)
 {
-    try
-    {
-        std::vector<item> items = parse_item_list(task);
+    std::vector<item> items = parse_item_list(task);
 
-        for (const item& item : items)
+    for (const item& item : items)
+    {
+        std::filesystem::path sub_task_file_path = config.history_directory;
+        sub_task_file_path /= std::filesystem::path{ item.head };
+        sub_task_file_path += ".txt";
+        if (std::filesystem::exists(sub_task_file_path))
         {
-            std::filesystem::path sub_task_file_path = config.history_directory;
-            sub_task_file_path /= std::filesystem::path{ item.head };
-            sub_task_file_path += ".txt";
-            if (std::filesystem::exists(sub_task_file_path))
+            throw file_open_exception{} << error_info::description{ "File already exists." } << error_info::path{ sub_task_file_path };
+        }
+        else
+        {
+            boost::nowide::ofstream ofs{ sub_task_file_path };
+            for (const std::string& description : item.descriptions)
             {
-                BOOST_LOG_TRIVIAL(error) << "File already exists: " << sub_task_file_path;
-            }
-            else
-            {
-                boost::nowide::ofstream ofs{ sub_task_file_path };
-                for (const std::string& description : item.descriptions)
-                {
-                    ofs << description;
-                }
+                ofs << description;
             }
         }
     }
-    catch (const std::exception& e)
-    {
-        BOOST_LOG_TRIVIAL(error) << e.what();
-    }
-    return 0;
 }
 
 llm_response send_oobabooga_completions_request(
@@ -591,33 +620,30 @@ llm_response send_oobabooga_completions_request(
             catch (const pt::ptree_bad_path& e)
             {
                 // Could not parse response text.
-                BOOST_LOG_TRIVIAL(error) << "Error parsing response: " << e.what();
-                result.error_code = 1;
+                throw socket_exception{} << error_info::description{ std::string{ "Error parsing response: " } + e.what() };
             }
         }
         else
         {
             // Error: HTTP request failed.
-            BOOST_LOG_TRIVIAL(error) << "HTTP Error: " << response.result_int() << " " << response.reason();
-            BOOST_LOG_TRIVIAL(error) << "Response Body: " << response.body();
-            result.error_code = 2;
+            throw socket_exception{}
+                << error_info::description{ "HTTP error" }
+                << error_info::http::response::result_int{ response.result_int() }
+                << error_info::http::response::reason{ response.reason() }
+                << error_info::http::response::body{ response.body() }
+            ;
         }
 
     }
     catch (const beast::system_error& se)
     {
-        // Network communication error.
-        BOOST_LOG_TRIVIAL(error) << "Beast System Error: " << se.code().message();
-        result.error_code = 3;
+        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + se.code().message() } };
     }
     catch (const std::exception& e)
     {
-        // An unexpected error occurred.
-        BOOST_LOG_TRIVIAL(error) << "Exception: " << e.what();
-        result.error_code = 4;
+        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + e.what() };
     }
 
-    result.error_code = 0;
     return result;
 }
 
@@ -672,27 +698,26 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
             }
             catch (const pt::ptree_bad_path& e)
             {
-                BOOST_LOG_TRIVIAL(error) << "Error parsing token count response: " << e.what();
-                return -1;
+                throw syntax_exception{} << error_info::description(e.what());
             }
         }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "HTTP Error getting token count: " << response.result_int() << " " << response.reason();
-            BOOST_LOG_TRIVIAL(error) << "Response Body: " << response.body();
+            throw socket_exception{}
+                << error_info::description{ "HTTP Error getting token count" }
+                << error_info::http::response::result_int{ response.result_int() }
+                << error_info::http::response::reason{ response.reason() }
+            << error_info::http::response::body{ response.body() };
             return -1;
         }
-
     }
     catch (const beast::system_error& se)
     {
-        BOOST_LOG_TRIVIAL(error) << "Beast System Error getting token count: " << se.code().message();
-        return -1;
+        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + se.code().message() } };
     }
     catch (const std::exception& e)
     {
-        BOOST_LOG_TRIVIAL(error) << "Exception getting token count: " << e.what();
-        return -1;
+        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + e.what() };
     }
 }
 
@@ -712,14 +737,7 @@ int get_tokens_from_cache(const config& config, const std::string& str)
     else
     {
         tokens = send_oobabooga_token_count_request(config, str);
-        if (tokens == -1)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Token count failed.";
-        }
-        else
-        {
-            config.lru_cache.insert({ str, tokens });
-        }
+        config.lru_cache.insert({ str, tokens });
     }
 
     if (config.lru_cache.size() > capacity)
@@ -742,12 +760,6 @@ std::string generate_and_complete_text(
     const int prompts_tokens = get_tokens_from_cache(config, prompts_string);
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << prompts_string << "\n```";
-
-    if (prompts_tokens == -1)
-    {
-        BOOST_LOG_TRIVIAL(error) << "Could not get initial token count. Aborting.";
-        return "ERROR: Initial token count failed.";
-    }
 
     std::string current_text = prompts_string;
     int current_tokens = prompts_tokens;
@@ -778,19 +790,13 @@ std::string generate_and_complete_text(
             config, current_text, temp_params
         );
 
-        if (response.text.empty() || response.error_code)
+        if (response.text.empty())
         {
-            BOOST_LOG_TRIVIAL(error) << "Error during text generation. Aborting.";
-            break;
+            throw text_generation_exception{} << error_info::description{ "Empty response." };
         }
 
         current_text += response.text;
         current_tokens = get_tokens_from_cache(config, current_text);
-        if (current_tokens == -1)
-        {
-            BOOST_LOG_TRIVIAL(error) << "Could not get token count after generation. Aborting.";
-            break;
-        }
 
         if (response.finish_reason == "stop")
         {
@@ -893,7 +899,7 @@ void init_logging_with_nowide_file_log(const std::filesystem::path& log)
     }
     else
     {
-        BOOST_LOG_TRIVIAL(error) << "File open error. " << log;
+        throw file_open_exception{} << error_info::path{ log };
     }
 
     backend->auto_flush(true);
@@ -1128,13 +1134,7 @@ int parse_commandline(
     }
     catch (const po::error& e)
     {
-        BOOST_LOG_TRIVIAL(error) << "boost::program_options::error: " << e.what();
-        return 1;
-    }
-    catch (const std::exception& e)
-    {
-        BOOST_LOG_TRIVIAL(error) << "std::exception: " << e.what();
-        return 1;
+        throw command_line_syntax_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() };
     }
 
     return 0;
@@ -1283,15 +1283,13 @@ void set_seed(config& config)
     }
 }
 
-int iterate(config& config, prompts& prompts)
+void iterate(config& config)
 {
     int iteration_count = 0;
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
-        if (read_prompts(config, prompts))
-        {
-            return -1;
-        }
+        prompts prompts;
+        read_prompts(config, prompts);
 
         set_seed(config);
 
@@ -1303,6 +1301,31 @@ int iterate(config& config, prompts& prompts)
 
         iteration_count += 1;
     }
+}
+
+int exception_safe_main(int argc, char** argv)
+{
+    try
+    {
+        config config;
+
+        if (parse_commandline(argc, argv, config))
+        {
+            return 0;
+        }
+
+        iterate(config);
+    }
+    catch (const boost::exception& exception)
+    {
+        BOOST_LOG_TRIVIAL(error) << boost::diagnostic_information(exception);
+        return -1;
+    }
+    catch (const std::exception& exception)
+    {
+        BOOST_LOG_TRIVIAL(error) << exception.what();
+        return -1;
+    }
 
     return 0;
 }
@@ -1310,19 +1333,5 @@ int iterate(config& config, prompts& prompts)
 int main(int argc, char** argv)
 {
     boost::nowide::args a(argc, argv);
-
-    config config;
-    prompts prompts;
-
-    if (parse_commandline(argc, argv, config))
-    {
-        return -1;
-    }
-
-    if (iterate(config, prompts))
-    {
-        return -1;
-    }
-
-    return 0;
+    return exception_safe_main(argc, argv);
 }
