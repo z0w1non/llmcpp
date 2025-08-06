@@ -634,13 +634,13 @@ llm_response send_oobabooga_completions_request(
         }
 
     }
-    catch (const beast::system_error& se)
+    catch (const beast::system_error& exception)
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + se.code().message() } };
+        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + exception.code().message() } };
     }
-    catch (const std::exception& e)
+    catch (const std::exception& exception)
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + e.what() };
+        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + exception.what() };
     }
 
     return result;
@@ -710,13 +710,13 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
             return -1;
         }
     }
-    catch (const beast::system_error& se)
+    catch (const beast::system_error& exception)
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + se.code().message() } };
+        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + exception.code().message() } };
     }
-    catch (const std::exception& e)
+    catch (const std::exception& exception)
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + e.what() };
+        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + exception.what() };
     }
 }
 
