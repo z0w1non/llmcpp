@@ -27,11 +27,10 @@
 #include <boost/make_shared.hpp>
 #include <boost/stacktrace.hpp>
 #include <boost/exception/all.hpp>
+#include <boost/algorithm/string.hpp> 
 #include <system_error>
 #include <string>
 #include <sstream>
-#include <cstdio>
-#include <cctype>
 #include <chrono>
 #include <iomanip>
 #include <regex>
@@ -43,22 +42,23 @@
 #include <deque>
 #include <memory>
 #include <stdexcept>
+#include <optional>
 
-
-class base_exception
+class runtime_exception
     : public boost::exception
 {
 public:
-    explicit base_exception();
+    explicit runtime_exception();
 };
 
-class base_exception;
-class io_exception : public base_exception {};
+class runtime_exception;
+class io_exception : public runtime_exception {};
 class file_open_exception : public io_exception {};
 class socket_exception : public io_exception {};
-class text_generation_exception : public base_exception {};
-class syntax_exception : public base_exception {};
-class command_line_syntax_exception : public base_exception {};
+class text_generation_exception : public runtime_exception {};
+class syntax_exception : public runtime_exception {};
+class macro_exception : public runtime_exception {};
+class command_line_syntax_exception : public runtime_exception {};
 
 namespace error_info
 {
@@ -75,9 +75,15 @@ namespace error_info
             using body = boost::error_info<struct tag_body, std::string>;
         }
     }
+
+    namespace macro
+    {
+        using name = boost::error_info<struct tag_name, std::string>;
+        using arguments = boost::error_info<struct tag_arguments, std::string>;
+    }
 }
 
-base_exception::base_exception()
+runtime_exception::runtime_exception()
 {
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
@@ -177,9 +183,7 @@ struct config
     std::string port;
     std::string api_key;
 
-    bool chat{};
-    bool novel{};
-    bool split_task{};
+    std::string mode{};
 
     std::string log_level;
     std::string log_file;
@@ -272,28 +276,34 @@ void read_file_to_container(Container& container, const std::filesystem::path& f
 void read_file_to_string(std::string& result, const std::filesystem::path& file)
 {
     result.clear();
-    if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
+    if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
     {
-        boost::nowide::ifstream ifs{ file };
-        if (!ifs.is_open())
-        {
-            throw file_open_exception{} << error_info::path{ file };
-        }
-        const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
-        result = file_content;
+        throw file_open_exception{} << error_info::path{ file };
     }
+    boost::nowide::ifstream ifs{ file };
+    if (!ifs.is_open())
+    {
+        throw file_open_exception{} << error_info::path{ file };
+    }
+    const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
+    result = file_content;
 }
 
 std::string include_predefiend_macro(const std::string& right)
 {
     std::string result;
-    read_file_to_string(result, right);
+    std::filesystem::path macro_file{ right };
+    if (!std::filesystem::exists(macro_file))
+    {
+        macro_file.replace_extension(".txt");
+    }
+    read_file_to_string(result, macro_file);
     return result;
 }
 
-std::string expand_predefined_macro(
-    const std::string& left,
-    const std::string& right
+std::optional<std::string> expand_predefined_macro(
+    const std::string& name,
+    const std::string& arguments
 )
 {
     const static std::map<std::string, std::function<std::string(const std::string&)>> predefiend_macro_impls
@@ -301,20 +311,30 @@ std::string expand_predefined_macro(
         {"include", include_predefiend_macro}
     };
 
-    auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&left](const auto& pair)
-        {
-            return std::equal(left.begin(), left.end(), pair.first.begin(), pair.first.end(), [](char a, char b)
-                {
-                    return std::tolower(a) == std::tolower(b);
-                });
-        });
+    auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&name](const auto& pair) { return boost::iequals(name, pair.first); });
     if (found != predefiend_macro_impls.end())
     {
-        return found->second(right);
+        BOOST_LOG_TRIVIAL(trace) << "found predefined macro. name: \"" << name << "\" arguments: \"" << arguments << "\"";
+
+        try
+        {
+            try
+            {
+                return found->second(arguments);
+            }
+            catch (const runtime_exception& exception)
+            {
+                BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
+                throw macro_exception{} << error_info::macro::name{ name } << error_info::macro::arguments{ arguments };
+            }
+        }
+        catch (const macro_exception& exception)
+        {
+            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
+        }
     }
 
-    BOOST_LOG_TRIVIAL(warning) << "Undefined predefined macro: " << left;
-    return {};
+    return std::nullopt;
 }
 
 std::string expand_macro(const std::string& str, const macros& macros, int depth = 0)
@@ -326,7 +346,7 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     }
 
     std::string result;
-    const std::regex macro{ R"(\{\{(\w+)\}\})", std::regex_constants::ECMAScript };
+    const std::regex macro{ R"(\{\{([^}]+)\}\})", std::regex_constants::ECMAScript };
     std::string::size_type last_position = 0;
 
     for (std::sregex_iterator iter{ str.begin(), str.end(), macro }, end; iter != end; ++iter)
@@ -335,30 +355,35 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
         const std::string macro_string = match[1].str();
         std::string expanded_string;
 
+        result += str.substr(last_position, match.position() - last_position);
+
+        std::string name;
+        std::string arguments;
         auto colon_position = macro_string.find(':');
         if (colon_position != std::string::npos)
         {
-            const std::string left = macro_string.substr(0, colon_position);
-            const std::string right = macro_string.substr(colon_position + 1);
-            expanded_string = expand_predefined_macro(left, right);
+            name = macro_string.substr(0, colon_position);
+            arguments = macro_string.substr(colon_position + 1);
+        }
+        else
+        {
+            name = macro_string;
         }
 
-        auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair)
-            {
-                return std::equal(macro_string.begin(), macro_string.end(), pair.first.begin(), pair.first.end(), [](char a, char b)
-                    {
-                        return std::tolower(a) == std::tolower(b);
-                    });
-            });
+        if (std::optional<std::string> temp = expand_predefined_macro(name, arguments))
+        {
+            expanded_string = *temp;
+            BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
+        }
 
-        result += str.substr(last_position, match.position() - last_position);
+        auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
 
         if (found != macros.end())
         {
             expanded_string = found->second;
             expanded_string = expand_macro(expanded_string, macros, depth + 1);
             result += expanded_string;
-            BOOST_LOG_TRIVIAL(trace) << "macro expanded: {{" << macro_string << "}} -> " << expanded_string;
+            BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
         }
         else
         {
@@ -375,6 +400,7 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     return result;
 }
 
+#if 0
 struct item
 {
     std::string head;
@@ -446,6 +472,7 @@ void split_task(const config& config, const std::string& task)
         }
     }
 }
+#endif
 
 llm_response send_oobabooga_completions_request(
     const config& config,
@@ -946,6 +973,10 @@ void init_logging(const config& config)
     {
         level = boost::log::trivial::fatal;
     }
+    else
+    {
+        BOOST_LOG_TRIVIAL(warning) << "Unkown log level: \"" << config.log_level << "\"";
+    }
 
     if (config.verbose)
     {
@@ -1002,9 +1033,7 @@ int parse_commandline(
             ("host", po::value<std::string>(&config.host)->default_value("localhost", "host"))
             ("port", po::value<std::string>(&config.port)->default_value("5000", "port"))
             ("api-key", po::value<std::string>(&config.api_key)->default_value("", "API key"))
-            ("chat", po::bool_switch(&config.chat)->default_value(false), "novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default")
-            ("novel", po::bool_switch(&config.novel)->default_value(false), "novel mode means \"--phases \"\" --generation-prefix \"\"\"")
-            ("split-task", po::bool_switch(&config.split_task)->default_value(false), "split task mode split one task into subtasks and output them as files")
+            ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
             ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt", "system prompt file path"))
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info", "log level (trace|debug|info|warning|error|fatal)"))
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt", "log file path"))
@@ -1015,12 +1044,12 @@ int parse_commandline(
             ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
             ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("\\n{{cur}} :", "generation prefix"))
+            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("\\n{{phase}} :", "generation prefix"))
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
             ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
-            ("max-total-context_tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
+            ("max-total-context-tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("model", po::value<std::string>(&config.params.model)->default_value("", "model"))
             ("num-best-of", po::value<int>(&config.params.best_of)->default_value(1), "best_of")
@@ -1094,7 +1123,7 @@ int parse_commandline(
 
         init_logging(config);
 
-        if (config.chat)
+        if (config.mode == "chat")
         {
             if (config.phases.empty())
             {
@@ -1105,17 +1134,13 @@ int parse_commandline(
                 config.generation_prefix = "\\n{{phase}}: ";
             }
         }
-        else if (config.novel)
+        else if (config.mode == "novel")
         {
             ;
         }
-        else if (config.split_task)
-        {
-            config.generation_prefix = "1. ";
-        }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "Any mode options must be specified. (chat|novel|split_task)";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be chat or novel.";
             return 1;
         }
 
@@ -1246,12 +1271,6 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
 
     const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
     BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-
-    if (config.split_task)
-    {
-        split_task(config, response);
-        return;
-    }
 
     write_response(config, response);
 }
