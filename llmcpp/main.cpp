@@ -463,6 +463,10 @@ void split_task(const config& config, const std::string& task)
         else
         {
             boost::nowide::ofstream ofs{ sub_task_file_path };
+            if (!ofs->is_open())
+            {
+                throw file_open_exception{} << error_info::path{ log };
+            }
             for (const std::string& description : item.descriptions)
             {
                 ofs << description;
@@ -917,15 +921,11 @@ void init_logging_with_nowide_file_log(const std::filesystem::path& log)
     boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
 
     boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
-    if (ofs->is_open())
-    {
-        backend->add_stream(ofs);
-    }
-    else
+    if (!ofs->is_open())
     {
         throw file_open_exception{} << error_info::path{ log };
     }
-
+    backend->add_stream(ofs);
     backend->auto_flush(true);
 
     boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink{
@@ -1251,6 +1251,10 @@ void read_prompts(const config& config, prompts& prompts)
 void write_response(const config& config, const std::string& response)
 {
     boost::nowide::ofstream ofs{ config.output_file, std::ios_base::app };
+    if (!ofs.is_open())
+    {
+        throw file_open_exception{} << error_info::path{ config.output_file };
+    }
     ofs << response;
 }
 
