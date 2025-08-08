@@ -190,9 +190,7 @@ struct config
 
     std::string system_prompts_file;
     std::string examples_file;
-    std::string history_directory;
     std::string history_file;
-    std::string output_directory;
     std::string output_file;
     std::string example_separator;
     std::vector<std::string> phases;
@@ -1038,9 +1036,7 @@ int parse_commandline(
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info", "log level (trace|debug|info|warning|error|fatal)"))
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt", "log file path"))
             ("examples-file", po::value<std::string>(&config.examples_file)->default_value("examples.txt", "exmaples file path"))
-            ("history-directory", po::value<std::string>(&config.history_directory)->default_value(".", "hisotry directory path"))
             ("history-file", po::value<std::string>(&config.history_file)->default_value("history.txt", "history file path"))
-            ("output-directory", po::value<std::string>(&config.output_directory)->default_value(".", "output file directory"))
             ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
             ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
@@ -1249,18 +1245,12 @@ void read_prompts(const config& config, prompts& prompts)
 {
     read_file_to_string(prompts.system_prompts, config.system_prompts_file);
     read_file_to_container(prompts.examples, config.examples_file);
-
-    std::filesystem::path history_file_path{ config.history_directory };
-    history_file_path /= config.history_file;
-    read_file_to_container(prompts.history, history_file_path);
+    read_file_to_container(prompts.history, config.history_file);
 }
 
 void write_response(const config& config, const std::string& response)
 {
-    std::filesystem::path output_file_path{ config.output_directory };
-    output_file_path /= config.output_file;
-
-    boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
+    boost::nowide::ofstream ofs{ config.output_file, std::ios_base::app };
     ofs << response;
 }
 
