@@ -196,6 +196,7 @@ struct config
     std::string example_separator;
     std::vector<std::string> phases;
     std::string generation_prefix;
+    std::string retry_generation_prefix;
 
     int seed{};
     bool verbose{};
@@ -209,7 +210,6 @@ struct config
     macros macros;
     mutable lru_cache lru_cache;
     std::vector<std::string> predefined_macros;
-    std::string retry_generation_prefix;
 };
 
 struct llm_response
@@ -1112,13 +1112,13 @@ int parse_commandline(
             ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
             ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("", "generation prefix"))
+            ("retry-generation-prefix", po::value<std::string>(&config.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
             ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
             ("max-total-context-tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
-            ("retry-generation-prefix", po::value<std::string>(&config.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
             ("model", po::value<std::string>(&config.params.model)->default_value("", "model"))
             ("num-best-of", po::value<int>(&config.params.best_of)->default_value(1), "best_of")
             ("echo", po::bool_switch(&config.params.echo)->default_value(false), "echo")
@@ -1391,8 +1391,11 @@ void iterate(config& config)
             catch (const text_generation_exception& exception)
             {
                 BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-                BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-                generate_and_output(config, prompts, config.retry_generation_prefix);
+                if (!config.retry_generation_prefix.empty())
+                {
+                    BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
+                    generate_and_output(config, prompts, config.retry_generation_prefix);
+                }
             }
         }
 
