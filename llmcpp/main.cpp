@@ -209,6 +209,7 @@ struct config
     macros macros;
     mutable lru_cache lru_cache;
     std::vector<std::string> predefined_macros;
+    std::string retry_generation_prefix;
 };
 
 struct llm_response
@@ -799,6 +800,51 @@ int get_tokens_from_cache(const config& config, const std::string& str)
     return tokens;
 }
 
+void write_cache(const config& config)
+{
+    namespace pt = boost::property_tree;
+
+    pt::ptree cache;
+    for (const token_count_string& element : config.lru_cache.get<lru_tag>())
+    {
+        pt::ptree node;
+        node.put("string", element.str);
+        node.put("tokens", element.tokens);
+        cache.push_back(std::make_pair("", node));
+    }
+    pt::ptree json;
+    json.add_child("cache", cache);
+
+    std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
+    create_parent_directories(cache_path);
+    boost::nowide::ofstream ofs{ cache_path };
+    pt::write_json(ofs, json, false);
+}
+
+void read_cache(const config& config)
+{
+    namespace pt = boost::property_tree;
+
+    pt::ptree json;
+    std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
+
+    if (!std::filesystem::exists(cache_path))
+    {
+        return;
+    }
+
+    boost::nowide::ifstream ifs{ cache_path };
+    pt::read_json(ifs, json);
+
+    config.lru_cache.clear();
+    for (const pt::ptree::value_type& node : json.get_child("cache"))
+    {
+        const std::string str{ node.second.get<std::string>("string")};
+        const int tokens{ node.second.get<int>("tokens")};
+        config.lru_cache.insert({ str, tokens});
+    }
+}
+
 std::string generate_and_complete_text(
     const config& config,
     const std::string& prompts,
@@ -808,7 +854,7 @@ std::string generate_and_complete_text(
     std::string prompts_string = prompts;
     const std::size_t initial_prompts_size = prompts_string.size();
     prompts_string += expand_macro(prefix, config.macros);
-    const int prompts_tokens = get_tokens_from_cache(config, prompts_string);
+    const int prompts_tokens = send_oobabooga_token_count_request(config, prompts_string);
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << prompts_string << "\n```";
 
@@ -847,7 +893,7 @@ std::string generate_and_complete_text(
         }
 
         current_text += response.text;
-        current_tokens = get_tokens_from_cache(config, current_text);
+        current_tokens = send_oobabooga_token_count_request(config, current_text);
 
         if (response.finish_reason == "stop")
         {
@@ -1065,13 +1111,14 @@ int parse_commandline(
             ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
             ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("\\n", "generation prefix"))
+            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("", "generation prefix"))
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
             ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
             ("max-total-context-tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
+            ("retry-generation-prefix", po::value<std::string>(&config.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
             ("model", po::value<std::string>(&config.params.model)->default_value("", "model"))
             ("num-best-of", po::value<int>(&config.params.best_of)->default_value(1), "best_of")
             ("echo", po::bool_switch(&config.params.echo)->default_value(false), "echo")
@@ -1085,24 +1132,24 @@ int parse_commandline(
             ("stream", po::bool_switch(&config.params.stream)->default_value(false), "stream")
             ("suffix", po::value<std::string>(&config.params.suffix)->default_value("", "suffix"))
             ("temperature", po::value<double>(&config.params.temperature)->default_value(1.0), "temperature")
-            ("top-p", po::value<double>(&config.params.top_p)->default_value(0.9), "top p")
+            ("top-p", po::value<double>(&config.params.top_p)->default_value(1.0), "top p")
             ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
             ("dynatemp-low", po::value<double>(&config.params.dynatemp_low)->default_value(0.75), "dynatemp low")
             ("dynatemp-high", po::value<double>(&config.params.dynatemp_high)->default_value(1.25), "dynatemp high")
             ("dynatemp-exponent", po::value<double>(&config.params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
             ("smoothing-factor", po::value<double>(&config.params.smoothing_factor)->default_value(0.0), "smoothing factor")
             ("smoothing-curve", po::value<double>(&config.params.smoothing_curve)->default_value(1.0), "smoothing curve")
-            ("min-p", po::value<double>(&config.params.min_p)->default_value(0.0), "min p")
-            ("top-k", po::value<int>(&config.params.top_k)->default_value(40), "top k")
+            ("min-p", po::value<double>(&config.params.min_p)->default_value(0.1), "min p")
+            ("top-k", po::value<int>(&config.params.top_k)->default_value(0), "top k")
             ("typical-p", po::value<double>(&config.params.typical_p)->default_value(1.0), "typical p")
             ("xtc-threshold", po::value<double>(&config.params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
             ("xtc-probability", po::value<double>(&config.params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
-            ("epsilon-cutoff", po::value<double>(&config.params.epsilon_cutoff)->default_value(3), "epsilon cutoff")
-            ("eta-cutoff", po::value<double>(&config.params.eta_cutoff)->default_value(3), "eta cutoff")
+            ("epsilon-cutoff", po::value<double>(&config.params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
+            ("eta-cutoff", po::value<double>(&config.params.eta_cutoff)->default_value(0), "eta cutoff")
             ("tfs", po::value<double>(&config.params.tfs)->default_value(1.0), "tfs")
             ("top-a", po::value<double>(&config.params.top_a)->default_value(0.0), "top a")
             ("top-n-sigma", po::value<double>(&config.params.top_n_sigma)->default_value(1.0), "top n sigma")
-            ("dry-multiplier", po::value<double>(&config.params.dry_multiplier)->default_value(0.8), "DRY multiplier")
+            ("dry-multiplier", po::value<double>(&config.params.dry_multiplier)->default_value(0.0), "DRY multiplier")
             ("dry-allowed-length", po::value<int>(&config.params.dry_allowed_length)->default_value(2), "DRY allowed length")
             ("dry-base", po::value<double>(&config.params.dry_base)->default_value(1.75), "DRY base")
             ("repetition-penalty", po::value<double>(&config.params.repetition_penalty)->default_value(1.2), "repetition penalty")
@@ -1111,7 +1158,7 @@ int parse_commandline(
             ("repetition-penalty-range", po::value<int>(&config.params.repetition_penalty_range)->default_value(0), "repetition penalty range")
             ("penalty-alpha", po::value<double>(&config.params.penalty_alpha)->default_value(0.9), "penalty alpha")
             ("guidance-scale", po::value<double>(&config.params.guidance_scale)->default_value(1.0), "guidance scale")
-            ("mirostat-mode", po::value<int>(&config.params.mirostat_mode)->default_value(2), "mirostat mode")
+            ("mirostat-mode", po::value<int>(&config.params.mirostat_mode)->default_value(0), "mirostat mode")
             ("mirostat-tau", po::value<double>(&config.params.mirostat_tau)->default_value(5), "mirostat tau")
             ("mirostat-eta", po::value<double>(&config.params.mirostat_eta)->default_value(0.1), "mirostat eta")
             ("prompt-lookup-num-tokens", po::value<int>(&config.params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
@@ -1123,7 +1170,7 @@ int parse_commandline(
             ("ban_eos_token", po::bool_switch(&config.params.ban_eos_token)->default_value(false), "ban eos token")
             ("add_bos_token", po::bool_switch(&config.params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
             ("skip_special_tokens", po::bool_switch(&config.params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-            ("static_cache", po::bool_switch(&config.params.static_cache)->default_value(false), "static cache")
+            ("static_cache", po::bool_switch(&config.params.static_cache)->default_value(false), "static 1")
             ("truncation_length", po::value<int>(&config.params.truncation_length)->default_value(0), "truncation length")
             ("sampler-priority", po::value<std::vector<std::string>>(&config.params.sampler_priority)->multitoken(), "sampler priority")
             ("custom-token-bans", po::value<std::string>(&config.params.custom_token_bans)->default_value("", "custom token bans"))
@@ -1174,6 +1221,7 @@ int parse_commandline(
         std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
         config.params.dry_sequence_breakers = unescape_string(config.params.dry_sequence_breakers);
         config.generation_prefix = unescape_string(config.generation_prefix);
+        config.retry_generation_prefix = unescape_string(config.retry_generation_prefix);
 
         parse_predefined_macros(config.predefined_macros, config.macros);
     }
@@ -1321,16 +1369,34 @@ void iterate(config& config)
     int iteration_count = 0;
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
+        if (iteration_count == 0)
+        {
+            read_cache(config);
+        }
+
         prompts prompts;
         read_prompts(config, prompts);
 
         set_seed(config);
 
+        config.macros["N"] = std::to_string(iteration_count + 1);
+
         for (const std::string& phase : config.phases)
         {
             config.macros["phase"] = phase;
-            generate_and_output(config, prompts, config.generation_prefix);
+            try
+            {
+                generate_and_output(config, prompts, config.generation_prefix);
+            }
+            catch (const text_generation_exception& exception)
+            {
+                BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
+                BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
+                generate_and_output(config, prompts, config.retry_generation_prefix);
+            }
         }
+
+        write_cache(config);
 
         iteration_count += 1;
     }
