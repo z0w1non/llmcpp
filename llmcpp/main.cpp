@@ -188,6 +188,7 @@ struct config
     std::string log_level;
     std::string log_file;
 
+    std::string base_path;
     std::string system_prompts_file;
     std::string examples_file;
     std::string history_file;
@@ -253,6 +254,27 @@ void split_string_by_new_line(const std::string& str, Container& container)
     {
         container.push_back(str.substr(start_position));
     }
+}
+
+std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
+{
+    std::filesystem::path result{ path };
+    if (result.is_relative())
+    {
+        result = config.base_path / result;
+
+    }
+    return result;
+}
+
+void create_parent_directories(const std::filesystem::path& path)
+{
+    if (path.empty() || !path.has_parent_path())
+    {
+        return;
+    }
+
+    std::filesystem::create_directories(path.parent_path());
 }
 
 template <typename Container>
@@ -462,6 +484,7 @@ void split_task(const config& config, const std::string& task)
         }
         else
         {
+            create_parent_directories(sub_task_file_path);
             boost::nowide::ofstream ofs{ sub_task_file_path };
             if (!ofs->is_open())
             {
@@ -919,7 +942,7 @@ void init_logging_with_nowide_cout()
 void init_logging_with_nowide_file_log(const std::filesystem::path& log)
 {
     boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
-
+    create_parent_directories(log);
     boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
     if (!ofs->is_open())
     {
@@ -983,7 +1006,8 @@ void init_logging(const config& config)
 
     if (!config.log_file.empty())
     {
-        init_logging_with_nowide_file_log(config.log_file);
+        const std::filesystem::path log_file_path{ string_to_path_by_config(config.log_file, config) };
+        init_logging_with_nowide_file_log(log_file_path);
     }
 
     boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
@@ -1032,9 +1056,10 @@ int parse_commandline(
             ("port", po::value<std::string>(&config.port)->default_value("5000", "port"))
             ("api-key", po::value<std::string>(&config.api_key)->default_value("", "API key"))
             ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
-            ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt", "system prompt file path"))
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info", "log level (trace|debug|info|warning|error|fatal)"))
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt", "log file path"))
+            ("base-path", po::value<std::string>(&config.base_path)->default_value(".", "base path"))
+            ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt", "system prompt file path"))
             ("examples-file", po::value<std::string>(&config.examples_file)->default_value("examples.txt", "exmaples file path"))
             ("history-file", po::value<std::string>(&config.history_file)->default_value("history.txt", "history file path"))
             ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
@@ -1243,14 +1268,16 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    read_file_to_string(prompts.system_prompts, config.system_prompts_file);
-    read_file_to_container(prompts.examples, config.examples_file);
-    read_file_to_container(prompts.history, config.history_file);
+    read_file_to_string(prompts.system_prompts, string_to_path_by_config(config.system_prompts_file, config));
+    read_file_to_container(prompts.examples, string_to_path_by_config(config.examples_file, config));
+    read_file_to_container(prompts.history, string_to_path_by_config(config.history_file, config));
 }
 
 void write_response(const config& config, const std::string& response)
 {
-    boost::nowide::ofstream ofs{ config.output_file, std::ios_base::app };
+    const std::filesystem::path output_file_path{ string_to_path_by_config(config.output_file, config) };
+    create_parent_directories(output_file_path);
+    boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
     if (!ofs.is_open())
     {
         throw file_open_exception{} << error_info::path{ config.output_file };
