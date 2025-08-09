@@ -1065,7 +1065,7 @@ int parse_commandline(
             ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
             ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("", "generation prefix"))
+            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("\\n", "generation prefix"))
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
