@@ -233,7 +233,7 @@ struct llm_response
 
 struct prompts
 {
-    std::string system_prompts;
+    std::vector<std::string> system_prompts;
     std::vector<std::string> examples;
     std::deque<std::string> history;
 
@@ -1328,12 +1328,13 @@ std::string prompts::to_string(const config& config) const
             std::vector<std::string> temp;
             for (; first != last; ++first)
             {
-                int next_tokens = get_tokens_from_cache(config, *first);
+                const std::string macro_expanded_string{ expand_macro(*first, config.macros) };
+                const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
                 if (written_tokens + next_tokens > max_tokens)
                 {
                     break;
                 }
-                temp.push_back(*first);
+                temp.push_back(macro_expanded_string);
                 written_tokens += next_tokens;
             }
             if (reverse)
@@ -1347,11 +1348,18 @@ std::string prompts::to_string(const config& config) const
         };
 
     int remaining_tokens = config.max_total_context_tokens - config.params.max_tokens;
-    int system_prompts_tokens = get_tokens_from_cache(config, system_prompts);
+
+    std::string system_prompts_string;
+    {
+        int written_tokens = 0;
+        try_append(system_prompts.begin(), system_prompts.end(), system_prompts_string, remaining_tokens, written_tokens, false);
+        remaining_tokens -= written_tokens;
+    }
+    int system_prompts_tokens = get_tokens_from_cache(config, system_prompts_string);
+
     if (remaining_tokens >= system_prompts_tokens)
     {
-        result += system_prompts;
-        remaining_tokens -= system_prompts_tokens;
+        result += system_prompts_string;
     }
 
     std::string history_string;
@@ -1394,7 +1402,7 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    read_file_to_string(prompts.system_prompts, string_to_path_by_config(config.system_prompts_file, config));
+    read_file_to_container(prompts.system_prompts, string_to_path_by_config(config.system_prompts_file, config));
     read_file_to_container(prompts.examples, string_to_path_by_config(config.examples_file, config));
     read_file_to_container(prompts.history, string_to_path_by_config(config.history_file, config));
 }
