@@ -133,3 +133,6 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{datetime}}`
 `yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。
+
+### `{{N}}`
+1から開始する現在の反復回数に展開される。
