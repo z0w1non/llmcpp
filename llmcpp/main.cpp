@@ -28,6 +28,8 @@
 #include <boost/stacktrace.hpp>
 #include <boost/exception/all.hpp>
 #include <boost/algorithm/string.hpp> 
+#include <boost/date_time.hpp>
+#include <boost/date_time/time_facet.hpp>
 #include <system_error>
 #include <string>
 #include <sstream>
@@ -267,17 +269,6 @@ void split_string_by_new_line(const std::string& str, Container& container)
     }
 }
 
-std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
-{
-    std::filesystem::path result{ path };
-    if (result.is_relative())
-    {
-        result = config.base_path / result;
-
-    }
-    return result;
-}
-
 void create_parent_directories(const std::filesystem::path& path)
 {
     if (path.empty() || !path.has_parent_path())
@@ -320,6 +311,14 @@ void read_file_to_string(std::string& result, const std::filesystem::path& file)
     result = file_content;
 }
 
+int generate_random_seed()
+{
+    static std::random_device seed_gen;
+    static std::default_random_engine random_engine(seed_gen());
+    static std::uniform_int_distribution<> distribution(0, std::numeric_limits<int>::max());
+    return distribution(random_engine);
+}
+
 std::string include_predefiend_macro(const std::string& right)
 {
     std::string result;
@@ -332,6 +331,16 @@ std::string include_predefiend_macro(const std::string& right)
     return result;
 }
 
+std::string datetime_predefiend_macro(const std::string&)
+{
+    boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
+    boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
 std::optional<std::string> expand_predefined_macro(
     const std::string& name,
     const std::string& arguments
@@ -339,7 +348,8 @@ std::optional<std::string> expand_predefined_macro(
 {
     const static std::map<std::string, std::function<std::string(const std::string&)>> predefiend_macro_impls
     {
-        {"include", include_predefiend_macro}
+        {"include", include_predefiend_macro},
+        {"datetime", datetime_predefiend_macro}
     };
 
     auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&name](const auto& pair) { return boost::iequals(name, pair.first); });
@@ -401,27 +411,24 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
             name = macro_string;
         }
 
-        if (std::optional<std::string> temp = expand_predefined_macro(name, arguments))
+        std::optional<std::string> predefined_macro_result{ expand_predefined_macro(name, arguments) };
+        if (predefined_macro_result)
         {
-            expanded_string = *temp;
-            BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
-        }
-
-        auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
-
-        if (found != macros.end())
-        {
-            expanded_string = found->second;
-            expanded_string = expand_macro(expanded_string, macros, depth + 1);
+            expanded_string = *predefined_macro_result;
             result += expanded_string;
             BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
         }
         else
         {
-            ;
-            //result += "{{";
-            //result += macro_string;
-            //result += "}}";
+            auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
+
+            if (found != macros.end())
+            {
+                expanded_string = found->second;
+                expanded_string = expand_macro(expanded_string, macros, depth + 1);
+                result += expanded_string;
+                BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
+            }
         }
 
         last_position = match.position() + match.length();
@@ -430,6 +437,18 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     result += str.substr(last_position);
 
     return result;
+}
+
+std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
+{
+    const std::filesystem::path file_path{ expand_macro(path, config.macros) };
+    if (file_path.is_relative())
+    {
+        const std::filesystem::path base_path{ expand_macro(config.base_path, config.macros) };
+        return base_path / file_path;
+
+    }
+    return file_path;
 }
 
 std::vector<item> parse_item_list(const std::string& str)
@@ -1352,16 +1371,15 @@ std::string prompts::to_string(const config& config) const
     int remaining_tokens = config.max_total_context_tokens - config.params.max_tokens;
 
     std::string system_prompts_string;
+    int system_prompts_tokens{};
     {
-        int written_tokens = 0;
-        try_append(system_prompts.begin(), system_prompts.end(), system_prompts_string, remaining_tokens, written_tokens, false);
-        remaining_tokens -= written_tokens;
+        try_append(system_prompts.begin(), system_prompts.end(), system_prompts_string, remaining_tokens, system_prompts_tokens, false);
     }
-    int system_prompts_tokens = get_tokens_from_cache(config, system_prompts_string);
 
     if (remaining_tokens >= system_prompts_tokens)
     {
         result += system_prompts_string;
+        remaining_tokens -= system_prompts_tokens;
     }
 
     std::string history_string;
@@ -1416,7 +1434,7 @@ void write_response(const config& config, const std::string& response)
     boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
     if (!ofs.is_open())
     {
-        throw file_open_exception{} << error_info::path{ config.output_file };
+        throw file_open_exception{} << error_info::path{ output_file_path };
     }
     ofs << response;
 }
@@ -1430,14 +1448,6 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
     BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
 
     write_response(config, response);
-}
-
-int generate_random_seed()
-{
-    static std::random_device seed_gen;
-    static std::default_random_engine random_engine(seed_gen());
-    static std::uniform_int_distribution<> distribution(0, std::numeric_limits<int>::max());
-    return distribution(random_engine);
 }
 
 void set_seed(config& config)
