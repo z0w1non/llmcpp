@@ -1464,7 +1464,7 @@ void iterate(config& config)
 
         config.macros["N"] = std::to_string(iteration_count + 1);
 
-        for (std::size_t phase_index = 0; config.phases.size(); ++phase_index)
+        for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
         {
             set_phases_macro(config.phases, phase_index, config.macros);
 
