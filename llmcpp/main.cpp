@@ -1444,14 +1444,11 @@ void set_seed(config& config)
 
 void iterate(config& config)
 {
+    read_cache(config);
+
     int iteration_count = 0;
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
-        if (iteration_count == 0)
-        {
-            read_cache(config);
-        }
-
         prompts prompts;
         read_prompts(config, prompts);
 
