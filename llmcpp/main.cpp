@@ -894,7 +894,7 @@ std::string generate_and_complete_text(
     int current_tokens = initial_tokens;
     for (int completion_iterations = 0; completion_iterations < config.max_completion_iterations; ++completion_iterations)
     {
-        BOOST_LOG_TRIVIAL(info) << "completion_iterations: " << completion_iterations;
+        BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
 
         if (current_tokens - initial_tokens >= config.min_completion_tokens)
         {
