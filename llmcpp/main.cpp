@@ -280,7 +280,7 @@ void create_parent_directories(const std::filesystem::path& path)
 }
 
 template <typename Container>
-void read_file_to_container(Container& container, const std::filesystem::path& file)
+void read_file_to_container(const std::filesystem::path& file, Container& container)
 {
     container.clear();
     if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
@@ -295,7 +295,7 @@ void read_file_to_container(Container& container, const std::filesystem::path& f
     }
 }
 
-void read_file_to_string(std::string& result, const std::filesystem::path& file)
+void read_file_to_string(const std::filesystem::path& file, std::string& result)
 {
     result.clear();
     if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
@@ -327,7 +327,7 @@ std::string include_predefiend_macro(const std::string& right)
     {
         macro_file.replace_extension(".txt");
     }
-    read_file_to_string(result, macro_file);
+    read_file_to_string(macro_file, result);
     return result;
 }
 
@@ -1161,7 +1161,7 @@ void init_novel_mode(config& config)
         config.phases.clear();
         std::filesystem::path plot_file_path{ string_to_path_by_config(config.plot_file, config) };
         std::string content;
-        read_file_to_string(content, plot_file_path);
+        read_file_to_string(plot_file_path, content);
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
     }
@@ -1425,9 +1425,20 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    read_file_to_container(prompts.system_prompts, string_to_path_by_config(config.system_prompts_file, config));
-    read_file_to_container(prompts.examples, string_to_path_by_config(config.examples_file, config));
-    read_file_to_container(prompts.history, string_to_path_by_config(config.history_file, config));
+    const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.system_prompts_file, config) };
+    read_file_to_container(system_prompts_path, prompts.system_prompts);
+
+    const std::filesystem::path examples_path{ string_to_path_by_config(config.examples_file, config) };
+    if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
+    {
+        read_file_to_container(examples_path, prompts.examples);
+    }
+
+    const std::filesystem::path history_path{ string_to_path_by_config(config.history_file, config) };
+    if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
+    {
+        read_file_to_container(history_path, prompts.history);
+    }
 }
 
 void write_response(const config& config, const std::string& response)
