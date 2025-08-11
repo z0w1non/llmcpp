@@ -861,18 +861,18 @@ std::string generate_and_complete_text(
     const std::string& prefix
 )
 {
-    std::string prompts_string = prompts;
-    const std::size_t initial_prompts_size = prompts_string.size();
-    prompts_string += expand_macro(prefix, config.macros);
-    const int prompts_tokens = send_oobabooga_token_count_request(config, prompts_string);
+    std::string initial_prompts = prompts;
+    const std::size_t initial_prompts_size = initial_prompts.size();
+    initial_prompts += expand_macro(prefix, config.macros);
+    const int initial_tokens = send_oobabooga_token_count_request(config, initial_prompts);
 
-    BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << prompts_string << "\n```";
+    BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
 
-    std::string current_text = prompts_string;
-    int current_tokens = prompts_tokens;
+    std::string current_text = initial_prompts;
+    int current_tokens = initial_tokens;
     for (int i = 0; i < config.max_completion_iterations; ++i)
     {
-        if (current_tokens - prompts_tokens >= config.min_completion_tokens)
+        if (current_tokens - initial_tokens >= config.min_completion_tokens)
         {
             break;
         }
@@ -899,7 +899,7 @@ std::string generate_and_complete_text(
 
         if (response.text.empty())
         {
-            throw text_generation_exception{} << error_info::description{ "Empty response." };
+            break;
         }
 
         current_text += response.text;
