@@ -870,8 +870,10 @@ std::string generate_and_complete_text(
 
     std::string current_text = initial_prompts;
     int current_tokens = initial_tokens;
-    for (int i = 0; i < config.max_completion_iterations; ++i)
+    for (int completion_iterations = 0; completion_iterations < config.max_completion_iterations; ++completion_iterations)
     {
+        BOOST_LOG_TRIVIAL(info) << "completion_iterations: " << completion_iterations;
+
         if (current_tokens - initial_tokens >= config.min_completion_tokens)
         {
             break;
