@@ -59,6 +59,7 @@ class text_generation_exception : public runtime_exception {};
 class syntax_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
+class array_index_out_of_bounds_exception : public runtime_exception {};
 
 namespace error_info
 {
@@ -177,6 +178,12 @@ using lru_cache = boost::multi_index::multi_index_container<
     >
 >;
 
+struct item
+{
+    std::string head;
+    std::vector<std::string> descriptions;
+};
+
 struct config
 {
     std::string host;
@@ -184,6 +191,9 @@ struct config
     std::string api_key;
 
     std::string mode{};
+
+    // for novel mode
+    std::string plot_file{};
 
     std::string log_level;
     std::string log_file;
@@ -408,9 +418,10 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
         }
         else
         {
-            result += "{{";
-            result += macro_string;
-            result += "}}";
+            ;
+            //result += "{{";
+            //result += macro_string;
+            //result += "}}";
         }
 
         last_position = match.position() + match.length();
@@ -421,13 +432,7 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     return result;
 }
 
-#if 0
-struct item
-{
-    std::string head;
     std::vector<std::string> descriptions;
-};
-
 std::vector<item> parse_item_list(const std::string& str)
 {
     std::vector<item> result;
@@ -470,26 +475,25 @@ std::vector<item> parse_item_list(const std::string& str)
     return result;
 }
 
-void split_task(const config& config, const std::string& task)
+void write_item_list(const config& config, const std::string& task)
 {
     std::vector<item> items = parse_item_list(task);
 
     for (const item& item : items)
     {
-        std::filesystem::path sub_task_file_path = config.history_directory;
-        sub_task_file_path /= std::filesystem::path{ item.head };
-        sub_task_file_path += ".txt";
-        if (std::filesystem::exists(sub_task_file_path))
+        std::filesystem::path item_file_path{ string_to_path_by_config(item.head, config) };
+        item_file_path += ".txt";
+        if (std::filesystem::exists(item_file_path))
         {
-            throw file_open_exception{} << error_info::description{ "File already exists." } << error_info::path{ sub_task_file_path };
+            throw file_open_exception{} << error_info::description{ "File already exists." } << error_info::path{ item_file_path };
         }
         else
         {
-            create_parent_directories(sub_task_file_path);
-            boost::nowide::ofstream ofs{ sub_task_file_path };
-            if (!ofs->is_open())
+            create_parent_directories(item_file_path);
+            boost::nowide::ofstream ofs{ item_file_path };
+            if (!ofs.is_open())
             {
-                throw file_open_exception{} << error_info::path{ log };
+                throw file_open_exception{} << error_info::path{ item_file_path };
             }
             for (const std::string& description : item.descriptions)
             {
@@ -498,7 +502,6 @@ void split_task(const config& config, const std::string& task)
         }
     }
 }
-#endif
 
 llm_response send_oobabooga_completions_request(
     const config& config,
@@ -833,15 +836,23 @@ void read_cache(const config& config)
         return;
     }
 
-    boost::nowide::ifstream ifs{ cache_path };
-    pt::read_json(ifs, json);
-
-    config.lru_cache.clear();
-    for (const pt::ptree::value_type& node : json.get_child("cache"))
+    try
     {
-        const std::string str{ node.second.get<std::string>("string")};
-        const int tokens{ node.second.get<int>("tokens")};
-        config.lru_cache.insert({ str, tokens});
+        boost::nowide::ifstream ifs{ cache_path };
+        pt::read_json(ifs, json);
+        lru_cache lru_cache;
+        for (const pt::ptree::value_type& node : json.get_child("cache"))
+        {
+            const std::string str{ node.second.get<std::string>("string") };
+            const int tokens{ node.second.get<int>("tokens") };
+            lru_cache.insert({ str, tokens });
+        }
+        config.lru_cache = lru_cache;
+    }
+    catch (const boost::exception& exception)
+    {
+        BOOST_LOG_TRIVIAL(error) << boost::diagnostic_information(exception);
+        throw syntax_exception{};
     }
 }
 
@@ -1059,6 +1070,80 @@ void init_logging(const config& config)
     boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
 }
 
+void init_chat_mode(config& config)
+{
+    if (config.phases.empty())
+    {
+        config.phases = { "{{user}}", "{{char}}" };
+    }
+    if (config.generation_prefix.empty())
+    {
+        config.generation_prefix = "\\n{{phase}}: ";
+    }
+}
+
+void set_phases_macro(
+    const std::vector<std::string>& phases,
+    std::size_t phase_index,
+    std::map<std::string, std::string>& macros
+)
+{
+    if (phase_index >= phases.size())
+    {
+        throw array_index_out_of_bounds_exception{};
+    }
+
+    if (phase_index > 0)
+    {
+        macros["prev_phase"] = phases[phase_index - 1];
+    }
+    else
+    {
+        macros.erase("prev_phase");
+    }
+
+    macros["phase"] = phases[phase_index];
+
+    if (phase_index < phases.size() - 1)
+    {
+        macros["next_phase"] = phases[phase_index + 1];
+    }
+    else
+    {
+        macros.erase("next_phase");
+    }
+}
+
+void set_paragraphs_to_phases(
+    const std::vector<item>& paragraphs,
+    std::vector<std::string>& phases
+)
+{
+    for (const item& paragraph : paragraphs)
+    {
+        std::string temp{ paragraph.head };
+        for (const std::string& description : paragraph.descriptions)
+        {
+            temp += "\n";
+            temp += description;
+        }
+        phases.push_back(temp);
+    }
+}
+
+void init_novel_mode(config& config)
+{
+    if (!config.plot_file.empty())
+    {
+        config.phases.clear();
+        std::filesystem::path plot_file_path{ string_to_path_by_config(config.plot_file, config) };
+        std::string content;
+        read_file_to_string(content, plot_file_path);
+        std::vector<item> paragraphs{ parse_item_list(content) };
+        set_paragraphs_to_phases(paragraphs, config.phases);
+    }
+}
+
 int parse_commandline(
     int argc,
     char** argv,
@@ -1102,6 +1187,7 @@ int parse_commandline(
             ("port", po::value<std::string>(&config.port)->default_value("5000", "port"))
             ("api-key", po::value<std::string>(&config.api_key)->default_value("", "API key"))
             ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
+            ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info", "log level (trace|debug|info|warning|error|fatal)"))
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt", "log file path"))
             ("base-path", po::value<std::string>(&config.base_path)->default_value(".", "base path"))
@@ -1193,18 +1279,11 @@ int parse_commandline(
 
         if (config.mode == "chat")
         {
-            if (config.phases.empty())
-            {
-                config.phases = { "{{user}}", "{{char}}" };
-            }
-            if (config.generation_prefix.empty())
-            {
-                config.generation_prefix = "\\n{{phase}}: ";
-            }
+            init_chat_mode(config);
         }
         else if (config.mode == "novel")
         {
-            ;
+            init_novel_mode(config);
         }
         else
         {
@@ -1381,9 +1460,10 @@ void iterate(config& config)
 
         config.macros["N"] = std::to_string(iteration_count + 1);
 
-        for (const std::string& phase : config.phases)
+        for (std::size_t phase_index = 0; config.phases.size(); ++phase_index)
         {
-            config.macros["phase"] = phase;
+            set_phases_macro(config.phases, phase_index, config.macros);
+
             try
             {
                 generate_and_output(config, prompts, config.generation_prefix);
