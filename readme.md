@@ -21,9 +21,9 @@ llmcpp は、oobabooga/text-generation-webui(https://github.com/oobabooga/text-g
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
 ## チュートリアル
-llmcpp はデフォルトで下記のファイルを読み込む。
+llmcpp は下記のファイルを読み込む。
 
-| ファイル名 | 概要 | 変更するオプション | 必須/任意 |
+| ファイル名(デフォルト) | 概要 | 変更するオプション | 必須/任意 |
 | --- | --- | --- | --- |
 | system_prompts.txt | システムプロンプト | --system-prompts-file | 必須 |
 | examples.txt | 生成したいテキストの例 | --examples-file | 任意 |
@@ -32,7 +32,7 @@ llmcpp はデフォルトで下記のファイルを読み込む。
 各ファイルを探索するディレクトリを変更する場合、`--base-path` オプションで指定する。
 ログはデフォルトで下記に出力される。
 
-| ファイル名 | 概要 | 変更するオプション |
+| ファイル名(デフォルト) | 概要 | 変更するオプション |
 | --- | --- | --- |
 | log.txt | ログファイル | --log-file |
 
