@@ -425,7 +425,10 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
             if (found != macros.end())
             {
                 expanded_string = found->second;
-                expanded_string = expand_macro(expanded_string, macros, depth + 1);
+                if ("{{" + macro_string + "}}" != expanded_string)
+                {
+                    expanded_string = expand_macro(expanded_string, macros, depth + 1);
+                }
                 result += expanded_string;
                 BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
             }
