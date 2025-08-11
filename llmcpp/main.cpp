@@ -432,7 +432,6 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     return result;
 }
 
-    std::vector<std::string> descriptions;
 std::vector<item> parse_item_list(const std::string& str)
 {
     std::vector<item> result;
