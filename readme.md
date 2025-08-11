@@ -4,9 +4,9 @@
 llmcpp は、oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) により提供される Open-API 互換の Web API を利用して、ローカル環境でテキスト生成する作業を支援する CLI のフロントエンドである。
 
 ## ビルド要求
-* Boost (>= 1.88.0)
+* Boost 1.88.0+
 	* https://www.boost.org/
-* C++20
+* C++20+
 
 ## 事前準備
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
