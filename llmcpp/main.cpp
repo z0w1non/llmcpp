@@ -1436,22 +1436,6 @@ int parse_commandline(
             ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
             ;
 
-        //struct sd_txt2img_parameters
-        {
-            std::string host;
-            std::string port;
-            std::string target = "/sdapi/v1/txt2img";
-
-            std::string prompt;
-            std::string negative_prompt;
-            int steps{};
-            int width{};
-            int height{};
-            double cfg_scale{};
-            std::string sampler_name;
-        };
-
-
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
         po::notify(vm);
