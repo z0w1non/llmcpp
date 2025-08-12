@@ -217,6 +217,9 @@ struct config
     std::string host;
     std::string port;
     std::string api_key;
+    
+    std::string completions_target;
+    std::string token_count_target;
 
     std::string mode{};
 
@@ -781,7 +784,7 @@ llm_response send_oobabooga_completions_request(
         std::stringstream ss_request_body;
         pt::write_json(ss_request_body, request_body_json, false);
 
-        http::request<http::string_body> request{ http::verb::post, "/v1/completions", 11 }; // HTTP/1.1
+        http::request<http::string_body> request{ http::verb::post, config.completions_target, 11 }; // HTTP/1.1
         request.set(http::field::host, config.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -874,7 +877,7 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         std::stringstream ss_request_body;
         pt::write_json(ss_request_body, request_body_json, false);
 
-        http::request<http::string_body> request{ http::verb::post, "/v1/internal/token-count", 11 }; // HTTP/1.1
+        http::request<http::string_body> request{ http::verb::post, config.token_count_target, 11 }; // HTTP/1.1
 
         request.set(http::field::host, config.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -1342,6 +1345,8 @@ int parse_commandline(
             ("host", po::value<std::string>(&config.host)->default_value("localhost"), "host")
             ("port", po::value<std::string>(&config.port)->default_value("5000"), "port")
             ("api-key", po::value<std::string>(&config.api_key)->default_value(""), "API key")
+            ("completions-target", po::value<std::string>(&config.completions_target)->default_value("/v1/completions"), "completions target")
+            ("token-count-target", po::value<std::string>(&config.token_count_target)->default_value("/v1/internal/token-count"), "token count target")
             ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
             ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
