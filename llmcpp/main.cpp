@@ -30,6 +30,8 @@
 #include <boost/algorithm/string.hpp> 
 #include <boost/date_time.hpp>
 #include <boost/date_time/time_facet.hpp>
+#include <boost/archive/iterators/binary_from_base64.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
 #include <system_error>
 #include <string>
 #include <sstream>
@@ -58,6 +60,7 @@ class io_exception : public runtime_exception {};
 class file_open_exception : public io_exception {};
 class socket_exception : public io_exception {};
 class text_generation_exception : public runtime_exception {};
+class image_generation_exception : public runtime_exception {};
 class syntax_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
@@ -67,6 +70,8 @@ namespace error_info
 {
     using stacktrace = boost::error_info<struct tag_stacktrace, boost::stacktrace::stacktrace>;
     using description = boost::error_info<struct tag_description, std::string>;
+    using wrapped_std_exception = boost::error_info<struct tag_wrapped_std_exception, std::exception>;
+    using wrapped_boost_exception = boost::error_info<struct tag_wrapped_boost_exception, boost::exception>;
     using path = boost::error_info<struct tag_file_path, std::filesystem::path>;
 
     namespace http
@@ -77,6 +82,11 @@ namespace error_info
             using reason = boost::error_info<struct tag_result_int, std::string>;
             using body = boost::error_info<struct tag_body, std::string>;
         }
+    }
+
+    namespace beast
+    {
+        using error_code = boost::error_info<struct tag_error_code, boost::beast::error_code>;
     }
 
     namespace macro
@@ -156,6 +166,22 @@ struct completions_parameters
     std::string grammar_string;
 };
 
+struct sd_txt2img_parameters
+{
+    bool enabled{};
+    std::string host;
+    std::string port;
+    std::string target;
+
+    std::string output_file;
+
+    int steps{};
+    int width{};
+    int height{};
+    double cfg_scale{};
+    std::string sampler_name;
+};
+
 using macros = std::map<std::string, std::string>;
 
 struct token_count_string
@@ -218,7 +244,8 @@ struct config
     int max_completion_iterations{};
     int max_total_context_tokens{};
 
-    completions_parameters params;
+    completions_parameters completions_params;
+    sd_txt2img_parameters sd_txt2img_params;
     macros macros;
     mutable lru_cache lru_cache;
     std::vector<std::string> predefined_macros;
@@ -241,6 +268,102 @@ struct prompts
 
     std::string to_string(const config& config) const;
 };
+
+std::string base64_decode(const std::string& encoded_string)
+{
+    using iterator = boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<std::string::const_iterator>, 8, 6>;
+    return std::string{ iterator{ encoded_string.begin() }, iterator{ encoded_string.end() } };
+}
+
+void send_automatic1111_txt2img_request(
+    const config& config,
+    const std::string& prompt,
+    const std::string& negative_prompt,
+    const std::filesystem::path& path
+)
+{
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
+
+    try
+    {
+        net::io_context ioc;
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
+
+        auto const results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
+        tcp_stream.connect(results);
+
+        boost::property_tree::ptree pt;
+        pt.put("prompt", prompt);
+        pt.put("negative_prompt", negative_prompt);
+        pt.put("steps", config.sd_txt2img_params.steps);
+        pt.put("width", config.sd_txt2img_params.width);
+        pt.put("height", config.sd_txt2img_params.height);
+        pt.put("cfg_scale", config.sd_txt2img_params.cfg_scale);
+        pt.put("sampler_name", config.sd_txt2img_params.sampler_name);
+
+        std::stringstream ss_request_body;
+        boost::property_tree::json_parser::write_json(ss_request_body, pt, false);
+
+        http::request<http::string_body> request_body{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
+        request_body.set(http::field::host, config.sd_txt2img_params.host);
+        request_body.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        request_body.set(http::field::content_type, "application/json; charset=UTF-8");
+        request_body.body() = ss_request_body.str();
+        request_body.prepare_payload();
+
+        http::write(tcp_stream, request_body);
+
+        beast::flat_buffer buffer;
+        http::response<http::string_body> response;
+        http::read(tcp_stream, buffer, response);
+
+        std::stringstream ss;
+        ss_request_body << response.body();
+        boost::property_tree::ptree response_pt;
+        boost::property_tree::json_parser::read_json(ss_request_body, response_pt);
+
+        std::string base64_image_data;
+        if (auto images_node = response_pt.get_child_optional("images"))
+        {
+            if (!images_node->empty())
+            {
+                base64_image_data = images_node->front().second.get_value<std::string>();
+            }
+        }
+
+        if (base64_image_data.empty())
+        {
+            throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
+        }
+
+        std::string decoded_image{ base64_decode(base64_image_data) };
+
+        {
+            boost::nowide::ofstream ofs{ path, std::ios::binary };
+            if (!ofs.is_open())
+            {
+                throw file_open_exception{} << error_info::path{ path };
+            }
+            ofs.write(decoded_image.data(), decoded_image.size());
+            BOOST_LOG_TRIVIAL(info) << "Image successfully saved to " << path;
+        }
+
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        throw file_open_exception{} << error_info::wrapped_std_exception{ exception };
+    }
+}
 
 std::string trim(const std::string& str)
 {
@@ -541,8 +664,8 @@ llm_response send_oobabooga_completions_request(
     try
     {
         net::io_context ioc;
-        tcp::resolver resolver(ioc);
-        beast::tcp_stream tcp_stream(ioc);
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
 
         const auto results = resolver.resolve(config.host, config.port);
         tcp_stream.connect(results);
@@ -676,7 +799,12 @@ llm_response send_oobabooga_completions_request(
         http::response<http::string_body> response;
         http::read(tcp_stream, buffer, response);
 
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw text_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
 
         if (response.result() == http::status::ok)
         {
@@ -734,11 +862,11 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
     try
     {
         net::io_context ioc;
-        tcp::resolver resolver(ioc);
-        beast::tcp_stream stream(ioc);
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
 
         auto const results = resolver.resolve(config.host, config.port);
-        stream.connect(results);
+        tcp_stream.connect(results);
 
         pt::ptree request_body_json;
         request_body_json.put("text", prompt);
@@ -754,13 +882,18 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         request.body() = ss_request_body.str();
         request.prepare_payload();
 
-        http::write(stream, request);
+        http::write(tcp_stream, request);
 
         beast::flat_buffer buffer;
         http::response<http::string_body> response;
-        http::read(stream, buffer, response);
+        http::read(tcp_stream, buffer, response);
 
-        stream.socket().shutdown(tcp::socket::shutdown_both);
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw text_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
 
         if (response.result() == http::status::ok)
         {
@@ -908,14 +1041,14 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int tokens_to_generate = std::min(config.params.max_tokens, remaining_context);
+        int tokens_to_generate = std::min(config.completions_params.max_tokens, remaining_context);
         if (tokens_to_generate <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting.";
             break;
         }
 
-        completions_parameters temp_params = config.params;
+        completions_parameters temp_params = config.completions_params;
         temp_params.max_tokens = tokens_to_generate;
         llm_response response = send_oobabooga_completions_request(
             config, current_text, temp_params
@@ -1177,8 +1310,8 @@ int parse_commandline(
 
     try
     {
-        config.params.stop = { "\\n\\n", ":", "***" };
-        config.params.sampler_priority =
+        config.completions_params.stop = { "\\n\\n", ":", "***" };
+        config.completions_params.sampler_priority =
         {
             "repetition_penalty",
             "presence_penalty",
@@ -1201,26 +1334,26 @@ int parse_commandline(
             "encoder_repetition_penalty",
             "no_repeat_ngram"
         };
-        config.params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+        config.completions_params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "produce help message")
-            ("host", po::value<std::string>(&config.host)->default_value("localhost", "host"))
-            ("port", po::value<std::string>(&config.port)->default_value("5000", "port"))
-            ("api-key", po::value<std::string>(&config.api_key)->default_value("", "API key"))
+            ("host", po::value<std::string>(&config.host)->default_value("localhost"), "host")
+            ("port", po::value<std::string>(&config.port)->default_value("5000"), "port")
+            ("api-key", po::value<std::string>(&config.api_key)->default_value(""), "API key")
             ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
             ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
-            ("log-level", po::value<std::string>(&config.log_level)->default_value("info", "log level (trace|debug|info|warning|error|fatal)"))
-            ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt", "log file path"))
-            ("base-path", po::value<std::string>(&config.base_path)->default_value(".", "base path"))
-            ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt", "system prompt file path"))
-            ("examples-file", po::value<std::string>(&config.examples_file)->default_value("examples.txt", "exmaples file path"))
-            ("history-file", po::value<std::string>(&config.history_file)->default_value("history.txt", "history file path"))
-            ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt", "output file path"))
-            ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***", "separator to be inserted before and after examples"))
+            ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
+            ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
+            ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
+            ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt"), "system prompt file path")
+            ("examples-file", po::value<std::string>(&config.examples_file)->default_value("examples.txt"), "exmaples file path")
+            ("history-file", po::value<std::string>(&config.history_file)->default_value("history.txt"), "history file path")
+            ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt"), "output file path")
+            ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***"), "separator to be inserted before and after examples")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value("", "generation prefix"))
+            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value(""), "generation prefix")
             ("retry-generation-prefix", po::value<std::string>(&config.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
@@ -1228,65 +1361,91 @@ int parse_commandline(
             ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
             ("max-total-context-tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
-            ("model", po::value<std::string>(&config.params.model)->default_value("", "model"))
-            ("num-best-of", po::value<int>(&config.params.best_of)->default_value(1), "best_of")
-            ("echo", po::bool_switch(&config.params.echo)->default_value(false), "echo")
-            ("frequency-penalty", po::value<double>(&config.params.frequency_penalty)->default_value(0.0), "frequency penalty")
+            ("model", po::value<std::string>(&config.completions_params.model)->default_value("", "model"))
+            ("num-best-of", po::value<int>(&config.completions_params.best_of)->default_value(1), "best_of")
+            ("echo", po::bool_switch(&config.completions_params.echo)->default_value(false), "echo")
+            ("frequency-penalty", po::value<double>(&config.completions_params.frequency_penalty)->default_value(0.0), "frequency penalty")
             //std::map<int, double> logit_bias;
-            ("logprobs", po::value<double>(&config.params.logprobs)->default_value(0.0), "presence penalty")
-            ("max-tokens", po::value<int>(&config.params.max_tokens)->default_value(512), "max tokens")
-            ("n", po::value<int>(&config.params.n)->default_value(1), "number of responses generated for the same prompt")
-            ("presence-penalty", po::value<double>(&config.params.presence_penalty)->default_value(0.0), "presence penalty")
-            ("stop", po::value<std::vector<std::string>>(&config.params.stop)->multitoken(), "stop sequences")
-            ("stream", po::bool_switch(&config.params.stream)->default_value(false), "stream")
-            ("suffix", po::value<std::string>(&config.params.suffix)->default_value("", "suffix"))
-            ("temperature", po::value<double>(&config.params.temperature)->default_value(1.0), "temperature")
-            ("top-p", po::value<double>(&config.params.top_p)->default_value(1.0), "top p")
+            ("logprobs", po::value<double>(&config.completions_params.logprobs)->default_value(0.0), "presence penalty")
+            ("max-tokens", po::value<int>(&config.completions_params.max_tokens)->default_value(512), "max tokens")
+            ("n", po::value<int>(&config.completions_params.n)->default_value(1), "number of responses generated for the same prompt")
+            ("presence-penalty", po::value<double>(&config.completions_params.presence_penalty)->default_value(0.0), "presence penalty")
+            ("stop", po::value<std::vector<std::string>>(&config.completions_params.stop)->multitoken(), "stop sequences")
+            ("stream", po::bool_switch(&config.completions_params.stream)->default_value(false), "stream")
+            ("suffix", po::value<std::string>(&config.completions_params.suffix)->default_value(""), "suffix")
+            ("temperature", po::value<double>(&config.completions_params.temperature)->default_value(1.0), "temperature")
+            ("top-p", po::value<double>(&config.completions_params.top_p)->default_value(1.0), "top p")
             ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
-            ("dynatemp-low", po::value<double>(&config.params.dynatemp_low)->default_value(0.75), "dynatemp low")
-            ("dynatemp-high", po::value<double>(&config.params.dynatemp_high)->default_value(1.25), "dynatemp high")
-            ("dynatemp-exponent", po::value<double>(&config.params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
-            ("smoothing-factor", po::value<double>(&config.params.smoothing_factor)->default_value(0.0), "smoothing factor")
-            ("smoothing-curve", po::value<double>(&config.params.smoothing_curve)->default_value(1.0), "smoothing curve")
-            ("min-p", po::value<double>(&config.params.min_p)->default_value(0.1), "min p")
-            ("top-k", po::value<int>(&config.params.top_k)->default_value(0), "top k")
-            ("typical-p", po::value<double>(&config.params.typical_p)->default_value(1.0), "typical p")
-            ("xtc-threshold", po::value<double>(&config.params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
-            ("xtc-probability", po::value<double>(&config.params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
-            ("epsilon-cutoff", po::value<double>(&config.params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
-            ("eta-cutoff", po::value<double>(&config.params.eta_cutoff)->default_value(0), "eta cutoff")
-            ("tfs", po::value<double>(&config.params.tfs)->default_value(1.0), "tfs")
-            ("top-a", po::value<double>(&config.params.top_a)->default_value(0.0), "top a")
-            ("top-n-sigma", po::value<double>(&config.params.top_n_sigma)->default_value(1.0), "top n sigma")
-            ("dry-multiplier", po::value<double>(&config.params.dry_multiplier)->default_value(0.0), "DRY multiplier")
-            ("dry-allowed-length", po::value<int>(&config.params.dry_allowed_length)->default_value(2), "DRY allowed length")
-            ("dry-base", po::value<double>(&config.params.dry_base)->default_value(1.75), "DRY base")
-            ("repetition-penalty", po::value<double>(&config.params.repetition_penalty)->default_value(1.2), "repetition penalty")
-            ("encoder-repetition-penalty", po::value<double>(&config.params.encoder_repetition_penalty)->default_value(1.0), "encoder repetition penalty")
-            ("no-repeat-ngram-size", po::value<int>(&config.params.no_repeat_ngram_size)->default_value(0), "no repeat ngram size")
-            ("repetition-penalty-range", po::value<int>(&config.params.repetition_penalty_range)->default_value(0), "repetition penalty range")
-            ("penalty-alpha", po::value<double>(&config.params.penalty_alpha)->default_value(0.9), "penalty alpha")
-            ("guidance-scale", po::value<double>(&config.params.guidance_scale)->default_value(1.0), "guidance scale")
-            ("mirostat-mode", po::value<int>(&config.params.mirostat_mode)->default_value(0), "mirostat mode")
-            ("mirostat-tau", po::value<double>(&config.params.mirostat_tau)->default_value(5), "mirostat tau")
-            ("mirostat-eta", po::value<double>(&config.params.mirostat_eta)->default_value(0.1), "mirostat eta")
-            ("prompt-lookup-num-tokens", po::value<int>(&config.params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
-            ("max-tokens-second", po::value<int>(&config.params.max_tokens_second)->default_value(0), "max tokens second")
-            ("do_sample", po::bool_switch(&config.params.do_sample)->default_value(true), "do sample")
-            ("dynamic_temperature", po::bool_switch(&config.params.dynamic_temperature)->default_value(false), "dynamic temperature")
-            ("temperature_last", po::bool_switch(&config.params.temperature_last)->default_value(false), "temperature last")
-            ("auto_max_new_tokens", po::bool_switch(&config.params.auto_max_new_tokens)->default_value(false), "auto max_new tokens")
-            ("ban_eos_token", po::bool_switch(&config.params.ban_eos_token)->default_value(false), "ban eos token")
-            ("add_bos_token", po::bool_switch(&config.params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
-            ("skip_special_tokens", po::bool_switch(&config.params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-            ("static_cache", po::bool_switch(&config.params.static_cache)->default_value(false), "static 1")
-            ("truncation_length", po::value<int>(&config.params.truncation_length)->default_value(0), "truncation length")
-            ("sampler-priority", po::value<std::vector<std::string>>(&config.params.sampler_priority)->multitoken(), "sampler priority")
-            ("custom-token-bans", po::value<std::string>(&config.params.custom_token_bans)->default_value("", "custom token bans"))
-            ("negative-prompt", po::value<std::string>(&config.params.negative_prompt)->default_value("", "negative prompt"))
-            ("dry-sequence-breakers", po::value<std::string>(&config.params.dry_sequence_breakers)->default_value("", "dry sequence breakers"))
-            ("grammar-string", po::value<std::string>(&config.params.grammar_string)->default_value("", "grammar-string"))
+            ("dynatemp-low", po::value<double>(&config.completions_params.dynatemp_low)->default_value(0.75), "dynatemp low")
+            ("dynatemp-high", po::value<double>(&config.completions_params.dynatemp_high)->default_value(1.25), "dynatemp high")
+            ("dynatemp-exponent", po::value<double>(&config.completions_params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
+            ("smoothing-factor", po::value<double>(&config.completions_params.smoothing_factor)->default_value(0.0), "smoothing factor")
+            ("smoothing-curve", po::value<double>(&config.completions_params.smoothing_curve)->default_value(1.0), "smoothing curve")
+            ("min-p", po::value<double>(&config.completions_params.min_p)->default_value(0.1), "min p")
+            ("top-k", po::value<int>(&config.completions_params.top_k)->default_value(0), "top k")
+            ("typical-p", po::value<double>(&config.completions_params.typical_p)->default_value(1.0), "typical p")
+            ("xtc-threshold", po::value<double>(&config.completions_params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
+            ("xtc-probability", po::value<double>(&config.completions_params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
+            ("epsilon-cutoff", po::value<double>(&config.completions_params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
+            ("eta-cutoff", po::value<double>(&config.completions_params.eta_cutoff)->default_value(0), "eta cutoff")
+            ("tfs", po::value<double>(&config.completions_params.tfs)->default_value(1.0), "tfs")
+            ("top-a", po::value<double>(&config.completions_params.top_a)->default_value(0.0), "top a")
+            ("top-n-sigma", po::value<double>(&config.completions_params.top_n_sigma)->default_value(1.0), "top n sigma")
+            ("dry-multiplier", po::value<double>(&config.completions_params.dry_multiplier)->default_value(0.0), "DRY multiplier")
+            ("dry-allowed-length", po::value<int>(&config.completions_params.dry_allowed_length)->default_value(2), "DRY allowed length")
+            ("dry-base", po::value<double>(&config.completions_params.dry_base)->default_value(1.75), "DRY base")
+            ("repetition-penalty", po::value<double>(&config.completions_params.repetition_penalty)->default_value(1.2), "repetition penalty")
+            ("encoder-repetition-penalty", po::value<double>(&config.completions_params.encoder_repetition_penalty)->default_value(1.0), "encoder repetition penalty")
+            ("no-repeat-ngram-size", po::value<int>(&config.completions_params.no_repeat_ngram_size)->default_value(0), "no repeat ngram size")
+            ("repetition-penalty-range", po::value<int>(&config.completions_params.repetition_penalty_range)->default_value(0), "repetition penalty range")
+            ("penalty-alpha", po::value<double>(&config.completions_params.penalty_alpha)->default_value(0.9), "penalty alpha")
+            ("guidance-scale", po::value<double>(&config.completions_params.guidance_scale)->default_value(1.0), "guidance scale")
+            ("mirostat-mode", po::value<int>(&config.completions_params.mirostat_mode)->default_value(0), "mirostat mode")
+            ("mirostat-tau", po::value<double>(&config.completions_params.mirostat_tau)->default_value(5), "mirostat tau")
+            ("mirostat-eta", po::value<double>(&config.completions_params.mirostat_eta)->default_value(0.1), "mirostat eta")
+            ("prompt-lookup-num-tokens", po::value<int>(&config.completions_params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
+            ("max-tokens-second", po::value<int>(&config.completions_params.max_tokens_second)->default_value(0), "max tokens second")
+            ("do_sample", po::bool_switch(&config.completions_params.do_sample)->default_value(true), "do sample")
+            ("dynamic_temperature", po::bool_switch(&config.completions_params.dynamic_temperature)->default_value(false), "dynamic temperature")
+            ("temperature_last", po::bool_switch(&config.completions_params.temperature_last)->default_value(false), "temperature last")
+            ("auto_max_new_tokens", po::bool_switch(&config.completions_params.auto_max_new_tokens)->default_value(false), "auto max_new tokens")
+            ("ban_eos_token", po::bool_switch(&config.completions_params.ban_eos_token)->default_value(false), "ban eos token")
+            ("add_bos_token", po::bool_switch(&config.completions_params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
+            ("skip_special_tokens", po::bool_switch(&config.completions_params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+            ("static_cache", po::bool_switch(&config.completions_params.static_cache)->default_value(false), "static 1")
+            ("truncation_length", po::value<int>(&config.completions_params.truncation_length)->default_value(0), "truncation length")
+            ("sampler-priority", po::value<std::vector<std::string>>(&config.completions_params.sampler_priority)->multitoken(), "sampler priority")
+            ("custom-token-bans", po::value<std::string>(&config.completions_params.custom_token_bans)->default_value(""), "custom token bans")
+            ("negative-prompt", po::value<std::string>(&config.completions_params.negative_prompt)->default_value(""), "negative prompt")
+            ("dry-sequence-breakers", po::value<std::string>(&config.completions_params.dry_sequence_breakers)->default_value(""), "dry sequence breakers")
+            ("grammar-string", po::value<std::string>(&config.completions_params.grammar_string)->default_value(""), "grammar-string")
+            ("enable-sd", po::bool_switch(&config.sd_txt2img_params.enabled)->default_value(false), "enable SD image generation")
+            ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
+            ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7681"), "SD port")
+            ("sd-target", po::value<std::string>(&config.sd_txt2img_params.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+            ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("output.png"), "SD output PNG file")
+            ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(20), "SD steps")
+            ("sd-width", po::value<int>(&config.sd_txt2img_params.width)->default_value(1024), "SD image width")
+            ("sd-height", po::value<int>(&config.sd_txt2img_params.height)->default_value(1024), "SD image height")
+            ("sd-cfg_scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(5), "SD cfg scale")
+            ("sd-sampler_name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
             ;
+
+        //struct sd_txt2img_parameters
+        {
+            std::string host;
+            std::string port;
+            std::string target = "/sdapi/v1/txt2img";
+
+            std::string prompt;
+            std::string negative_prompt;
+            int steps{};
+            int width{};
+            int height{};
+            double cfg_scale{};
+            std::string sampler_name;
+        };
+
 
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -1319,9 +1478,9 @@ int parse_commandline(
             config.phases = { "" };
         }
 
-        std::transform(config.params.stop.begin(), config.params.stop.end(), config.params.stop.begin(), unescape_string);
+        std::transform(config.completions_params.stop.begin(), config.completions_params.stop.end(), config.completions_params.stop.begin(), unescape_string);
         std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
-        config.params.dry_sequence_breakers = unescape_string(config.params.dry_sequence_breakers);
+        config.completions_params.dry_sequence_breakers = unescape_string(config.completions_params.dry_sequence_breakers);
         config.generation_prefix = unescape_string(config.generation_prefix);
         config.retry_generation_prefix = unescape_string(config.retry_generation_prefix);
 
@@ -1371,7 +1530,7 @@ std::string prompts::to_string(const config& config) const
             }
         };
 
-    int remaining_tokens = config.max_total_context_tokens - config.params.max_tokens;
+    int remaining_tokens = config.max_total_context_tokens - config.completions_params.max_tokens;
 
     std::string system_prompts_string;
     int system_prompts_tokens{};
@@ -1462,17 +1621,24 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
     BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
 
     write_response(config, response);
+
+    if (config.sd_txt2img_params.enabled)
+    {
+        const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
+        create_parent_directories(output_file_path);
+        send_automatic1111_txt2img_request(config, response, "", output_file_path);
+    }
 }
 
 void set_seed(config& config)
 {
     if (config.seed == -1)
     {
-        config.params.seed = generate_random_seed();
+        config.completions_params.seed = generate_random_seed();
     }
     else
     {
-        config.params.seed = config.seed;
+        config.completions_params.seed = config.seed;
     }
 }
 
