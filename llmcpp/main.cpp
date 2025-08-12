@@ -1432,7 +1432,7 @@ int parse_commandline(
             ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(20), "SD steps")
             ("sd-width", po::value<int>(&config.sd_txt2img_params.width)->default_value(1024), "SD image width")
             ("sd-height", po::value<int>(&config.sd_txt2img_params.height)->default_value(1024), "SD image height")
-            ("sd-cfg-scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(5), "SD cfg scale")
+            ("sd-cfg-scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(7), "SD cfg scale")
             ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
             ;
 
