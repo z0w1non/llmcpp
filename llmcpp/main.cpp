@@ -168,11 +168,12 @@ struct completions_parameters
 
 struct sd_txt2img_parameters
 {
-    bool enabled{};
     std::string host;
     std::string port;
     std::string target;
 
+    std::string prompt_file;
+    std::string negative_prompt_file;
     std::string output_file;
 
     int steps{};
@@ -324,10 +325,10 @@ void send_automatic1111_txt2img_request(
         http::response<http::string_body> response;
         http::read(tcp_stream, buffer, response);
 
-        std::stringstream ss;
-        ss_request_body << response.body();
+        std::stringstream ss_response;
+        ss_response << response.body();
         boost::property_tree::ptree response_pt;
-        boost::property_tree::json_parser::read_json(ss_request_body, response_pt);
+        boost::property_tree::json_parser::read_json(ss_response, response_pt);
 
         std::string base64_image_data;
         if (auto images_node = response_pt.get_child_optional("images"))
@@ -347,12 +348,12 @@ void send_automatic1111_txt2img_request(
 
         {
             boost::nowide::ofstream ofs{ path, std::ios::binary };
+            BOOST_LOG_TRIVIAL(info) << __LINE__;
             if (!ofs.is_open())
             {
                 throw file_open_exception{} << error_info::path{ path };
             }
             ofs.write(decoded_image.data(), decoded_image.size());
-            BOOST_LOG_TRIVIAL(info) << "Image successfully saved to " << path;
         }
 
         beast::error_code error_code;
@@ -364,7 +365,7 @@ void send_automatic1111_txt2img_request(
     }
     catch (const std::exception& exception)
     {
-        throw file_open_exception{} << error_info::wrapped_std_exception{ exception };
+        throw file_open_exception{} << error_info::description{ exception.what()};
     }
 }
 
@@ -964,6 +965,11 @@ void write_cache(const config& config)
 {
     namespace pt = boost::property_tree;
 
+    if (config.mode != "chat" && config.mode != "novel")
+    {
+        return;
+    }
+
     pt::ptree cache;
     for (const token_count_string& element : config.lru_cache.get<lru_tag>())
     {
@@ -984,6 +990,11 @@ void write_cache(const config& config)
 void read_cache(const config& config)
 {
     namespace pt = boost::property_tree;
+
+    if (config.mode != "chat" && config.mode != "novel")
+    {
+        return;
+    }
 
     pt::ptree json;
     std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
@@ -1347,7 +1358,7 @@ int parse_commandline(
             ("api-key", po::value<std::string>(&config.api_key)->default_value(""), "API key")
             ("completions-target", po::value<std::string>(&config.completions_target)->default_value("/v1/completions"), "completions target")
             ("token-count-target", po::value<std::string>(&config.token_count_target)->default_value("/v1/internal/token-count"), "token count target")
-            ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
+            ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel or sd. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
             ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
@@ -1424,10 +1435,11 @@ int parse_commandline(
             ("negative-prompt", po::value<std::string>(&config.completions_params.negative_prompt)->default_value(""), "negative prompt")
             ("dry-sequence-breakers", po::value<std::string>(&config.completions_params.dry_sequence_breakers)->default_value(""), "dry sequence breakers")
             ("grammar-string", po::value<std::string>(&config.completions_params.grammar_string)->default_value(""), "grammar-string")
-            ("enable-sd", po::bool_switch(&config.sd_txt2img_params.enabled)->default_value(false), "enable SD image generation")
             ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
-            ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7681"), "SD port")
+            ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7860"), "SD port")
             ("sd-target", po::value<std::string>(&config.sd_txt2img_params.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+            ("sd-prompt-file", po::value<std::string>(&config.sd_txt2img_params.prompt_file)->default_value("prompt.txt"), "SD prompt file")
+            ("sd-negative-prompt-file", po::value<std::string>(&config.sd_txt2img_params.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
             ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("output.png"), "SD output PNG file")
             ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(20), "SD steps")
             ("sd-width", po::value<int>(&config.sd_txt2img_params.width)->default_value(1024), "SD image width")
@@ -1456,9 +1468,13 @@ int parse_commandline(
         {
             init_novel_mode(config);
         }
+        else if (config.mode == "sd")
+        {
+            ;
+        }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "mode options must be chat or novel.";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be chat or novel or sd.";
             return 1;
         }
 
@@ -1573,19 +1589,37 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.system_prompts_file, config) };
-    read_file_to_container(system_prompts_path, prompts.system_prompts);
-
-    const std::filesystem::path examples_path{ string_to_path_by_config(config.examples_file, config) };
-    if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
+    if (config.mode == "chat" || config.mode == "novel")
     {
-        read_file_to_container(examples_path, prompts.examples);
+        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.system_prompts_file, config) };
+        read_file_to_container(system_prompts_path, prompts.system_prompts);
+
+        const std::filesystem::path examples_path{ string_to_path_by_config(config.examples_file, config) };
+        if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
+        {
+            read_file_to_container(examples_path, prompts.examples);
+        }
+
+        const std::filesystem::path history_path{ string_to_path_by_config(config.history_file, config) };
+        if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
+        {
+            read_file_to_container(history_path, prompts.history);
+        }
     }
-
-    const std::filesystem::path history_path{ string_to_path_by_config(config.history_file, config) };
-    if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
+    else if (config.mode == "sd")
     {
-        read_file_to_container(history_path, prompts.history);
+        const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
+        create_parent_directories(output_file_path);
+
+        const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
+        std::string prompt_string;
+        read_file_to_string(prompt_file_path, prompt_string);
+        prompt_string = expand_macro(prompt_string, config.macros);
+
+        const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
+        std::string negative_prompt_string;
+        read_file_to_string(negative_prompt_file_path, negative_prompt_string);
+        negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
     }
 }
 
@@ -1603,19 +1637,32 @@ void write_response(const config& config, const std::string& response)
 
 void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
 {
-    std::string prompts_string = prompts.to_string(config);
-    prompts_string = expand_macro(prompts_string, config.macros);
+    if (config.mode == "chat" || config.mode == "novel")
+    {
+        std::string prompts_string = prompts.to_string(config);
+        prompts_string = expand_macro(prompts_string, config.macros);
 
-    const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
-    BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
+        const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
+        BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
 
-    write_response(config, response);
-
-    if (config.sd_txt2img_params.enabled)
+        write_response(config, response);
+    }
+    else if (config.mode == "sd")
     {
         const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
         create_parent_directories(output_file_path);
-        send_automatic1111_txt2img_request(config, response, "", output_file_path);
+
+        const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
+        std::string prompt_string;
+        read_file_to_string(prompt_file_path, prompt_string);
+        prompt_string = expand_macro(prompt_string, config.macros);
+
+        const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
+        std::string negative_prompt_string;
+        read_file_to_string(negative_prompt_file_path, negative_prompt_string);
+        negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
+
+        send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
     }
 }
 
