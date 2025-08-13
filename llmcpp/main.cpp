@@ -166,6 +166,65 @@ struct completions_parameters
     std::string grammar_string;
 };
 
+struct adetailer_parametesrs
+{
+    bool ad_enable{};
+    bool skip_img2img{};
+
+    struct arg
+    {
+        std::string ad_model;;
+        std::string ad_model_classes;
+        bool ad_tab_enable{};
+        std::string ad_prompt;
+        std::string ad_negative_prompt;
+        double ad_confidence{};
+        std::string ad_mask_filter_method;
+        int ad_mask_k{};
+        double ad_mask_min_ratio;
+        double ad_mask_max_ratio;
+        int ad_dilate_erode{};
+        int ad_x_offset{};
+        int ad_y_offset{};
+        std::string ad_mask_merge_invert;
+        int ad_mask_blur{};
+        double ad_denoising_strength{};
+        bool ad_inpaint_only_masked{};;
+        int ad_inpaint_only_masked_padding{};
+        bool ad_use_inpaint_width_height{};
+        int ad_inpaint_width{};
+        int ad_inpaint_height{};
+        bool ad_use_steps{};
+        int ad_steps{};
+        bool ad_use_cfg_scale{};
+        double ad_cfg_scale{};
+        bool ad_use_checkpoint{};
+        std::string ad_checkpoint;
+        bool ad_use_vae{};
+        std::string ad_vae;
+        bool ad_use_sampler{};
+        std::string ad_sampler;
+        std::string ad_scheduler;
+        bool ad_use_noise_multiplier{};
+        double ad_noise_multiplier{};
+        bool ad_use_clip_skip{};
+        int ad_clip_skip{};
+        bool ad_restore_face{};
+        std::string ad_controlnet_model;
+        std::string ad_controlnet_module;
+        std::string ad_controlnet_weight{};
+        double ad_controlnet_guidance_start{};
+        double ad_controlnet_guidance_end{};
+    };
+
+    arg args1;
+};
+
+struct alwayson_scripts
+{
+    adetailer_parametesrs adetailer_parametesrs;
+};
+
 struct sd_txt2img_parameters
 {
     std::string host;
@@ -176,11 +235,63 @@ struct sd_txt2img_parameters
     std::string negative_prompt_file;
     std::string output_file;
 
+    std::string prompt;
+    std::string negative_prompt;
+    std::vector<std::string> styles;
+    int seed{};
+    int subseed{};
+    double subseed_strength{};
+    int seed_resize_from_h{};
+    int seed_resize_from_w{};
+    std::string sampler_name;
+    std::string scheduler;
+    int batch_size{};
+    int n_iter{};
     int steps{};
+    double cfg_scale{};
     int width{};
     int height{};
-    double cfg_scale{};
-    std::string sampler_name;
+    bool restore_faces{};
+    bool tiling{};
+    bool do_not_save_samples{};
+    bool do_not_save_grid{};
+    int eta{};
+    double denoising_strength{};
+    int s_min_uncond{};
+    int s_churn{};
+    int s_tmax{};
+    int s_tmin{};
+    int s_noise{};
+    std::string override_settings;
+    bool override_settings_restore_afterwards{};
+    std::string refiner_checkpoint;
+    double refiner_switch_at{};
+    bool disable_extra_networks{};
+    std::string firstpass_image;
+    std::string comments;
+    bool enable_hr{};
+    int firstphase_width{};
+    int firstphase_height{};
+    double hr_scale{};
+    std::string hr_upscaler;
+    int hr_second_pass_steps{};
+    int hr_resize_x{};
+    int hr_resize_y{};
+    std::string hr_checkpoint_name;
+    std::string hr_sampler_name;
+    std::string hr_scheduler;
+    std::string hr_prompt;
+    std::string hr_negative_prompt;
+    std::string force_task_id;
+    std::string sampler_index;
+    std::string script_name;
+    std::vector<std::string> script_args;
+    bool send_images{};
+    bool save_images{};
+    alwayson_scripts alwayson_scripts;
+    std::string infotext;
+
+    bool abg_remover_enable{};
 };
 
 using macros = std::map<std::string, std::string>;
@@ -218,7 +329,7 @@ struct config
     std::string host;
     std::string port;
     std::string api_key;
-    
+
     std::string completions_target;
     std::string token_count_target;
 
@@ -273,100 +384,19 @@ struct prompts
     std::string to_string(const config& config) const;
 };
 
+std::string replace_constant(const std::string& str)
+{
+    std::string result{ str };
+    const std::regex constants{ R"(\"(null|true|false)\")", std::regex_constants::ECMAScript };
+    result = std::regex_replace(result, constants, "$1");
+    //const std::regex numeric_constants{ R"(\"([-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?)\")", std::regex_constants::ECMAScript };
+    return result;
+}
+
 std::string base64_decode(const std::string& encoded_string)
 {
     using iterator = boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<std::string::const_iterator>, 8, 6>;
     return std::string{ iterator{ encoded_string.begin() }, iterator{ encoded_string.end() } };
-}
-
-void send_automatic1111_txt2img_request(
-    const config& config,
-    const std::string& prompt,
-    const std::string& negative_prompt,
-    const std::filesystem::path& path
-)
-{
-    namespace beast = boost::beast;
-    namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
-
-    try
-    {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
-
-        auto const results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
-        tcp_stream.connect(results);
-
-        boost::property_tree::ptree pt;
-        pt.put("prompt", prompt);
-        pt.put("negative_prompt", negative_prompt);
-        pt.put("steps", config.sd_txt2img_params.steps);
-        pt.put("width", config.sd_txt2img_params.width);
-        pt.put("height", config.sd_txt2img_params.height);
-        pt.put("cfg_scale", config.sd_txt2img_params.cfg_scale);
-        pt.put("sampler_name", config.sd_txt2img_params.sampler_name);
-
-        std::stringstream ss_request_body;
-        boost::property_tree::json_parser::write_json(ss_request_body, pt, false);
-
-        http::request<http::string_body> request_body{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
-        request_body.set(http::field::host, config.sd_txt2img_params.host);
-        request_body.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request_body.set(http::field::content_type, "application/json; charset=UTF-8");
-        request_body.body() = ss_request_body.str();
-        request_body.prepare_payload();
-
-        http::write(tcp_stream, request_body);
-
-        beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
-
-        std::stringstream ss_response;
-        ss_response << response.body();
-        boost::property_tree::ptree response_pt;
-        boost::property_tree::json_parser::read_json(ss_response, response_pt);
-
-        std::string base64_image_data;
-        if (auto images_node = response_pt.get_child_optional("images"))
-        {
-            if (!images_node->empty())
-            {
-                base64_image_data = images_node->front().second.get_value<std::string>();
-            }
-        }
-
-        if (base64_image_data.empty())
-        {
-            throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
-        }
-
-        std::string decoded_image{ base64_decode(base64_image_data) };
-
-        {
-            boost::nowide::ofstream ofs{ path, std::ios::binary };
-            BOOST_LOG_TRIVIAL(info) << __LINE__;
-            if (!ofs.is_open())
-            {
-                throw file_open_exception{} << error_info::path{ path };
-            }
-            ofs.write(decoded_image.data(), decoded_image.size());
-        }
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
-        }
-    }
-    catch (const std::exception& exception)
-    {
-        throw file_open_exception{} << error_info::description{ exception.what()};
-    }
 }
 
 std::string trim(const std::string& str)
@@ -567,6 +597,190 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     result += str.substr(last_position);
 
     return result;
+}
+
+void send_automatic1111_txt2img_request(
+    const config& config,
+    const std::string& prompt,
+    const std::string& negative_prompt,
+    const std::filesystem::path& path
+)
+{
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
+
+    try
+    {
+        net::io_context ioc;
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
+        namespace pt = boost::property_tree;
+
+        auto const results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
+        tcp_stream.connect(results);
+
+        boost::property_tree::ptree request_body_json;
+
+        request_body_json.put("host", config.sd_txt2img_params.host);
+        request_body_json.put("port", config.sd_txt2img_params.port);
+        request_body_json.put("target", config.sd_txt2img_params.target);
+
+        //pt.put("prompt_file", config.sd_txt2img_params.prompt_file);
+        //pt.put("negative_prompt_file", config.sd_txt2img_params.negative_prompt_file);
+        //pt.put("output_file", config.sd_txt2img_params.output_file);
+
+        //pt.put("prompt", config.sd_txt2img_params.prompt);
+        //pt.put("negative_prompt", config.sd_txt2img_params.negative_prompt);
+
+        request_body_json.put("prompt", prompt);
+        request_body_json.put("negative_prompt", negative_prompt);
+
+        //pt.put("styles", config.sd_txt2img_params.styles);
+        request_body_json.put("seed", config.sd_txt2img_params.seed);
+        request_body_json.put("subseed_strength", config.sd_txt2img_params.subseed_strength);
+        request_body_json.put("seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
+        request_body_json.put("seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
+        request_body_json.put("sampler_name", config.sd_txt2img_params.sampler_name);
+        request_body_json.put("scheduler", config.sd_txt2img_params.scheduler);
+        request_body_json.put("batch_size", config.sd_txt2img_params.batch_size);
+        request_body_json.put("n_iter", config.sd_txt2img_params.n_iter);
+        request_body_json.put("steps", config.sd_txt2img_params.steps);
+        request_body_json.put("cfg_scale", config.sd_txt2img_params.cfg_scale);
+        request_body_json.put("width", config.sd_txt2img_params.width);
+        request_body_json.put("height", config.sd_txt2img_params.height);
+        request_body_json.put("restore_faces", config.sd_txt2img_params.restore_faces);
+        request_body_json.put("tiling", config.sd_txt2img_params.tiling);
+        request_body_json.put("do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
+        request_body_json.put("do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
+        request_body_json.put("eta", config.sd_txt2img_params.eta);
+        request_body_json.put("denoising_strength", config.sd_txt2img_params.denoising_strength);
+        request_body_json.put("s_min_uncond", config.sd_txt2img_params.s_min_uncond);
+        request_body_json.put("s_churn", config.sd_txt2img_params.s_churn);
+        request_body_json.put("s_tmax", config.sd_txt2img_params.s_tmax);
+        request_body_json.put("s_tmin", config.sd_txt2img_params.s_tmin);
+        request_body_json.put("s_noise", config.sd_txt2img_params.s_noise);
+        request_body_json.put("override_settings", config.sd_txt2img_params.override_settings);
+        request_body_json.put("override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
+        request_body_json.put("refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
+        request_body_json.put("refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
+        request_body_json.put("disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
+        request_body_json.put("firstpass_image", config.sd_txt2img_params.firstpass_image);
+        request_body_json.put("comments", config.sd_txt2img_params.comments);
+        request_body_json.put("enable_hr", config.sd_txt2img_params.enable_hr);
+        request_body_json.put("firstphase_width", config.sd_txt2img_params.firstphase_width);
+        request_body_json.put("firstphase_height", config.sd_txt2img_params.firstphase_height);
+        request_body_json.put("hr_scale", config.sd_txt2img_params.hr_scale);
+        request_body_json.put("hr_upscaler", config.sd_txt2img_params.hr_upscaler);
+        request_body_json.put("hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
+        request_body_json.put("hr_resize_x", config.sd_txt2img_params.hr_resize_x);
+        request_body_json.put("hr_resize_y", config.sd_txt2img_params.hr_resize_y);
+        request_body_json.put("hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
+        request_body_json.put("hr_sampler_name", config.sd_txt2img_params.hr_sampler_name);
+        request_body_json.put("hr_scheduler", config.sd_txt2img_params.hr_scheduler);
+        request_body_json.put("hr_prompt", config.sd_txt2img_params.hr_prompt);
+        request_body_json.put("hr_negative_prompt", config.sd_txt2img_params.hr_negative_prompt);
+        request_body_json.put("force_task_id", config.sd_txt2img_params.force_task_id);
+        request_body_json.put("sampler_index", config.sd_txt2img_params.sampler_index);
+
+        if (config.sd_txt2img_params.abg_remover_enable)
+        {
+            request_body_json.put("script_name", "abg remover");
+            pt::ptree args_array;
+            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
+            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
+            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
+            args_array.push_back(std::make_pair("", pt::ptree("#000000")));
+            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
+            request_body_json.add_child("script_args", args_array);
+        }
+
+        request_body_json.put("send_images", config.sd_txt2img_params.send_images);
+        request_body_json.put("save_images", config.sd_txt2img_params.save_images);
+
+        pt::ptree alwayson_scripts;
+        if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
+        {
+            pt::ptree adetailer;
+            pt::ptree args_array;
+            pt::ptree arg;
+            arg.put("ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+            if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+            {
+                arg.put("ad_prompt", expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config.macros));
+            }
+            if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+            {
+                arg.put("ad_negative_prompt", expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config.macros));
+            }
+            args_array.push_back(std::make_pair("", arg));
+            adetailer.add_child("args", args_array);
+            alwayson_scripts.add_child("ADetailer", adetailer);
+        }
+        request_body_json.add_child("alwayson_scripts", alwayson_scripts);
+
+        request_body_json.put("infotext", config.sd_txt2img_params.infotext);
+
+        std::stringstream ss_request_body;
+        boost::property_tree::json_parser::write_json(ss_request_body, request_body_json, false);
+        const std::string request_body{ replace_constant(ss_request_body.str()) };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+        http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.sd_txt2img_params.host);
+        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        request.set(http::field::content_type, "application/json; charset=UTF-8");
+        request.body() = replace_constant(request_body);
+        request.prepare_payload();
+
+        http::write(tcp_stream, request);
+
+        beast::flat_buffer buffer;
+        http::response<http::string_body> response;
+        http::read(tcp_stream, buffer, response);
+
+        std::stringstream ss_response;
+        ss_response << response.body();
+        boost::property_tree::ptree response_pt;
+        boost::property_tree::json_parser::read_json(ss_response, response_pt);
+
+        std::string base64_image_data;
+        if (auto images_node = response_pt.get_child_optional("images"))
+        {
+            if (!images_node->empty())
+            {
+                base64_image_data = images_node->front().second.get_value<std::string>();
+            }
+        }
+
+        if (base64_image_data.empty())
+        {
+            throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
+        }
+
+        std::string decoded_image{ base64_decode(base64_image_data) };
+
+        {
+            boost::nowide::ofstream ofs{ path, std::ios::binary };
+            if (!ofs.is_open())
+            {
+                throw file_open_exception{} << error_info::path{ path };
+            }
+            ofs.write(decoded_image.data(), decoded_image.size());
+        }
+
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        throw file_open_exception{} << error_info::description{ exception.what() };
+    }
 }
 
 std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
@@ -1435,17 +1649,72 @@ int parse_commandline(
             ("negative-prompt", po::value<std::string>(&config.completions_params.negative_prompt)->default_value(""), "negative prompt")
             ("dry-sequence-breakers", po::value<std::string>(&config.completions_params.dry_sequence_breakers)->default_value(""), "dry sequence breakers")
             ("grammar-string", po::value<std::string>(&config.completions_params.grammar_string)->default_value(""), "grammar-string")
+
             ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
             ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7860"), "SD port")
             ("sd-target", po::value<std::string>(&config.sd_txt2img_params.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
             ("sd-prompt-file", po::value<std::string>(&config.sd_txt2img_params.prompt_file)->default_value("prompt.txt"), "SD prompt file")
             ("sd-negative-prompt-file", po::value<std::string>(&config.sd_txt2img_params.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
             ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("output.png"), "SD output PNG file")
-            ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(20), "SD steps")
+
+            ("sd-prompt", po::value<std::string>(&config.sd_txt2img_params.prompt)->default_value(""), "SD prompt")
+            ("sd-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.negative_prompt)->default_value(""), "SD negative prompt")
+            ("sd-styles", po::value<std::vector<std::string>>(&config.sd_txt2img_params.styles), "SD styles")
+            ("sd-seed", po::value<int>(&config.sd_txt2img_params.seed)->default_value(-1), "SD seed")
+            ("sd-subseed-strength", po::value<double>(&config.sd_txt2img_params.subseed_strength)->default_value(0), "SD subseed strength")
+            ("sd-seed-resize-from-h", po::value<int>(&config.sd_txt2img_params.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+            ("sd-seed-resize-from-w", po::value<int>(&config.sd_txt2img_params.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+            ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
+            ("sd-scheduler", po::value<std::string>(&config.sd_txt2img_params.scheduler)->default_value("Automatic"), "SD scheduler")
+            ("sd-batch_size", po::value<int>(&config.sd_txt2img_params.batch_size)->default_value(1), "SD batch size")
+            ("sd-n-iter", po::value<int>(&config.sd_txt2img_params.n_iter)->default_value(1), "SD n iter")
+            ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(30), "SD steps")
+            ("sd-cfg-scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(7), "SD cfg scale")
             ("sd-width", po::value<int>(&config.sd_txt2img_params.width)->default_value(1024), "SD image width")
             ("sd-height", po::value<int>(&config.sd_txt2img_params.height)->default_value(1024), "SD image height")
-            ("sd-cfg-scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(7), "SD cfg scale")
-            ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
+            ("sd-restore-faces", po::bool_switch(&config.sd_txt2img_params.restore_faces)->default_value(false), "SD restore faces")
+            ("sd-tiling", po::bool_switch(&config.sd_txt2img_params.tiling)->default_value(false), "SD tiling")
+            ("sd-do-not-save-samples", po::bool_switch(&config.sd_txt2img_params.do_not_save_samples)->default_value(false), "SD do not save samples")
+            ("sd-do-not-save-grid", po::bool_switch(&config.sd_txt2img_params.do_not_save_grid)->default_value(false), "SD do not save grid")
+            ("sd-eta", po::value<int>(&config.sd_txt2img_params.eta)->default_value(0), "SD eta")
+            ("sd-denoising-strength", po::value<double>(&config.sd_txt2img_params.denoising_strength)->default_value(0.7), "SD denoising strength")
+            ("sd-s-min-uncond", po::value<int>(&config.sd_txt2img_params.s_min_uncond)->default_value(0), "SD s min uncond")
+            ("sd-s-churn", po::value<int>(&config.sd_txt2img_params.s_churn)->default_value(0), "SD s churn")
+            ("sd-s-tmax", po::value<int>(&config.sd_txt2img_params.s_tmax)->default_value(0), "SD s tmax")
+            ("sd-s-tmin", po::value<int>(&config.sd_txt2img_params.s_tmin)->default_value(0), "SD s tmin")
+            ("sd-s-noise", po::value<int>(&config.sd_txt2img_params.s_noise)->default_value(0), "SD s noise")
+            ("sd-override-settings", po::value<std::string>(&config.sd_txt2img_params.override_settings)->default_value(""), "SD override settings")
+            ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd_txt2img_params.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+            ("sd-refiner-checkpoint", po::value<std::string>(&config.sd_txt2img_params.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+            ("sd-refiner-switch-at", po::value<double>(&config.sd_txt2img_params.refiner_switch_at)->default_value(0.8), "SD refiner switch at")
+            ("sd-disable-extra-networks", po::bool_switch(&config.sd_txt2img_params.disable_extra_networks)->default_value(false), "SD disable extra networks")
+            ("sd-firstpass-image", po::value<std::string>(&config.sd_txt2img_params.firstpass_image)->default_value(""), "SD firstpass image")
+            ("sd-comments", po::value<std::string>(&config.sd_txt2img_params.comments)->default_value(""), "SD comments")
+            ("sd-enable-hr", po::bool_switch(&config.sd_txt2img_params.enable_hr)->default_value(false), "SD enable hr")
+            ("sd-firstphase-width", po::value<int>(&config.sd_txt2img_params.firstphase_width)->default_value(0), "SD firstphase width")
+            ("sd-firstphase-height", po::value<int>(&config.sd_txt2img_params.firstphase_height)->default_value(0), "SD firstphase height")
+            ("sd-hr-scale", po::value<double>(&config.sd_txt2img_params.hr_scale)->default_value(0), "SD hr scale")
+            ("sd-hr-upscaler", po::value<std::string>(&config.sd_txt2img_params.hr_upscaler)->default_value("Latent (bicubic antialiased)"), "SD hr upscaler")
+            ("sd-hr-second-pass-steps", po::value<int>(&config.sd_txt2img_params.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+            ("sd-hr-resize-x", po::value<int>(&config.sd_txt2img_params.hr_resize_x)->default_value(0), "SD hr resize x")
+            ("sd-hr-resize-y", po::value<int>(&config.sd_txt2img_params.hr_resize_y)->default_value(0), "SD hr resize y")
+            ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd_txt2img_params.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+            ("sd-hr-sampler-name", po::value<std::string>(&config.sd_txt2img_params.hr_sampler_name)->default_value(""), "SD hr sampler name")
+            ("sd-hr-scheduler", po::value<std::string>(&config.sd_txt2img_params.hr_scheduler)->default_value("Automatic"), "SD hr scheduler")
+            ("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+            ("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
+            ("sd-force-task-id", po::value<std::string>(&config.sd_txt2img_params.force_task_id)->default_value(""), "SD force task id")
+            ("sd-sampler-index", po::value<std::string>(&config.sd_txt2img_params.sampler_index)->default_value(""), "SD sampler index")
+            ("sd-script-name", po::value<std::string>(&config.sd_txt2img_params.script_name)->default_value(""), "SD script name")
+            ("sd-script-args", po::value<std::vector<std::string>>(&config.sd_txt2img_params.script_args), "SD script_args")
+            ("sd-send-images", po::bool_switch(&config.sd_txt2img_params.send_images)->default_value(true), "SD send images")
+            ("sd-save-images", po::bool_switch(&config.sd_txt2img_params.save_images)->default_value(false), "SD save images")
+            ("sd-ad-enable", po::bool_switch(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+            ("sd-ad-model", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+            ("sd-ad-prompt", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+            ("sd-ad-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer negative prompt")
+            ("sd-infotext", po::value<std::string>(&config.sd_txt2img_params.infotext)->default_value(""), "SD infotext")
+            ("sd-abg-remover-enable", po::bool_switch(&config.sd_txt2img_params.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
             ;
 
         po::variables_map vm;
@@ -1671,10 +1940,12 @@ void set_seed(config& config)
     if (config.seed == -1)
     {
         config.completions_params.seed = generate_random_seed();
+        config.sd_txt2img_params.seed = generate_random_seed();
     }
     else
     {
         config.completions_params.seed = config.seed;
+        config.sd_txt2img_params.seed = config.seed;
     }
 }
 
