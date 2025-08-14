@@ -101,9 +101,26 @@ runtime_exception::runtime_exception()
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
 
-
-struct completions_parameters
+struct tg_prompt_parameters
 {
+    std::string system_prompts_file;
+    std::string examples_file;
+    std::string history_file;
+    std::string output_file;
+    std::string example_separator;
+    std::string generation_prefix;
+    std::string retry_generation_prefix;
+};
+
+struct tg_completions_parameters
+{
+    std::string host;
+    std::string port;
+    std::string api_key;
+
+    std::string completions_target;
+    std::string token_count_target;
+
     std::string model;
     int best_of{};
     bool echo{};
@@ -326,39 +343,24 @@ struct item
 
 struct config
 {
-    std::string host;
-    std::string port;
-    std::string api_key;
-
-    std::string completions_target;
-    std::string token_count_target;
-
     std::string mode{};
+    std::string base_path;
+    std::string log_level;
+    std::string log_file;
+    bool verbose{};
+    int number_iterations{};
+    std::vector<std::string> phases;
 
     // for novel mode
     std::string plot_file{};
 
-    std::string log_level;
-    std::string log_file;
-    std::string base_path;
-
-    std::string system_prompts_file;
-    std::string examples_file;
-    std::string history_file;
-    std::string output_file;
-    std::string example_separator;
-    std::vector<std::string> phases;
-    std::string generation_prefix;
-    std::string retry_generation_prefix;
 
     int seed{};
-    bool verbose{};
-    int number_iterations{};
     int min_completion_tokens{};
-    int max_new_tokens{};
     int max_completion_iterations{};
 
-    completions_parameters completions_params;
+    tg_prompt_parameters tg_prompt_params;
+    tg_completions_parameters tg_completions_params;
     sd_txt2img_parameters sd_txt2img_params;
     mutable lru_cache lru_cache;
     macros macros;
@@ -904,7 +906,7 @@ void write_item_list(const config& config, const std::string& task)
 llm_response send_oobabooga_completions_request(
     const config& config,
     const std::string& prompt,
-    const completions_parameters& params
+    const tg_completions_parameters& params
 )
 {
     namespace beast = boost::beast;
@@ -920,7 +922,7 @@ llm_response send_oobabooga_completions_request(
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const auto results = resolver.resolve(config.host, config.port);
+        const auto results = resolver.resolve(config.tg_completions_params.host, config.tg_completions_params.port);
         tcp_stream.connect(results);
 
         picojson::object request_body_json;
@@ -1034,16 +1036,16 @@ llm_response send_oobabooga_completions_request(
         const std::string request_body{ picojson::value{ request_body_json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.completions_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.host);
+        http::request<http::string_body> request{ http::verb::post, config.tg_completions_params.completions_target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.tg_completions_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
         request.prepare_payload();
 
-        if (!config.api_key.empty())
+        if (!config.tg_completions_params.api_key.empty())
         {
-            request.set(http::field::authorization, ("Bearer ") + config.api_key);
+            request.set(http::field::authorization, ("Bearer ") + config.tg_completions_params.api_key);
         }
 
         http::write(tcp_stream, request);
@@ -1110,7 +1112,7 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        auto const results = resolver.resolve(config.host, config.port);
+        auto const results = resolver.resolve(config.tg_completions_params.host, config.tg_completions_params.port);
         tcp_stream.connect(results);
 
         picojson::object request_body_json;
@@ -1119,8 +1121,8 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         const std::string request_body{ picojson::value{ request_body_json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.token_count_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.host);
+        http::request<http::string_body> request{ http::verb::post, config.tg_completions_params.token_count_target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.tg_completions_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
@@ -1283,21 +1285,21 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int remaining_context = config.completions_params.truncation_length - current_tokens;
+        int remaining_context = config.tg_completions_params.truncation_length - current_tokens;
         if (remaining_context <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
             break;
         }
 
-        int tokens_to_generate = std::min(config.completions_params.max_tokens, remaining_context);
+        int tokens_to_generate = std::min(config.tg_completions_params.max_tokens, remaining_context);
         if (tokens_to_generate <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting.";
             break;
         }
 
-        completions_parameters temp_params = config.completions_params;
+        tg_completions_parameters temp_params = config.tg_completions_params;
         temp_params.max_tokens = tokens_to_generate;
         llm_response response = send_oobabooga_completions_request(
             config, current_text, temp_params
@@ -1481,9 +1483,9 @@ void init_chat_mode(config& config)
     {
         config.phases = { "{{user}}", "{{char}}" };
     }
-    if (config.generation_prefix.empty())
+    if (config.tg_prompt_params.generation_prefix.empty())
     {
-        config.generation_prefix = "\\n{{phase}}: ";
+        config.tg_prompt_params.generation_prefix = "\\n{{phase}}: ";
     }
 }
 
@@ -1559,8 +1561,8 @@ int parse_commandline(
 
     try
     {
-        config.completions_params.stop = { "\\n\\n", ":", "***" };
-        config.completions_params.sampler_priority =
+        config.tg_completions_params.stop = { "\\n\\n", ":", "***" };
+        config.tg_completions_params.sampler_priority =
         {
             "repetition_penalty",
             "presence_penalty",
@@ -1583,92 +1585,92 @@ int parse_commandline(
             "encoder_repetition_penalty",
             "no_repeat_ngram"
         };
-        config.completions_params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+        config.tg_completions_params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "produce help message")
-            ("host", po::value<std::string>(&config.host)->default_value("localhost"), "host")
-            ("port", po::value<std::string>(&config.port)->default_value("5000"), "port")
-            ("api-key", po::value<std::string>(&config.api_key)->default_value(""), "API key")
-            ("completions-target", po::value<std::string>(&config.completions_target)->default_value("/v1/completions"), "completions target")
-            ("token-count-target", po::value<std::string>(&config.token_count_target)->default_value("/v1/internal/token-count"), "token count target")
             ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel or sd. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
-            ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
+            ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
-            ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
-            ("system-prompts-file", po::value<std::string>(&config.system_prompts_file)->default_value("system_prompts.txt"), "system prompt file path")
-            ("examples-file", po::value<std::string>(&config.examples_file)->default_value("examples.txt"), "exmaples file path")
-            ("history-file", po::value<std::string>(&config.history_file)->default_value("history.txt"), "history file path")
-            ("output-file", po::value<std::string>(&config.output_file)->default_value("history.txt"), "output file path")
-            ("example-separator", po::value<std::string>(&config.example_separator)->default_value("***"), "separator to be inserted before and after examples")
-            ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("generation-prefix", po::value<std::string>(&config.generation_prefix)->default_value(""), "generation prefix")
-            ("retry-generation-prefix", po::value<std::string>(&config.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-            ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
-            ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
-            ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
-            ("model", po::value<std::string>(&config.completions_params.model)->default_value("", "model"))
-            ("num-best-of", po::value<int>(&config.completions_params.best_of)->default_value(1), "best_of")
-            ("echo", po::bool_switch(&config.completions_params.echo)->default_value(false), "echo")
-            ("frequency-penalty", po::value<double>(&config.completions_params.frequency_penalty)->default_value(0.0), "frequency penalty")
+            ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
+            ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
+            ("tg-system-prompts-file", po::value<std::string>(&config.tg_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "system prompt file path")
+            ("tg-examples-file", po::value<std::string>(&config.tg_prompt_params.examples_file)->default_value("examples.txt"), "exmaples file path")
+            ("tg-history-file", po::value<std::string>(&config.tg_prompt_params.history_file)->default_value("history.txt"), "history file path")
+            ("tg-output-file", po::value<std::string>(&config.tg_prompt_params.output_file)->default_value("history.txt"), "output file path")
+            ("tg-example-separator", po::value<std::string>(&config.tg_prompt_params.example_separator)->default_value("***"), "separator to be inserted before and after examples")
+            ("tg-generation-prefix", po::value<std::string>(&config.tg_prompt_params.generation_prefix)->default_value(""), "generation prefix")
+            ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
+            ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "host")
+            ("tg-port", po::value<std::string>(&config.tg_completions_params.port)->default_value("5000"), "port")
+            ("tg-api-key", po::value<std::string>(&config.tg_completions_params.api_key)->default_value(""), "API key")
+            ("tg-completions-target", po::value<std::string>(&config.tg_completions_params.completions_target)->default_value("/v1/completions"), "completions target")
+            ("tg-token-count-target", po::value<std::string>(&config.tg_completions_params.token_count_target)->default_value("/v1/internal/token-count"), "token count target")
+            ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
+            ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
+            ("tg-define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
+            ("tg-model", po::value<std::string>(&config.tg_completions_params.model)->default_value("", "model"))
+            ("tg-num-best-of", po::value<int>(&config.tg_completions_params.best_of)->default_value(1), "best_of")
+            ("tg-echo", po::bool_switch(&config.tg_completions_params.echo)->default_value(false), "echo")
+            ("tg-frequency-penalty", po::value<double>(&config.tg_completions_params.frequency_penalty)->default_value(0.0), "frequency penalty")
             //std::map<int, double> logit_bias;
-            ("logprobs", po::value<double>(&config.completions_params.logprobs)->default_value(0.0), "presence penalty")
-            ("max-tokens", po::value<int>(&config.completions_params.max_tokens)->default_value(512), "max tokens")
-            ("n", po::value<int>(&config.completions_params.n)->default_value(1), "number of responses generated for the same prompt")
-            ("presence-penalty", po::value<double>(&config.completions_params.presence_penalty)->default_value(0.0), "presence penalty")
-            ("stop", po::value<std::vector<std::string>>(&config.completions_params.stop)->multitoken(), "stop sequences")
-            ("stream", po::bool_switch(&config.completions_params.stream)->default_value(false), "stream")
-            ("suffix", po::value<std::string>(&config.completions_params.suffix)->default_value(""), "suffix")
-            ("temperature", po::value<double>(&config.completions_params.temperature)->default_value(1.0), "temperature")
-            ("top-p", po::value<double>(&config.completions_params.top_p)->default_value(1.0), "top p")
-            ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
-            ("dynatemp-low", po::value<double>(&config.completions_params.dynatemp_low)->default_value(0.75), "dynatemp low")
-            ("dynatemp-high", po::value<double>(&config.completions_params.dynatemp_high)->default_value(1.25), "dynatemp high")
-            ("dynatemp-exponent", po::value<double>(&config.completions_params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
-            ("smoothing-factor", po::value<double>(&config.completions_params.smoothing_factor)->default_value(0.0), "smoothing factor")
-            ("smoothing-curve", po::value<double>(&config.completions_params.smoothing_curve)->default_value(1.0), "smoothing curve")
-            ("min-p", po::value<double>(&config.completions_params.min_p)->default_value(0.1), "min p")
-            ("top-k", po::value<int>(&config.completions_params.top_k)->default_value(0), "top k")
-            ("typical-p", po::value<double>(&config.completions_params.typical_p)->default_value(1.0), "typical p")
-            ("xtc-threshold", po::value<double>(&config.completions_params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
-            ("xtc-probability", po::value<double>(&config.completions_params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
-            ("epsilon-cutoff", po::value<double>(&config.completions_params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
-            ("eta-cutoff", po::value<double>(&config.completions_params.eta_cutoff)->default_value(0), "eta cutoff")
-            ("tfs", po::value<double>(&config.completions_params.tfs)->default_value(1.0), "tfs")
-            ("top-a", po::value<double>(&config.completions_params.top_a)->default_value(0.0), "top a")
-            ("top-n-sigma", po::value<double>(&config.completions_params.top_n_sigma)->default_value(1.0), "top n sigma")
-            ("dry-multiplier", po::value<double>(&config.completions_params.dry_multiplier)->default_value(0.0), "DRY multiplier")
-            ("dry-allowed-length", po::value<int>(&config.completions_params.dry_allowed_length)->default_value(2), "DRY allowed length")
-            ("dry-base", po::value<double>(&config.completions_params.dry_base)->default_value(1.75), "DRY base")
-            ("repetition-penalty", po::value<double>(&config.completions_params.repetition_penalty)->default_value(1.2), "repetition penalty")
-            ("encoder-repetition-penalty", po::value<double>(&config.completions_params.encoder_repetition_penalty)->default_value(1.0), "encoder repetition penalty")
-            ("no-repeat-ngram-size", po::value<int>(&config.completions_params.no_repeat_ngram_size)->default_value(0), "no repeat ngram size")
-            ("repetition-penalty-range", po::value<int>(&config.completions_params.repetition_penalty_range)->default_value(0), "repetition penalty range")
-            ("penalty-alpha", po::value<double>(&config.completions_params.penalty_alpha)->default_value(0.9), "penalty alpha")
-            ("guidance-scale", po::value<double>(&config.completions_params.guidance_scale)->default_value(1.0), "guidance scale")
-            ("mirostat-mode", po::value<int>(&config.completions_params.mirostat_mode)->default_value(0), "mirostat mode")
-            ("mirostat-tau", po::value<double>(&config.completions_params.mirostat_tau)->default_value(5), "mirostat tau")
-            ("mirostat-eta", po::value<double>(&config.completions_params.mirostat_eta)->default_value(0.1), "mirostat eta")
-            ("prompt-lookup-num-tokens", po::value<int>(&config.completions_params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
-            ("max-tokens-second", po::value<int>(&config.completions_params.max_tokens_second)->default_value(0), "max tokens second")
-            ("do-sample", po::bool_switch(&config.completions_params.do_sample)->default_value(true), "do sample")
-            ("dynamic-temperature", po::bool_switch(&config.completions_params.dynamic_temperature)->default_value(false), "dynamic temperature")
-            ("temperature-last", po::bool_switch(&config.completions_params.temperature_last)->default_value(false), "temperature last")
-            ("auto-max-new-tokens", po::bool_switch(&config.completions_params.auto_max_new_tokens)->default_value(false), "auto max_new tokens")
-            ("ban-eos-token", po::bool_switch(&config.completions_params.ban_eos_token)->default_value(false), "ban eos token")
-            ("add-bos-token", po::bool_switch(&config.completions_params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
-            ("skip-special-tokens", po::bool_switch(&config.completions_params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-            ("static-cache", po::bool_switch(&config.completions_params.static_cache)->default_value(false), "static cache")
-            ("truncation-length", po::value<int>(&config.completions_params.truncation_length)->default_value(4096), "truncation length")
-            ("sampler-priority", po::value<std::vector<std::string>>(&config.completions_params.sampler_priority)->multitoken(), "sampler priority")
-            ("custom-token-bans", po::value<std::string>(&config.completions_params.custom_token_bans)->default_value(""), "custom token bans")
-            ("negative-prompt", po::value<std::string>(&config.completions_params.negative_prompt)->default_value(""), "negative prompt")
-            ("dry-sequence-breakers", po::value<std::string>(&config.completions_params.dry_sequence_breakers)->default_value(""), "dry sequence breakers")
-            ("grammar-string", po::value<std::string>(&config.completions_params.grammar_string)->default_value(""), "grammar-string")
+            ("tg-logprobs", po::value<double>(&config.tg_completions_params.logprobs)->default_value(0.0), "presence penalty")
+            ("tg-max-tokens", po::value<int>(&config.tg_completions_params.max_tokens)->default_value(512), "max tokens")
+            ("tg-n", po::value<int>(&config.tg_completions_params.n)->default_value(1), "number of responses generated for the same prompt")
+            ("tg-presence-penalty", po::value<double>(&config.tg_completions_params.presence_penalty)->default_value(0.0), "presence penalty")
+            ("tg-stop", po::value<std::vector<std::string>>(&config.tg_completions_params.stop)->multitoken(), "stop sequences")
+            ("tg-stream", po::bool_switch(&config.tg_completions_params.stream)->default_value(false), "stream")
+            ("tg-suffix", po::value<std::string>(&config.tg_completions_params.suffix)->default_value(""), "suffix")
+            ("tg-temperature", po::value<double>(&config.tg_completions_params.temperature)->default_value(1.0), "temperature")
+            ("tg-top-p", po::value<double>(&config.tg_completions_params.top_p)->default_value(1.0), "top p")
+            ("tg-seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
+            ("tg-dynatemp-low", po::value<double>(&config.tg_completions_params.dynatemp_low)->default_value(0.75), "dynatemp low")
+            ("tg-dynatemp-high", po::value<double>(&config.tg_completions_params.dynatemp_high)->default_value(1.25), "dynatemp high")
+            ("tg-dynatemp-exponent", po::value<double>(&config.tg_completions_params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
+            ("tg-smoothing-factor", po::value<double>(&config.tg_completions_params.smoothing_factor)->default_value(0.0), "smoothing factor")
+            ("tg-smoothing-curve", po::value<double>(&config.tg_completions_params.smoothing_curve)->default_value(1.0), "smoothing curve")
+            ("tg-min-p", po::value<double>(&config.tg_completions_params.min_p)->default_value(0.1), "min p")
+            ("tg-top-k", po::value<int>(&config.tg_completions_params.top_k)->default_value(0), "top k")
+            ("tg-typical-p", po::value<double>(&config.tg_completions_params.typical_p)->default_value(1.0), "typical p")
+            ("tg-xtc-threshold", po::value<double>(&config.tg_completions_params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
+            ("tg-xtc-probability", po::value<double>(&config.tg_completions_params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
+            ("tg-epsilon-cutoff", po::value<double>(&config.tg_completions_params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
+            ("tg-eta-cutoff", po::value<double>(&config.tg_completions_params.eta_cutoff)->default_value(0), "eta cutoff")
+            ("tg-tfs", po::value<double>(&config.tg_completions_params.tfs)->default_value(1.0), "tfs")
+            ("tg-top-a", po::value<double>(&config.tg_completions_params.top_a)->default_value(0.0), "top a")
+            ("tg-top-n-sigma", po::value<double>(&config.tg_completions_params.top_n_sigma)->default_value(1.0), "top n sigma")
+            ("tg-dry-multiplier", po::value<double>(&config.tg_completions_params.dry_multiplier)->default_value(0.0), "DRY multiplier")
+            ("tg-dry-allowed-length", po::value<int>(&config.tg_completions_params.dry_allowed_length)->default_value(2), "DRY allowed length")
+            ("tg-dry-base", po::value<double>(&config.tg_completions_params.dry_base)->default_value(1.75), "DRY base")
+            ("tg-repetition-penalty", po::value<double>(&config.tg_completions_params.repetition_penalty)->default_value(1.2), "repetition penalty")
+            ("tg-encoder-repetition-penalty", po::value<double>(&config.tg_completions_params.encoder_repetition_penalty)->default_value(1.0), "encoder repetition penalty")
+            ("tg-no-repeat-ngram-size", po::value<int>(&config.tg_completions_params.no_repeat_ngram_size)->default_value(0), "no repeat ngram size")
+            ("tg-repetition-penalty-range", po::value<int>(&config.tg_completions_params.repetition_penalty_range)->default_value(0), "repetition penalty range")
+            ("tg-penalty-alpha", po::value<double>(&config.tg_completions_params.penalty_alpha)->default_value(0.9), "penalty alpha")
+            ("tg-guidance-scale", po::value<double>(&config.tg_completions_params.guidance_scale)->default_value(1.0), "guidance scale")
+            ("tg-mirostat-mode", po::value<int>(&config.tg_completions_params.mirostat_mode)->default_value(0), "mirostat mode")
+            ("tg-mirostat-tau", po::value<double>(&config.tg_completions_params.mirostat_tau)->default_value(5), "mirostat tau")
+            ("tg-mirostat-eta", po::value<double>(&config.tg_completions_params.mirostat_eta)->default_value(0.1), "mirostat eta")
+            ("tg-prompt-lookup-num-tokens", po::value<int>(&config.tg_completions_params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
+            ("tg-max-tokens-second", po::value<int>(&config.tg_completions_params.max_tokens_second)->default_value(0), "max tokens second")
+            ("tg-do-sample", po::bool_switch(&config.tg_completions_params.do_sample)->default_value(true), "do sample")
+            ("tg-dynamic-temperature", po::bool_switch(&config.tg_completions_params.dynamic_temperature)->default_value(false), "dynamic temperature")
+            ("tg-temperature-last", po::bool_switch(&config.tg_completions_params.temperature_last)->default_value(false), "temperature last")
+            ("tg-auto-max-new-tokens", po::bool_switch(&config.tg_completions_params.auto_max_new_tokens)->default_value(false), "auto max_new tokens")
+            ("tg-ban-eos-token", po::bool_switch(&config.tg_completions_params.ban_eos_token)->default_value(false), "ban eos token")
+            ("tg-add-bos-token", po::bool_switch(&config.tg_completions_params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
+            ("tg-skip-special-tokens", po::bool_switch(&config.tg_completions_params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+            ("tg-static-cache", po::bool_switch(&config.tg_completions_params.static_cache)->default_value(false), "static cache")
+            ("tg-truncation-length", po::value<int>(&config.tg_completions_params.truncation_length)->default_value(4096), "truncation length")
+            ("tg-sampler-priority", po::value<std::vector<std::string>>(&config.tg_completions_params.sampler_priority)->multitoken(), "sampler priority")
+            ("tg-custom-token-bans", po::value<std::string>(&config.tg_completions_params.custom_token_bans)->default_value(""), "custom token bans")
+            ("tg-negative-prompt", po::value<std::string>(&config.tg_completions_params.negative_prompt)->default_value(""), "negative prompt")
+            ("tg-dry-sequence-breakers", po::value<std::string>(&config.tg_completions_params.dry_sequence_breakers)->default_value(""), "dry sequence breakers")
+            ("tg-grammar-string", po::value<std::string>(&config.tg_completions_params.grammar_string)->default_value(""), "grammar-string")
 
             ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
             ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7860"), "SD port")
@@ -1771,11 +1773,11 @@ int parse_commandline(
             config.phases = { "" };
         }
 
-        std::transform(config.completions_params.stop.begin(), config.completions_params.stop.end(), config.completions_params.stop.begin(), unescape_string);
+        std::transform(config.tg_completions_params.stop.begin(), config.tg_completions_params.stop.end(), config.tg_completions_params.stop.begin(), unescape_string);
         std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
-        config.completions_params.dry_sequence_breakers = unescape_string(config.completions_params.dry_sequence_breakers);
-        config.generation_prefix = unescape_string(config.generation_prefix);
-        config.retry_generation_prefix = unescape_string(config.retry_generation_prefix);
+        config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
+        config.tg_prompt_params.generation_prefix = unescape_string(config.tg_prompt_params.generation_prefix);
+        config.tg_prompt_params.retry_generation_prefix = unescape_string(config.tg_prompt_params.retry_generation_prefix);
 
         parse_predefined_macros(config.predefined_macros, config.macros);
     }
@@ -1823,7 +1825,7 @@ std::string prompts::to_string(const config& config) const
             }
         };
 
-    int remaining_tokens = config.completions_params.truncation_length - config.completions_params.max_tokens;
+    int remaining_tokens = config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens;
 
     std::string system_prompts_string;
     int system_prompts_tokens{};
@@ -1846,22 +1848,22 @@ std::string prompts::to_string(const config& config) const
 
     std::string examples_string;
     {
-        if (!config.example_separator.empty())
+        if (!config.tg_prompt_params.example_separator.empty())
         {
-            remaining_tokens -= (static_cast<int>(config.example_separator.size()) + 2) * 2;
+            remaining_tokens -= (static_cast<int>(config.tg_prompt_params.example_separator.size()) + 2) * 2;
         }
         int written_tokens = 0;
         try_append(examples.begin(), examples.end(), examples_string, remaining_tokens, written_tokens, false);
         if (written_tokens > 0)
         {
-            if (!config.example_separator.empty())
+            if (!config.tg_prompt_params.example_separator.empty())
             {
                 std::string temp = "\n";
-                temp += config.example_separator;
+                temp += config.tg_prompt_params.example_separator;
                 temp += "\n";
                 temp += examples_string;
                 temp += "\n";
-                temp += config.example_separator;
+                temp += config.tg_prompt_params.example_separator;
                 temp += "\n";
                 std::swap(examples_string, temp);
             }
@@ -1879,16 +1881,16 @@ void read_prompts(const config& config, prompts& prompts)
 {
     if (config.mode == "chat" || config.mode == "novel")
     {
-        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.system_prompts_file, config) };
+        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.tg_prompt_params.system_prompts_file, config) };
         read_file_to_container(system_prompts_path, prompts.system_prompts);
 
-        const std::filesystem::path examples_path{ string_to_path_by_config(config.examples_file, config) };
+        const std::filesystem::path examples_path{ string_to_path_by_config(config.tg_prompt_params.examples_file, config) };
         if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
         {
             read_file_to_container(examples_path, prompts.examples);
         }
 
-        const std::filesystem::path history_path{ string_to_path_by_config(config.history_file, config) };
+        const std::filesystem::path history_path{ string_to_path_by_config(config.tg_prompt_params.history_file, config) };
         if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
         {
             read_file_to_container(history_path, prompts.history);
@@ -1913,7 +1915,7 @@ void read_prompts(const config& config, prompts& prompts)
 
 void write_response(const config& config, const std::string& response)
 {
-    const std::filesystem::path output_file_path{ string_to_path_by_config(config.output_file, config) };
+    const std::filesystem::path output_file_path{ string_to_path_by_config(config.tg_prompt_params.output_file, config) };
     create_parent_directories(output_file_path);
     boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
     if (!ofs.is_open())
@@ -1972,12 +1974,12 @@ void set_seed(config& config)
 {
     if (config.seed == -1)
     {
-        config.completions_params.seed = generate_random_seed();
+        config.tg_completions_params.seed = generate_random_seed();
         config.sd_txt2img_params.seed = generate_random_seed();
     }
     else
     {
-        config.completions_params.seed = config.seed;
+        config.tg_completions_params.seed = config.seed;
         config.sd_txt2img_params.seed = config.seed;
     }
 }
@@ -2002,15 +2004,15 @@ void iterate(config& config)
 
             try
             {
-                generate_and_output(config, prompts, config.generation_prefix);
+                generate_and_output(config, prompts, config.tg_prompt_params.generation_prefix);
             }
             catch (const text_generation_exception& exception)
             {
                 BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-                if (!config.retry_generation_prefix.empty())
+                if (!config.tg_prompt_params.retry_generation_prefix.empty())
                 {
                     BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-                    generate_and_output(config, prompts, config.retry_generation_prefix);
+                    generate_and_output(config, prompts, config.tg_prompt_params.retry_generation_prefix);
                 }
             }
         }
