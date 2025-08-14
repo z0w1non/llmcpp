@@ -278,10 +278,10 @@ struct sd_txt2img_parameters
     int hr_resize_x{};
     int hr_resize_y{};
     std::string hr_checkpoint_name;
-    std::string hr_sampler_name;
-    std::string hr_scheduler;
-    std::string hr_prompt;
-    std::string hr_negative_prompt;
+    //std::string hr_sampler_name;
+    //std::string hr_scheduler;
+    //std::string hr_prompt;
+    //std::string hr_negative_prompt;
     std::string force_task_id;
     std::string sampler_index;
     std::string script_name;
@@ -649,22 +649,12 @@ void send_automatic1111_txt2img_request(
 
         picojson::object request_body_json;
 
-        request_body_json.insert(std::make_pair("host", picojson::value{ config.sd_txt2img_params.host }));
-        request_body_json.insert(std::make_pair("port", picojson::value{ config.sd_txt2img_params.port }));
-        request_body_json.insert(std::make_pair("target", picojson::value{ config.sd_txt2img_params.target }));
-
-        //pt.put("prompt_file", config.sd_txt2img_params.prompt_file);
-        //pt.put("negative_prompt_file", config.sd_txt2img_params.negative_prompt_file);
-        //pt.put("output_file", config.sd_txt2img_params.output_file);
-
-        //pt.put("prompt", config.sd_txt2img_params.prompt);
-        //pt.put("negative_prompt", config.sd_txt2img_params.negative_prompt);
-
         request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
         request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ negative_prompt }));
 
-        //pt.put("styles", config.sd_txt2img_params.styles);
+        //request_body_json.insert(std::make_pair("styles", picojson::value{ config.sd_txt2img_params.styles }));
         request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) }));
+        request_body_json.insert(std::make_pair("subseed", picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) }));
         request_body_json.insert(std::make_pair("subseed_strength", picojson::value{ config.sd_txt2img_params.subseed_strength }));
         request_body_json.insert(std::make_pair("seed_resize_from_h", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_h) }));
         request_body_json.insert(std::make_pair("seed_resize_from_w", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_w) }));
@@ -703,12 +693,14 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
         request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
         request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
-        request_body_json.insert(std::make_pair("hr_sampler_name", picojson::value{ config.sd_txt2img_params.hr_sampler_name }));
-        request_body_json.insert(std::make_pair("hr_scheduler", picojson::value{ config.sd_txt2img_params.hr_scheduler }));
-        request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ config.sd_txt2img_params.hr_prompt }));
-        request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ config.sd_txt2img_params.hr_negative_prompt }));
+        request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ config.sd_txt2img_params.prompt }));
+        request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ config.sd_txt2img_params.negative_prompt }));
         request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
-        request_body_json.insert(std::make_pair("sampler_index", picojson::value{ config.sd_txt2img_params.sampler_index }));
+
+        if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
+        {
+            request_body_json.insert(std::make_pair("sampler_index", picojson::value{ config.sd_txt2img_params.sampler_index }));
+        }
 
         if (config.sd_txt2img_params.abg_remover_enable)
         {
@@ -749,6 +741,27 @@ void send_automatic1111_txt2img_request(
             adetailer.insert(std::make_pair("args", picojson::value{ args_array }));
             alwayson_scripts.insert(std::make_pair("ADetailer", picojson::value{ adetailer }));
         }
+        //{
+        //    picojson::object sampler;
+        //    picojson::array args_array;
+        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) });
+        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.sampler_name });
+        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.scheduler });
+        //    sampler.insert(std::make_pair("args", picojson::value{ args_array }));
+        //    alwayson_scripts.insert(std::make_pair("Sampler", picojson::value{ sampler }));
+        //}
+        //{
+        //    picojson::object seed;
+        //    picojson::array args_array;
+        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) });
+        //    args_array.push_back(picojson::value{ false });
+        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) });
+        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+        //    seed.insert(std::make_pair("args", picojson::value{ args_array }));
+        //    alwayson_scripts.insert(std::make_pair("Seed", picojson::value{ seed }));
+        //}
         request_body_json.insert(std::make_pair("alwayson_scripts", picojson::value{ alwayson_scripts }));
 
         request_body_json.insert(std::make_pair("infotext", picojson::value{ config.sd_txt2img_params.infotext }));
@@ -1670,10 +1683,11 @@ int parse_commandline(
             ("sd-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.negative_prompt)->default_value(""), "SD negative prompt")
             ("sd-styles", po::value<std::vector<std::string>>(&config.sd_txt2img_params.styles), "SD styles")
             ("sd-seed", po::value<int>(&config.sd_txt2img_params.seed)->default_value(-1), "SD seed")
+            ("sd-subseed", po::value<int>(&config.sd_txt2img_params.subseed)->default_value(-1), "SD subseed")
             ("sd-subseed-strength", po::value<double>(&config.sd_txt2img_params.subseed_strength)->default_value(0), "SD subseed strength")
             ("sd-seed-resize-from-h", po::value<int>(&config.sd_txt2img_params.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
             ("sd-seed-resize-from-w", po::value<int>(&config.sd_txt2img_params.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-            ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Eular E"), "SD sampler name")
+            ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Euler a"), "SD sampler name")
             ("sd-scheduler", po::value<std::string>(&config.sd_txt2img_params.scheduler)->default_value("Automatic"), "SD scheduler")
             ("sd-batch_size", po::value<int>(&config.sd_txt2img_params.batch_size)->default_value(1), "SD batch size")
             ("sd-n-iter", po::value<int>(&config.sd_txt2img_params.n_iter)->default_value(1), "SD n iter")
@@ -1691,7 +1705,7 @@ int parse_commandline(
             ("sd-s-churn", po::value<int>(&config.sd_txt2img_params.s_churn)->default_value(0), "SD s churn")
             ("sd-s-tmax", po::value<int>(&config.sd_txt2img_params.s_tmax)->default_value(0), "SD s tmax")
             ("sd-s-tmin", po::value<int>(&config.sd_txt2img_params.s_tmin)->default_value(0), "SD s tmin")
-            ("sd-s-noise", po::value<int>(&config.sd_txt2img_params.s_noise)->default_value(0), "SD s noise")
+            ("sd-s-noise", po::value<int>(&config.sd_txt2img_params.s_noise)->default_value(1), "SD s noise")
             ("sd-override-settings", po::value<std::string>(&config.sd_txt2img_params.override_settings)->default_value(""), "SD override settings")
             ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd_txt2img_params.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
             ("sd-refiner-checkpoint", po::value<std::string>(&config.sd_txt2img_params.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
@@ -1703,15 +1717,13 @@ int parse_commandline(
             ("sd-firstphase-width", po::value<int>(&config.sd_txt2img_params.firstphase_width)->default_value(0), "SD firstphase width")
             ("sd-firstphase-height", po::value<int>(&config.sd_txt2img_params.firstphase_height)->default_value(0), "SD firstphase height")
             ("sd-hr-scale", po::value<double>(&config.sd_txt2img_params.hr_scale)->default_value(0), "SD hr scale")
-            ("sd-hr-upscaler", po::value<std::string>(&config.sd_txt2img_params.hr_upscaler)->default_value("Latent (bicubic antialiased)"), "SD hr upscaler")
+            ("sd-hr-upscaler", po::value<std::string>(&config.sd_txt2img_params.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
             ("sd-hr-second-pass-steps", po::value<int>(&config.sd_txt2img_params.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
             ("sd-hr-resize-x", po::value<int>(&config.sd_txt2img_params.hr_resize_x)->default_value(0), "SD hr resize x")
             ("sd-hr-resize-y", po::value<int>(&config.sd_txt2img_params.hr_resize_y)->default_value(0), "SD hr resize y")
             ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd_txt2img_params.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
-            ("sd-hr-sampler-name", po::value<std::string>(&config.sd_txt2img_params.hr_sampler_name)->default_value(""), "SD hr sampler name")
-            ("sd-hr-scheduler", po::value<std::string>(&config.sd_txt2img_params.hr_scheduler)->default_value("Automatic"), "SD hr scheduler")
-            ("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
-            ("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
+            //("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+            //("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
             ("sd-force-task-id", po::value<std::string>(&config.sd_txt2img_params.force_task_id)->default_value(""), "SD force task id")
             ("sd-sampler-index", po::value<std::string>(&config.sd_txt2img_params.sampler_index)->default_value(""), "SD sampler index")
             ("sd-script-name", po::value<std::string>(&config.sd_txt2img_params.script_name)->default_value(""), "SD script name")
@@ -1930,15 +1942,29 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
         create_parent_directories(output_file_path);
 
-        const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
         std::string prompt_string;
-        read_file_to_string(prompt_file_path, prompt_string);
-        prompt_string = expand_macro(prompt_string, config.macros);
+        if (!config.sd_txt2img_params.prompt.empty())
+        {
+            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config.macros);
+        }
+        else
+        {
+            const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
+            read_file_to_string(prompt_file_path, prompt_string);
+            prompt_string = expand_macro(prompt_string, config.macros);
+        }
 
-        const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
         std::string negative_prompt_string;
-        read_file_to_string(negative_prompt_file_path, negative_prompt_string);
-        negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
+        if (!config.sd_txt2img_params.prompt.empty())
+        {
+            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config.macros);
+        }
+        else
+        {
+            const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
+            read_file_to_string(negative_prompt_file_path, negative_prompt_string);
+            negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
+        }
 
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
     }
