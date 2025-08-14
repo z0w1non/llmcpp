@@ -23,18 +23,18 @@ llmcpp は、oobabooga/text-generation-webui(https://github.com/oobabooga/text-g
 ## チュートリアル
 llmcpp は下記のファイルを読み込む。
 
-| ファイル名(デフォルト) | 概要 | 変更するオプション | 必須/任意 |
+| オプション | 概要 | デフォルト値 | 必須/任意 |
 | --- | --- | --- | --- |
-| system_prompts.txt | システムプロンプト | --tg-system-prompts-file | 必須 |
-| examples.txt | 生成したいテキストの例 | --tg-examples-file | 任意 |
-| history.txt | 直近に生成されたテキスト | --tg-history-file | 任意 |
+| --tg-system-prompts-file | システムプロンプト | system_prompts.txt | 必須 |
+| --tg-examples-file | 生成したいテキストの例 | examples.txt | 任意 |
+| --tg-history-file| 直近に生成されたテキスト | history.txt | 任意 |
 
 各ファイルを探索するディレクトリを変更する場合、`--base-path` オプションで指定する。
 ログはデフォルトで下記に出力される。
 
-| ファイル名(デフォルト) | 概要 | 変更するオプション |
+| オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
-| log.txt | ログファイル | --log-file |
+| --log-file | ログファイル | log.txt |
 
 ログをコンソールに冗長に出力する場合、`-v` オプションを指定する。
 
