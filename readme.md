@@ -100,7 +100,7 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 現在実行中の phase は、プロンプトの内容に `{{phase}}` マクロを記述することにより、実行時に参照できる。
 前の phase は `{{prev_phase}}` マクロ、次の phase は `{{next_phase}}` マクロで参照できる。
 
-例えば `--phases "{{char}}" "{{user}}" --tg-generation-prefix "{{phase}}}: "` オプションを指定した場合、pahse として現在発言している人物の名前を扱い、それをプロンプトの先頭に追加することにより、LLM が当該の人物の発言を生成するように誘導する。
+例えば `--phases "{{char}}" "{{user}}" --tg-generation-prefix "{{phase}}: "` オプションを指定した場合、pahse として現在発言している人物の名前を扱い、それをプロンプトの先頭に追加することにより、LLM が当該の人物の発言を生成するように誘導する。
 `system_prompts.txt` の内容に phase の要素に関する説明を含めることにより、1回の処理を複数の工程に分割し、動的に生成の方法を制御することができる。
 
 `--tg-paragraph-file` オプションで段落ファイルを指定した場合、段落ファイルに含まれる内容が phase に割り当てられる。
