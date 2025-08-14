@@ -1598,6 +1598,7 @@ int parse_commandline(
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
             ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
+            
             ("tg-system-prompts-file", po::value<std::string>(&config.tg_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "system prompt file path")
             ("tg-examples-file", po::value<std::string>(&config.tg_prompt_params.examples_file)->default_value("examples.txt"), "exmaples file path")
             ("tg-history-file", po::value<std::string>(&config.tg_prompt_params.history_file)->default_value("history.txt"), "history file path")
@@ -1678,7 +1679,6 @@ int parse_commandline(
             ("sd-prompt-file", po::value<std::string>(&config.sd_txt2img_params.prompt_file)->default_value("prompt.txt"), "SD prompt file")
             ("sd-negative-prompt-file", po::value<std::string>(&config.sd_txt2img_params.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
             ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("output.png"), "SD output PNG file")
-
             ("sd-prompt", po::value<std::string>(&config.sd_txt2img_params.prompt)->default_value(""), "SD prompt")
             ("sd-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.negative_prompt)->default_value(""), "SD negative prompt")
             ("sd-styles", po::value<std::vector<std::string>>(&config.sd_txt2img_params.styles), "SD styles")
