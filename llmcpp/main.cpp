@@ -1056,9 +1056,10 @@ llm_response send_oobabooga_completions_request(
             const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
             const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
             result.text = throwable_find<std::string>(choice, "text");
-            result.prompt_tokens = static_cast<int>(throwable_find<double>(choice, "prompt_tokens"));
-            result.completion_tokens = static_cast<int>(throwable_find<double>(choice, "completion_tokens"));
-            result.total_tokens = static_cast<int>(throwable_find<double>(choice, "total_tokens"));
+            const picojson::object& usage{ throwable_find<picojson::object>(object, "usage") };
+            result.prompt_tokens = static_cast<int>(throwable_find<double>(usage, "prompt_tokens"));
+            result.completion_tokens = static_cast<int>(throwable_find<double>(usage, "completion_tokens"));
+            result.total_tokens = static_cast<int>(throwable_find<double>(usage, "total_tokens"));
         }
         else
         {
