@@ -340,8 +340,8 @@ struct config
 
     std::string log_level;
     std::string log_file;
-
     std::string base_path;
+
     std::string system_prompts_file;
     std::string examples_file;
     std::string history_file;
@@ -357,12 +357,11 @@ struct config
     int min_completion_tokens{};
     int max_new_tokens{};
     int max_completion_iterations{};
-    int max_total_context_tokens{};
 
     completions_parameters completions_params;
     sd_txt2img_parameters sd_txt2img_params;
-    macros macros;
     mutable lru_cache lru_cache;
+    macros macros;
     std::vector<std::string> predefined_macros;
 };
 
@@ -1284,7 +1283,7 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int remaining_context = config.max_total_context_tokens - current_tokens;
+        int remaining_context = config.completions_params.truncation_length - current_tokens;
         if (remaining_context <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
@@ -1611,7 +1610,6 @@ int parse_commandline(
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "min completion tokens")
             ("max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "max completion iterations")
-            ("max-total-context-tokens", po::value<int>(&config.max_total_context_tokens)->default_value(4096), "max total context tokens")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("model", po::value<std::string>(&config.completions_params.model)->default_value("", "model"))
             ("num-best-of", po::value<int>(&config.completions_params.best_of)->default_value(1), "best_of")
@@ -1665,7 +1663,7 @@ int parse_commandline(
             ("add-bos-token", po::bool_switch(&config.completions_params.add_bos_token)->default_value(true), "add Beginning of Sequence Token (BOS) token")
             ("skip-special-tokens", po::bool_switch(&config.completions_params.skip_special_tokens)->default_value(true), "skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
             ("static-cache", po::bool_switch(&config.completions_params.static_cache)->default_value(false), "static cache")
-            ("truncation-length", po::value<int>(&config.completions_params.truncation_length)->default_value(0), "truncation length")
+            ("truncation-length", po::value<int>(&config.completions_params.truncation_length)->default_value(4096), "truncation length")
             ("sampler-priority", po::value<std::vector<std::string>>(&config.completions_params.sampler_priority)->multitoken(), "sampler priority")
             ("custom-token-bans", po::value<std::string>(&config.completions_params.custom_token_bans)->default_value(""), "custom token bans")
             ("negative-prompt", po::value<std::string>(&config.completions_params.negative_prompt)->default_value(""), "negative prompt")
@@ -1718,7 +1716,7 @@ int parse_commandline(
             ("sd-firstphase-height", po::value<int>(&config.sd_txt2img_params.firstphase_height)->default_value(0), "SD firstphase height")
             ("sd-hr-scale", po::value<double>(&config.sd_txt2img_params.hr_scale)->default_value(0), "SD hr scale")
             ("sd-hr-upscaler", po::value<std::string>(&config.sd_txt2img_params.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-            ("sd-hr-second-pass-steps", po::value<int>(&config.sd_txt2img_params.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+            ("sd-hr-second-pass-steps", po::value<int>(&config.sd_txt2img_params.hr_second_pass_steps)->default_value(20), "SD hr second pass steps")
             ("sd-hr-resize-x", po::value<int>(&config.sd_txt2img_params.hr_resize_x)->default_value(0), "SD hr resize x")
             ("sd-hr-resize-y", po::value<int>(&config.sd_txt2img_params.hr_resize_y)->default_value(0), "SD hr resize y")
             ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd_txt2img_params.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
@@ -1825,7 +1823,7 @@ std::string prompts::to_string(const config& config) const
             }
         };
 
-    int remaining_tokens = config.max_total_context_tokens - config.completions_params.max_tokens;
+    int remaining_tokens = config.completions_params.truncation_length - config.completions_params.max_tokens;
 
     std::string system_prompts_string;
     int system_prompts_tokens{};
