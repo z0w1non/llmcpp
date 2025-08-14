@@ -1197,7 +1197,7 @@ int get_tokens_from_cache(const config& config, const std::string& str)
 
 void write_cache(const config& config)
 {
-    if (config.mode != "chat" && config.mode != "novel")
+    if (config.mode != "tg")
     {
         return;
     }
@@ -1222,7 +1222,7 @@ void write_cache(const config& config)
 
 void read_cache(const config& config)
 {
-    if (config.mode != "chat" && config.mode != "novel")
+    if (config.mode != "tg")
     {
         return;
     }
@@ -1872,7 +1872,7 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    if (config.mode == "chat" || config.mode == "novel")
+    if (config.mode == "tg")
     {
         const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.tg_prompt_params.system_prompts_file, config) };
         read_file_to_container(system_prompts_path, prompts.system_prompts);
@@ -1920,7 +1920,7 @@ void write_response(const config& config, const std::string& response)
 
 void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
 {
-    if (config.mode == "chat" || config.mode == "novel")
+    if (config.mode == "tg")
     {
         std::string prompts_string = prompts.to_string(config);
         prompts_string = expand_macro(prompts_string, config.macros);
