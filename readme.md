@@ -46,9 +46,12 @@ llmcpp は下記のファイルを読み込む。
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
 
-* `--host`
-* `--port`
-* `--api-key`
+| オプション | 概要 | デフォルト値 |
+| --- | --- | --- |
+| --tg-host | ホスト | localhost |
+| --tg-port | ポート | 5000 |
+| --tg-completions-target | テキストを補完するターゲット | /v1/completions |
+| --tg-token-count-target | トークン数を取得するターゲット | /v1/internal/token-count |
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
