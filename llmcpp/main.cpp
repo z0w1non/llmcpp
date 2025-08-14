@@ -110,6 +110,7 @@ struct tg_prompt_parameters
     std::string example_separator;
     std::string generation_prefix;
     std::string retry_generation_prefix;
+    std::string paragraphs_file;
 };
 
 struct tg_completions_parameters
@@ -350,10 +351,6 @@ struct config
     bool verbose{};
     int number_iterations{};
     std::vector<std::string> phases;
-
-    // for novel mode
-    std::string plot_file{};
-
 
     int seed{};
     int min_completion_tokens{};
@@ -1538,12 +1535,12 @@ void set_paragraphs_to_phases(
     }
 }
 
-void init_novel_mode(config& config)
+void init_tg_mode(config& config)
 {
-    if (!config.plot_file.empty())
+    if (!config.tg_prompt_params.paragraphs_file.empty())
     {
         config.phases.clear();
-        std::filesystem::path plot_file_path{ string_to_path_by_config(config.plot_file, config) };
+        std::filesystem::path plot_file_path{ string_to_path_by_config(config.tg_prompt_params.paragraphs_file, config) };
         std::string content;
         read_file_to_string(plot_file_path, content);
         std::vector<item> paragraphs{ parse_item_list(content) };
@@ -1590,14 +1587,13 @@ int parse_commandline(
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "produce help message")
-            ("mode", po::value<std::string>(&config.mode)->default_value("chat"), "Specify mode chat or novel or sd. novel mode means \"--phases \"{{user}}\" \"{{char}}\" --generation-prefix \"\\n{{phase}} :\"\" as default. novel mode means \"--phases \"\" --generation-prefix \"\"\" as default.")
+            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg or sd")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            ("plot-file", po::value<std::string>(&config.plot_file)->default_value(""), "plot file")
             
             ("tg-system-prompts-file", po::value<std::string>(&config.tg_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "system prompt file path")
             ("tg-examples-file", po::value<std::string>(&config.tg_prompt_params.examples_file)->default_value("examples.txt"), "exmaples file path")
@@ -1606,6 +1602,7 @@ int parse_commandline(
             ("tg-example-separator", po::value<std::string>(&config.tg_prompt_params.example_separator)->default_value("***"), "separator to be inserted before and after examples")
             ("tg-generation-prefix", po::value<std::string>(&config.tg_prompt_params.generation_prefix)->default_value(""), "generation prefix")
             ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "prefix to be used after a failed text generation")
+            ("tg-paragraphs-file", po::value<std::string>(&config.tg_prompt_params.paragraphs_file)->default_value(""), "paragraphs file")
             ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "host")
             ("tg-port", po::value<std::string>(&config.tg_completions_params.port)->default_value("5000"), "port")
             ("tg-api-key", po::value<std::string>(&config.tg_completions_params.api_key)->default_value(""), "API key")
@@ -1629,15 +1626,15 @@ int parse_commandline(
             ("tg-temperature", po::value<double>(&config.tg_completions_params.temperature)->default_value(1.0), "temperature")
             ("tg-top-p", po::value<double>(&config.tg_completions_params.top_p)->default_value(1.0), "top p")
             ("tg-seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
-            ("tg-dynatemp-low", po::value<double>(&config.tg_completions_params.dynatemp_low)->default_value(0.75), "dynatemp low")
-            ("tg-dynatemp-high", po::value<double>(&config.tg_completions_params.dynatemp_high)->default_value(1.25), "dynatemp high")
+            ("tg-dynatemp-low", po::value<double>(&config.tg_completions_params.dynatemp_low)->default_value(0.75, "0.75"), "dynatemp low")
+            ("tg-dynatemp-high", po::value<double>(&config.tg_completions_params.dynatemp_high)->default_value(1.25, "1.25"), "dynatemp high")
             ("tg-dynatemp-exponent", po::value<double>(&config.tg_completions_params.dynatemp_exponent)->default_value(1.0), "dynatemp exponent")
             ("tg-smoothing-factor", po::value<double>(&config.tg_completions_params.smoothing_factor)->default_value(0.0), "smoothing factor")
             ("tg-smoothing-curve", po::value<double>(&config.tg_completions_params.smoothing_curve)->default_value(1.0), "smoothing curve")
-            ("tg-min-p", po::value<double>(&config.tg_completions_params.min_p)->default_value(0.1), "min p")
+            ("tg-min-p", po::value<double>(&config.tg_completions_params.min_p)->default_value(0.1, "0.1"), "min p")
             ("tg-top-k", po::value<int>(&config.tg_completions_params.top_k)->default_value(0), "top k")
             ("tg-typical-p", po::value<double>(&config.tg_completions_params.typical_p)->default_value(1.0), "typical p")
-            ("tg-xtc-threshold", po::value<double>(&config.tg_completions_params.xtc_threshold)->default_value(0.1), "Exclude Top Choices (XTC) threshold")
+            ("tg-xtc-threshold", po::value<double>(&config.tg_completions_params.xtc_threshold)->default_value(0.1, "0.1"), "Exclude Top Choices (XTC) threshold")
             ("tg-xtc-probability", po::value<double>(&config.tg_completions_params.xtc_probability)->default_value(0.0), "Exclude Top Choices (XTC) probability")
             ("tg-epsilon-cutoff", po::value<double>(&config.tg_completions_params.epsilon_cutoff)->default_value(0), "epsilon cutoff")
             ("tg-eta-cutoff", po::value<double>(&config.tg_completions_params.eta_cutoff)->default_value(0), "eta cutoff")
@@ -1651,11 +1648,11 @@ int parse_commandline(
             ("tg-encoder-repetition-penalty", po::value<double>(&config.tg_completions_params.encoder_repetition_penalty)->default_value(1.0), "encoder repetition penalty")
             ("tg-no-repeat-ngram-size", po::value<int>(&config.tg_completions_params.no_repeat_ngram_size)->default_value(0), "no repeat ngram size")
             ("tg-repetition-penalty-range", po::value<int>(&config.tg_completions_params.repetition_penalty_range)->default_value(0), "repetition penalty range")
-            ("tg-penalty-alpha", po::value<double>(&config.tg_completions_params.penalty_alpha)->default_value(0.9), "penalty alpha")
+            ("tg-penalty-alpha", po::value<double>(&config.tg_completions_params.penalty_alpha)->default_value(0.9, "0.9"), "penalty alpha")
             ("tg-guidance-scale", po::value<double>(&config.tg_completions_params.guidance_scale)->default_value(1.0), "guidance scale")
             ("tg-mirostat-mode", po::value<int>(&config.tg_completions_params.mirostat_mode)->default_value(0), "mirostat mode")
             ("tg-mirostat-tau", po::value<double>(&config.tg_completions_params.mirostat_tau)->default_value(5), "mirostat tau")
-            ("tg-mirostat-eta", po::value<double>(&config.tg_completions_params.mirostat_eta)->default_value(0.1), "mirostat eta")
+            ("tg-mirostat-eta", po::value<double>(&config.tg_completions_params.mirostat_eta)->default_value(0.1, "0.1"), "mirostat eta")
             ("tg-prompt-lookup-num-tokens", po::value<int>(&config.tg_completions_params.prompt_lookup_num_tokens)->default_value(0), "prompt lookup num tokens")
             ("tg-max-tokens-second", po::value<int>(&config.tg_completions_params.max_tokens_second)->default_value(0), "max tokens second")
             ("tg-do-sample", po::bool_switch(&config.tg_completions_params.do_sample)->default_value(true), "do sample")
@@ -1700,7 +1697,7 @@ int parse_commandline(
             ("sd-do-not-save-samples", po::bool_switch(&config.sd_txt2img_params.do_not_save_samples)->default_value(false), "SD do not save samples")
             ("sd-do-not-save-grid", po::bool_switch(&config.sd_txt2img_params.do_not_save_grid)->default_value(false), "SD do not save grid")
             ("sd-eta", po::value<int>(&config.sd_txt2img_params.eta)->default_value(0), "SD eta")
-            ("sd-denoising-strength", po::value<double>(&config.sd_txt2img_params.denoising_strength)->default_value(0.7), "SD denoising strength")
+            ("sd-denoising-strength", po::value<double>(&config.sd_txt2img_params.denoising_strength)->default_value(0.7, "0.7"), "SD denoising strength")
             ("sd-s-min-uncond", po::value<int>(&config.sd_txt2img_params.s_min_uncond)->default_value(0), "SD s min uncond")
             ("sd-s-churn", po::value<int>(&config.sd_txt2img_params.s_churn)->default_value(0), "SD s churn")
             ("sd-s-tmax", po::value<int>(&config.sd_txt2img_params.s_tmax)->default_value(0), "SD s tmax")
@@ -1709,7 +1706,7 @@ int parse_commandline(
             ("sd-override-settings", po::value<std::string>(&config.sd_txt2img_params.override_settings)->default_value(""), "SD override settings")
             ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd_txt2img_params.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
             ("sd-refiner-checkpoint", po::value<std::string>(&config.sd_txt2img_params.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-            ("sd-refiner-switch-at", po::value<double>(&config.sd_txt2img_params.refiner_switch_at)->default_value(0.8), "SD refiner switch at")
+            ("sd-refiner-switch-at", po::value<double>(&config.sd_txt2img_params.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
             ("sd-disable-extra-networks", po::bool_switch(&config.sd_txt2img_params.disable_extra_networks)->default_value(false), "SD disable extra networks")
             ("sd-firstpass-image", po::value<std::string>(&config.sd_txt2img_params.firstpass_image)->default_value(""), "SD firstpass image")
             ("sd-comments", po::value<std::string>(&config.sd_txt2img_params.comments)->default_value(""), "SD comments")
@@ -1750,13 +1747,9 @@ int parse_commandline(
 
         init_logging(config);
 
-        if (config.mode == "chat")
+        if (config.mode == "tg")
         {
-            init_chat_mode(config);
-        }
-        else if (config.mode == "novel")
-        {
-            init_novel_mode(config);
+            init_tg_mode(config);
         }
         else if (config.mode == "sd")
         {
@@ -1764,7 +1757,7 @@ int parse_commandline(
         }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "mode options must be chat or novel or sd.";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be tg or sd.";
             return 1;
         }
 
