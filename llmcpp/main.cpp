@@ -3,8 +3,6 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
 #include <boost/program_options.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -47,6 +45,7 @@
 #include <memory>
 #include <stdexcept>
 #include <optional>
+#include "picojson.h"
 
 class runtime_exception
     : public boost::exception
@@ -62,6 +61,7 @@ class socket_exception : public io_exception {};
 class text_generation_exception : public runtime_exception {};
 class image_generation_exception : public runtime_exception {};
 class syntax_exception : public runtime_exception {};
+class json_parse_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
 class array_index_out_of_bounds_exception : public runtime_exception {};
@@ -384,13 +384,40 @@ struct prompts
     std::string to_string(const config& config) const;
 };
 
-std::string replace_constant(const std::string& str)
+template<typename Value>
+const Value& throwable_get(const picojson::value& value)
 {
-    std::string result{ str };
-    const std::regex constants{ R"(\"(null|true|false)\")", std::regex_constants::ECMAScript };
-    result = std::regex_replace(result, constants, "$1");
-    //const std::regex numeric_constants{ R"(\"([-+]?(?:[0-9]*\.)?[0-9]+(?:[eE][-+]?[0-9]+)?)\")", std::regex_constants::ECMAScript };
-    return result;
+    if (!value.is<Value>())
+    {
+        throw json_parse_exception{};
+    }
+    return value.get<Value>();
+}
+
+template<typename Value>
+const Value& throwable_at(const picojson::array& array, std::size_t index)
+{
+    if (index >= array.size())
+    {
+        throw json_parse_exception{};
+    }
+    const picojson::value& element = array[index];
+    if (!element.is<Value>())
+    {
+        throw json_parse_exception{};
+    }
+    return element.get<Value>();
+}
+
+template<typename Value>
+const Value& throwable_find(const picojson::object& object, const std::string& key)
+{
+    auto iter = object.find(key);
+    if (iter == object.end() || !iter->second.is<Value>())
+    {
+        throw json_parse_exception{};
+    }
+    return iter->second.get<Value>();
 }
 
 std::string base64_decode(const std::string& encoded_string)
@@ -616,16 +643,15 @@ void send_automatic1111_txt2img_request(
         net::io_context ioc;
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
-        namespace pt = boost::property_tree;
 
         auto const results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
         tcp_stream.connect(results);
 
-        boost::property_tree::ptree request_body_json;
+        picojson::object request_body_json;
 
-        request_body_json.put("host", config.sd_txt2img_params.host);
-        request_body_json.put("port", config.sd_txt2img_params.port);
-        request_body_json.put("target", config.sd_txt2img_params.target);
+        request_body_json.insert(std::make_pair("host", picojson::value{ config.sd_txt2img_params.host }));
+        request_body_json.insert(std::make_pair("port", picojson::value{ config.sd_txt2img_params.port }));
+        request_body_json.insert(std::make_pair("target", picojson::value{ config.sd_txt2img_params.target }));
 
         //pt.put("prompt_file", config.sd_txt2img_params.prompt_file);
         //pt.put("negative_prompt_file", config.sd_txt2img_params.negative_prompt_file);
@@ -634,104 +660,107 @@ void send_automatic1111_txt2img_request(
         //pt.put("prompt", config.sd_txt2img_params.prompt);
         //pt.put("negative_prompt", config.sd_txt2img_params.negative_prompt);
 
-        request_body_json.put("prompt", prompt);
-        request_body_json.put("negative_prompt", negative_prompt);
+        request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ negative_prompt }));
 
         //pt.put("styles", config.sd_txt2img_params.styles);
-        request_body_json.put("seed", config.sd_txt2img_params.seed);
-        request_body_json.put("subseed_strength", config.sd_txt2img_params.subseed_strength);
-        request_body_json.put("seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
-        request_body_json.put("seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
-        request_body_json.put("sampler_name", config.sd_txt2img_params.sampler_name);
-        request_body_json.put("scheduler", config.sd_txt2img_params.scheduler);
-        request_body_json.put("batch_size", config.sd_txt2img_params.batch_size);
-        request_body_json.put("n_iter", config.sd_txt2img_params.n_iter);
-        request_body_json.put("steps", config.sd_txt2img_params.steps);
-        request_body_json.put("cfg_scale", config.sd_txt2img_params.cfg_scale);
-        request_body_json.put("width", config.sd_txt2img_params.width);
-        request_body_json.put("height", config.sd_txt2img_params.height);
-        request_body_json.put("restore_faces", config.sd_txt2img_params.restore_faces);
-        request_body_json.put("tiling", config.sd_txt2img_params.tiling);
-        request_body_json.put("do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
-        request_body_json.put("do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
-        request_body_json.put("eta", config.sd_txt2img_params.eta);
-        request_body_json.put("denoising_strength", config.sd_txt2img_params.denoising_strength);
-        request_body_json.put("s_min_uncond", config.sd_txt2img_params.s_min_uncond);
-        request_body_json.put("s_churn", config.sd_txt2img_params.s_churn);
-        request_body_json.put("s_tmax", config.sd_txt2img_params.s_tmax);
-        request_body_json.put("s_tmin", config.sd_txt2img_params.s_tmin);
-        request_body_json.put("s_noise", config.sd_txt2img_params.s_noise);
-        request_body_json.put("override_settings", config.sd_txt2img_params.override_settings);
-        request_body_json.put("override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
-        request_body_json.put("refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
-        request_body_json.put("refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
-        request_body_json.put("disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
-        request_body_json.put("firstpass_image", config.sd_txt2img_params.firstpass_image);
-        request_body_json.put("comments", config.sd_txt2img_params.comments);
-        request_body_json.put("enable_hr", config.sd_txt2img_params.enable_hr);
-        request_body_json.put("firstphase_width", config.sd_txt2img_params.firstphase_width);
-        request_body_json.put("firstphase_height", config.sd_txt2img_params.firstphase_height);
-        request_body_json.put("hr_scale", config.sd_txt2img_params.hr_scale);
-        request_body_json.put("hr_upscaler", config.sd_txt2img_params.hr_upscaler);
-        request_body_json.put("hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
-        request_body_json.put("hr_resize_x", config.sd_txt2img_params.hr_resize_x);
-        request_body_json.put("hr_resize_y", config.sd_txt2img_params.hr_resize_y);
-        request_body_json.put("hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
-        request_body_json.put("hr_sampler_name", config.sd_txt2img_params.hr_sampler_name);
-        request_body_json.put("hr_scheduler", config.sd_txt2img_params.hr_scheduler);
-        request_body_json.put("hr_prompt", config.sd_txt2img_params.hr_prompt);
-        request_body_json.put("hr_negative_prompt", config.sd_txt2img_params.hr_negative_prompt);
-        request_body_json.put("force_task_id", config.sd_txt2img_params.force_task_id);
-        request_body_json.put("sampler_index", config.sd_txt2img_params.sampler_index);
+        request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) }));
+        request_body_json.insert(std::make_pair("subseed_strength", picojson::value{ config.sd_txt2img_params.subseed_strength }));
+        request_body_json.insert(std::make_pair("seed_resize_from_h", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_h) }));
+        request_body_json.insert(std::make_pair("seed_resize_from_w", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_w) }));
+        request_body_json.insert(std::make_pair("sampler_name", picojson::value{ config.sd_txt2img_params.sampler_name }));
+        request_body_json.insert(std::make_pair("scheduler", picojson::value{ config.sd_txt2img_params.scheduler }));
+        request_body_json.insert(std::make_pair("batch_size", picojson::value{ static_cast<double>(config.sd_txt2img_params.batch_size) }));
+        request_body_json.insert(std::make_pair("n_iter", picojson::value{ static_cast<double>(config.sd_txt2img_params.n_iter) }));
+        request_body_json.insert(std::make_pair("steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) }));
+        request_body_json.insert(std::make_pair("cfg_scale", picojson::value{ config.sd_txt2img_params.cfg_scale }));
+        request_body_json.insert(std::make_pair("width", picojson::value{ static_cast<double>(config.sd_txt2img_params.width) }));
+        request_body_json.insert(std::make_pair("height", picojson::value{ static_cast<double>(config.sd_txt2img_params.height) }));
+        request_body_json.insert(std::make_pair("restore_faces", picojson::value{ config.sd_txt2img_params.restore_faces }));
+        request_body_json.insert(std::make_pair("tiling", picojson::value{ config.sd_txt2img_params.tiling }));
+        request_body_json.insert(std::make_pair("do_not_save_samples", picojson::value{ config.sd_txt2img_params.do_not_save_samples }));
+        request_body_json.insert(std::make_pair("do_not_save_grid", picojson::value{ config.sd_txt2img_params.do_not_save_grid }));
+        request_body_json.insert(std::make_pair("eta", picojson::value{ static_cast<double>(config.sd_txt2img_params.eta) }));
+        request_body_json.insert(std::make_pair("denoising_strength", picojson::value{ config.sd_txt2img_params.denoising_strength }));
+        request_body_json.insert(std::make_pair("s_min_uncond", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_min_uncond) }));
+        request_body_json.insert(std::make_pair("s_churn", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_churn) }));
+        request_body_json.insert(std::make_pair("s_tmax", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmax) }));
+        request_body_json.insert(std::make_pair("s_tmin", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmin) }));
+        request_body_json.insert(std::make_pair("s_noise", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_noise) }));
+        request_body_json.insert(std::make_pair("override_settings", picojson::value{ config.sd_txt2img_params.override_settings }));
+        request_body_json.insert(std::make_pair("override_settings_restore_afterwards", picojson::value{ config.sd_txt2img_params.override_settings_restore_afterwards }));
+        request_body_json.insert(std::make_pair("refiner_checkpoint", picojson::value{ config.sd_txt2img_params.refiner_checkpoint }));
+        request_body_json.insert(std::make_pair("refiner_switch_at", picojson::value{ config.sd_txt2img_params.refiner_switch_at }));
+        request_body_json.insert(std::make_pair("disable_extra_networks", picojson::value{ config.sd_txt2img_params.disable_extra_networks }));
+        request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
+        request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
+        request_body_json.insert(std::make_pair("enable_hr", picojson::value{ config.sd_txt2img_params.enable_hr }));
+        request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
+        request_body_json.insert(std::make_pair("firstphase_height", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_height) }));
+        request_body_json.insert(std::make_pair("hr_scale", picojson::value{ config.sd_txt2img_params.hr_scale }));
+        request_body_json.insert(std::make_pair("hr_upscaler", picojson::value{ config.sd_txt2img_params.hr_upscaler }));
+        request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
+        request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
+        request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
+        request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
+        request_body_json.insert(std::make_pair("hr_sampler_name", picojson::value{ config.sd_txt2img_params.hr_sampler_name }));
+        request_body_json.insert(std::make_pair("hr_scheduler", picojson::value{ config.sd_txt2img_params.hr_scheduler }));
+        request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ config.sd_txt2img_params.hr_prompt }));
+        request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ config.sd_txt2img_params.hr_negative_prompt }));
+        request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
+        request_body_json.insert(std::make_pair("sampler_index", picojson::value{ config.sd_txt2img_params.sampler_index }));
 
         if (config.sd_txt2img_params.abg_remover_enable)
         {
-            request_body_json.put("script_name", "abg remover");
-            pt::ptree args_array;
-            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
-            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
-            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
-            args_array.push_back(std::make_pair("", pt::ptree("#000000")));
-            args_array.push_back(std::make_pair("", pt::ptree{ "false" }));
-            request_body_json.add_child("script_args", args_array);
+            request_body_json.insert(std::make_pair("script_name", picojson::value{ "abg remover" }));
+            picojson::array args_array;
+            args_array.push_back(picojson::value{ false });
+            args_array.push_back(picojson::value{ false });
+            args_array.push_back(picojson::value{ false });
+            args_array.push_back(picojson::value{ "#000000" });
+            args_array.push_back(picojson::value{ false });
+            request_body_json.insert(std::make_pair("script_args", args_array));
         }
 
-        request_body_json.put("send_images", config.sd_txt2img_params.send_images);
-        request_body_json.put("save_images", config.sd_txt2img_params.save_images);
+        request_body_json.insert(std::make_pair("send_images", picojson::value{ config.sd_txt2img_params.send_images }));
+        request_body_json.insert(std::make_pair("save_images", picojson::value{ config.sd_txt2img_params.save_images }));
 
-        pt::ptree alwayson_scripts;
+        picojson::object alwayson_scripts;
         if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
         {
-            pt::ptree adetailer;
-            pt::ptree args_array;
-            pt::ptree arg;
-            arg.put("ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+            picojson::object adetailer;
+            picojson::array args_array;
+            picojson::object args;
+            picojson::object object;
+            object.insert(std::make_pair("ad_model", picojson::value{ config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model }));
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
             {
-                arg.put("ad_prompt", expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config.macros));
+                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config.macros) };
+                object.insert(std::make_pair("ad_prompt", picojson::value{ ad_prompt }));
             }
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
             {
-                arg.put("ad_negative_prompt", expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config.macros));
+                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config.macros) };
+                object.insert(std::make_pair("ad_negative_prompt", picojson::value{ ad_negative_prompt }));
             }
-            args_array.push_back(std::make_pair("", arg));
-            adetailer.add_child("args", args_array);
-            alwayson_scripts.add_child("ADetailer", adetailer);
+            args_array.push_back(picojson::value{ true });
+            args_array.push_back(picojson::value{ false });
+            args_array.push_back(picojson::value{ object });
+            adetailer.insert(std::make_pair("args", picojson::value{ args_array }));
+            alwayson_scripts.insert(std::make_pair("ADetailer", picojson::value{ adetailer }));
         }
-        request_body_json.add_child("alwayson_scripts", alwayson_scripts);
+        request_body_json.insert(std::make_pair("alwayson_scripts", picojson::value{ alwayson_scripts }));
 
-        request_body_json.put("infotext", config.sd_txt2img_params.infotext);
+        request_body_json.insert(std::make_pair("infotext", picojson::value{ config.sd_txt2img_params.infotext }));
 
-        std::stringstream ss_request_body;
-        boost::property_tree::json_parser::write_json(ss_request_body, request_body_json, false);
-        const std::string request_body{ replace_constant(ss_request_body.str()) };
+        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
         request.set(http::field::host, config.sd_txt2img_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = replace_constant(request_body);
+        request.body() = request_body;
         request.prepare_payload();
 
         http::write(tcp_stream, request);
@@ -742,17 +771,12 @@ void send_automatic1111_txt2img_request(
 
         std::stringstream ss_response;
         ss_response << response.body();
-        boost::property_tree::ptree response_pt;
-        boost::property_tree::json_parser::read_json(ss_response, response_pt);
-
-        std::string base64_image_data;
-        if (auto images_node = response_pt.get_child_optional("images"))
-        {
-            if (!images_node->empty())
-            {
-                base64_image_data = images_node->front().second.get_value<std::string>();
-            }
-        }
+        picojson::value response_json;
+        picojson::parse(response_json, ss_response);
+        
+        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+        const picojson::array& images{ throwable_find<picojson::array>(object, "images")};
+        const std::string base64_image_data{ throwable_at<std::string>(images, 0) };
 
         if (base64_image_data.empty())
         {
@@ -875,7 +899,6 @@ llm_response send_oobabooga_completions_request(
     namespace http = beast::http;
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
-    namespace pt = boost::property_tree;
 
     llm_response result;
 
@@ -888,122 +911,122 @@ llm_response send_oobabooga_completions_request(
         const auto results = resolver.resolve(config.host, config.port);
         tcp_stream.connect(results);
 
-        pt::ptree request_body_json;
-        request_body_json.put("prompt", prompt);
+        picojson::object request_body_json;
+        request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
 
         if (!params.model.empty())
         {
-            request_body_json.put("model", params.model);
+            request_body_json.insert(std::make_pair("model", picojson::value{ params.model }));
         }
 
-        request_body_json.put("best_of", params.best_of);
-        request_body_json.put("echo", params.echo);
-        request_body_json.put("frequency_penalty", params.frequency_penalty);
-        //request_body_json.put("logit_bias", params.logit_bias);
-        request_body_json.put("logprobs", params.logprobs);
-        request_body_json.put("max_tokens", params.max_tokens);
-        request_body_json.put("n", params.n);
-        request_body_json.put("presence_penalty", params.presence_penalty);
+        request_body_json.insert(std::make_pair("best_of", picojson::value{ static_cast<double>(params.best_of) }));
+        request_body_json.insert(std::make_pair("echo", picojson::value{ params.echo }));
+        request_body_json.insert(std::make_pair("frequency_penalty", picojson::value{ params.frequency_penalty }));
+        //request_body_json.insert(std::make_pair("logit_bias", picojson::value{ params.logit_bias }));
+        request_body_json.insert(std::make_pair("logprobs", picojson::value{ params.logprobs }));
+        request_body_json.insert(std::make_pair("max_tokens", picojson::value{ static_cast<double>(params.max_tokens) }));
+        request_body_json.insert(std::make_pair("n", picojson::value{ static_cast<double>(params.n) }));
+        request_body_json.insert(std::make_pair("presence_penalty", picojson::value{ params.presence_penalty }));
 
         if (!params.stop.empty())
         {
-            pt::ptree stop_array;
+            picojson::array stop_array;
             for (const std::string& str : params.stop)
             {
-                stop_array.push_back(std::make_pair("", pt::ptree(str)));
+                stop_array.push_back(picojson::value{ str });
             }
-            request_body_json.add_child("stop", stop_array);
+            request_body_json.insert(std::make_pair("stop", picojson::value{ stop_array }));
         }
 
-        request_body_json.put("stream", params.stream);
+        request_body_json.insert(std::make_pair("stream", picojson::value{ params.stream }));
 
         if (!params.suffix.empty())
         {
-            request_body_json.put("suffix", params.suffix);
+            request_body_json.insert(std::make_pair("suffix", picojson::value{ params.suffix }));
         }
 
-        request_body_json.put("temperature", params.temperature);
-        request_body_json.put("top_p", params.top_p);
+        request_body_json.insert(std::make_pair("temperature", picojson::value{ params.temperature }));
+        request_body_json.insert(std::make_pair("top_p", picojson::value{ params.top_p }));
 
         if (params.seed != -1)
         {
-            request_body_json.put("seed", params.seed);
+            request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(params.seed) }));
         }
 
-        request_body_json.put("max_tokens", params.max_tokens);
+        request_body_json.insert(std::make_pair("max_tokens", picojson::value{ static_cast<double>(params.max_tokens) }));
 
         if (!params.user.empty())
         {
-            request_body_json.put("user", params.user);
+            request_body_json.insert(std::make_pair("user", picojson::value{ params.user }));
         }
 
         if (!params.preset.empty())
         {
-            request_body_json.put("preset", params.preset);
+            request_body_json.insert(std::make_pair("preset", picojson::value{ params.preset }));
         }
 
-        request_body_json.put("dynatemp_low", params.dynatemp_low);
-        request_body_json.put("dynatemp_high", params.dynatemp_high);
-        request_body_json.put("dynatemp_exponent", params.dynatemp_exponent);
-        request_body_json.put("smoothing_factor", params.smoothing_factor);
-        request_body_json.put("smoothing_curve", params.smoothing_curve);
-        request_body_json.put("min_p", params.min_p);
-        request_body_json.put("top_k", params.top_k);
-        request_body_json.put("typical_p", params.typical_p);
-        request_body_json.put("xtc_threshold", params.xtc_threshold);
-        request_body_json.put("xtc_probability", params.xtc_probability);
-        request_body_json.put("epsilon_cutoff", params.epsilon_cutoff);
-        request_body_json.put("eta_cutoff", params.eta_cutoff);
-        request_body_json.put("tfs", params.tfs);
-        request_body_json.put("top_a", params.top_a);
-        request_body_json.put("top_n_sigma", params.top_n_sigma);
-        request_body_json.put("dry_multiplier", params.dry_multiplier);
-        request_body_json.put("dry_allowed_length", params.dry_allowed_length);
-        request_body_json.put("dry_base", params.dry_base);
-        request_body_json.put("repetition_penalty", params.repetition_penalty);
-        request_body_json.put("encoder_repetition_penalty", params.encoder_repetition_penalty);
-        request_body_json.put("no_repeat_ngram_size", params.no_repeat_ngram_size);
-        request_body_json.put("repetition_penalty_range", params.repetition_penalty_range);
-        request_body_json.put("penalty_alpha", params.penalty_alpha);
-        request_body_json.put("guidance_scale", params.guidance_scale);
-        request_body_json.put("mirostat_mode", params.mirostat_mode);
-        request_body_json.put("mirostat_tau", params.mirostat_tau);
-        request_body_json.put("mirostat_eta", params.mirostat_eta);
-        request_body_json.put("prompt_lookup_num_tokens", params.prompt_lookup_num_tokens);
-        request_body_json.put("max_tokens_second", params.max_tokens_second);
-        request_body_json.put("do_sample", params.do_sample);
-        request_body_json.put("dynamic_temperature", params.max_tokens_second);
-        request_body_json.put("temperature_last", params.temperature_last);
-        request_body_json.put("auto_max_new_tokens", params.auto_max_new_tokens);
-        request_body_json.put("ban_eos_token", params.ban_eos_token);
-        request_body_json.put("add_bos_token", params.add_bos_token);
-        request_body_json.put("skip_special_tokens", params.skip_special_tokens);
-        request_body_json.put("static_cache", params.static_cache);
-        request_body_json.put("truncation_length", params.truncation_length);
+        request_body_json.insert(std::make_pair("dynatemp_low", picojson::value{ params.dynatemp_low }));
+        request_body_json.insert(std::make_pair("dynatemp_high", picojson::value{ params.dynatemp_high }));
+        request_body_json.insert(std::make_pair("dynatemp_exponent", picojson::value{ params.dynatemp_exponent }));
+        request_body_json.insert(std::make_pair("smoothing_factor", picojson::value{ params.smoothing_factor }));
+        request_body_json.insert(std::make_pair("smoothing_curve", picojson::value{ params.smoothing_curve }));
+        request_body_json.insert(std::make_pair("min_p", picojson::value{ params.min_p }));
+        request_body_json.insert(std::make_pair("top_k", picojson::value{ static_cast<double>(params.top_k) }));
+        request_body_json.insert(std::make_pair("typical_p", picojson::value{ params.typical_p }));
+        request_body_json.insert(std::make_pair("xtc_threshold", picojson::value{ params.xtc_threshold }));
+        request_body_json.insert(std::make_pair("xtc_probability", picojson::value{ params.xtc_probability }));
+        request_body_json.insert(std::make_pair("epsilon_cutoff", picojson::value{ params.epsilon_cutoff }));
+        request_body_json.insert(std::make_pair("eta_cutoff", picojson::value{ params.eta_cutoff }));
+        request_body_json.insert(std::make_pair("tfs", picojson::value{ params.tfs }));
+        request_body_json.insert(std::make_pair("top_a", picojson::value{ params.top_a }));
+        request_body_json.insert(std::make_pair("top_n_sigma", picojson::value{ params.top_n_sigma }));
+        request_body_json.insert(std::make_pair("dry_multiplier", picojson::value{ params.dry_multiplier }));
+        request_body_json.insert(std::make_pair("dry_allowed_length", picojson::value{ static_cast<double>(params.dry_allowed_length) }));
+        request_body_json.insert(std::make_pair("dry_base", picojson::value{ params.dry_base }));
+        request_body_json.insert(std::make_pair("repetition_penalty", picojson::value{ params.repetition_penalty }));
+        request_body_json.insert(std::make_pair("encoder_repetition_penalty", picojson::value{ params.encoder_repetition_penalty }));
+        request_body_json.insert(std::make_pair("no_repeat_ngram_size", picojson::value{ static_cast<double>(params.no_repeat_ngram_size) }));
+        request_body_json.insert(std::make_pair("repetition_penalty_range", picojson::value{ static_cast<double>(params.repetition_penalty_range) }));
+        request_body_json.insert(std::make_pair("penalty_alpha", picojson::value{ params.penalty_alpha }));
+        request_body_json.insert(std::make_pair("guidance_scale", picojson::value{ params.guidance_scale }));
+        request_body_json.insert(std::make_pair("mirostat_mode", picojson::value{ static_cast<double>(params.mirostat_mode) }));
+        request_body_json.insert(std::make_pair("mirostat_tau", picojson::value{ params.mirostat_tau }));
+        request_body_json.insert(std::make_pair("mirostat_eta", picojson::value{ params.mirostat_eta }));
+        request_body_json.insert(std::make_pair("prompt_lookup_num_tokens", picojson::value{ static_cast<double>(params.prompt_lookup_num_tokens) }));
+        request_body_json.insert(std::make_pair("max_tokens_second", picojson::value{ static_cast<double>(params.max_tokens_second) }));
+        request_body_json.insert(std::make_pair("do_sample", picojson::value{ params.do_sample }));
+        request_body_json.insert(std::make_pair("dynamic_temperature", picojson::value{ static_cast<double>(params.max_tokens_second) }));
+        request_body_json.insert(std::make_pair("temperature_last", picojson::value{ params.temperature_last }));
+        request_body_json.insert(std::make_pair("auto_max_new_tokens", picojson::value{ params.auto_max_new_tokens }));
+        request_body_json.insert(std::make_pair("ban_eos_token", picojson::value{ params.ban_eos_token }));
+        request_body_json.insert(std::make_pair("add_bos_token", picojson::value{ params.add_bos_token }));
+        request_body_json.insert(std::make_pair("skip_special_tokens", picojson::value{ params.skip_special_tokens }));
+        request_body_json.insert(std::make_pair("static_cache", picojson::value{ params.static_cache }));
+        request_body_json.insert(std::make_pair("truncation_length", picojson::value{ static_cast<double>(params.truncation_length) }));
 
         if (!params.sampler_priority.empty())
         {
-            pt::ptree sampler_priority_array;
+            picojson::array sampler_priority_array;
             for (const std::string& str : params.sampler_priority)
             {
-                sampler_priority_array.push_back(std::make_pair("", pt::ptree(str)));
+                sampler_priority_array.push_back(picojson::value{ str });
             }
-            request_body_json.add_child("sampler_priority", sampler_priority_array);
+            request_body_json.insert(std::make_pair("sampler_priority", picojson::value{ sampler_priority_array }));
         }
 
-        request_body_json.put("custom_token_bans", params.custom_token_bans);
-        request_body_json.put("negative_prompt", params.negative_prompt);
-        request_body_json.put("dry_sequence_breakers", params.dry_sequence_breakers);
-        request_body_json.put("grammar_string", params.grammar_string);
+        request_body_json.insert(std::make_pair("custom_token_bans", picojson::value{ params.custom_token_bans }));
+        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ params.negative_prompt }));
+        request_body_json.insert(std::make_pair("dry_sequence_breakers", picojson::value{ params.dry_sequence_breakers }));
+        request_body_json.insert(std::make_pair("grammar_string", picojson::value{ params.grammar_string }));
 
-        std::stringstream ss_request_body;
-        pt::write_json(ss_request_body, request_body_json, false);
+        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, config.completions_target, 11 }; // HTTP/1.1
         request.set(http::field::host, config.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = ss_request_body.str();
+        request.body() = request_body;
         request.prepare_payload();
 
         if (!config.api_key.empty())
@@ -1026,24 +1049,16 @@ llm_response send_oobabooga_completions_request(
 
         if (response.result() == http::status::ok)
         {
-            pt::ptree response_json;
+            picojson::value response_json;
             std::stringstream ss_response_body(response.body());
-            pt::read_json(ss_response_body, response_json);
-
-            try
-            {
-                pt::ptree choices{ response_json.get_child("choices") };
-                result.text = choices.front().second.get<std::string>("text");
-                result.finish_reason = choices.front().second.get<std::string>("finish_reason", "");
-                result.prompt_tokens = choices.front().second.get<int>("prompt_tokens", 0);
-                result.completion_tokens = choices.front().second.get<int>("completion_tokens", 0);
-                result.total_tokens = choices.front().second.get<int>("total_tokens", 0);
-            }
-            catch (const pt::ptree_bad_path& exception)
-            {
-                // Could not parse response text.
-                throw socket_exception{} << error_info::description{ std::string{ "Error parsing response: " } + exception.what() };
-            }
+            picojson::parse(response_json, ss_response_body);
+            const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+            const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
+            const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
+            result.text = throwable_find<std::string>(choice, "text");
+            result.prompt_tokens = static_cast<int>(throwable_find<double>(choice, "prompt_tokens"));
+            result.completion_tokens = static_cast<int>(throwable_find<double>(choice, "completion_tokens"));
+            result.total_tokens = static_cast<int>(throwable_find<double>(choice, "total_tokens"));
         }
         else
         {
@@ -1075,7 +1090,6 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
     namespace http = beast::http;
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
-    namespace pt = boost::property_tree;
 
     try
     {
@@ -1086,18 +1100,17 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         auto const results = resolver.resolve(config.host, config.port);
         tcp_stream.connect(results);
 
-        pt::ptree request_body_json;
-        request_body_json.put("text", prompt);
+        picojson::object request_body_json;
+        request_body_json.insert(std::make_pair("text", picojson::value{ prompt }));
 
-        std::stringstream ss_request_body;
-        pt::write_json(ss_request_body, request_body_json, false);
+        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, config.token_count_target, 11 }; // HTTP/1.1
-
         request.set(http::field::host, config.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = ss_request_body.str();
+        request.body() = request_body;
         request.prepare_payload();
 
         http::write(tcp_stream, request);
@@ -1115,18 +1128,13 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
 
         if (response.result() == http::status::ok)
         {
-            pt::ptree response_json;
+            picojson::value response_json;
             std::stringstream ss_response_body(response.body());
-            pt::read_json(ss_response_body, response_json);
+            picojson::parse(response_json, ss_response_body);
 
-            try
-            {
-                return response_json.get<int>("length");
-            }
-            catch (const pt::ptree_bad_path& e)
-            {
-                throw syntax_exception{} << error_info::description(e.what());
-            }
+            const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+            return static_cast<int>(throwable_find<double>(object, "length"));
+
         }
         else
         {
@@ -1177,40 +1185,37 @@ int get_tokens_from_cache(const config& config, const std::string& str)
 
 void write_cache(const config& config)
 {
-    namespace pt = boost::property_tree;
-
     if (config.mode != "chat" && config.mode != "novel")
     {
         return;
     }
 
-    pt::ptree cache;
+    picojson::array cache;
     for (const token_count_string& element : config.lru_cache.get<lru_tag>())
     {
-        pt::ptree node;
-        node.put("string", element.str);
-        node.put("tokens", element.tokens);
-        cache.push_back(std::make_pair("", node));
+        picojson::object node;
+        node.insert(std::make_pair("string", picojson::value{ element.str }));
+        node.insert(std::make_pair("tokens", picojson::value{ static_cast<double>(element.tokens) }));
+        cache.push_back(picojson::value{ node });
     }
-    pt::ptree json;
-    json.add_child("cache", cache);
+    picojson::object json;
+    json.insert(std::make_pair("cache", picojson::value{ cache }));
+    const std::string serialized = picojson::value{ json }.serialize();
 
     std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
     create_parent_directories(cache_path);
     boost::nowide::ofstream ofs{ cache_path };
-    pt::write_json(ofs, json, false);
+    ofs << serialized;
 }
 
 void read_cache(const config& config)
 {
-    namespace pt = boost::property_tree;
-
     if (config.mode != "chat" && config.mode != "novel")
     {
         return;
     }
 
-    pt::ptree json;
+    picojson::value json;
     std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
 
     if (!std::filesystem::exists(cache_path))
@@ -1221,12 +1226,15 @@ void read_cache(const config& config)
     try
     {
         boost::nowide::ifstream ifs{ cache_path };
-        pt::read_json(ifs, json);
+        picojson::parse(json, ifs);
         lru_cache lru_cache;
-        for (const pt::ptree::value_type& node : json.get_child("cache"))
+        const picojson::object& object{ throwable_get<picojson::object>(json) };
+        const picojson::array& caches{ throwable_find<picojson::array>(object, "cache") };
+        for (const auto& cache : caches)
         {
-            const std::string str{ node.second.get<std::string>("string") };
-            const int tokens{ node.second.get<int>("tokens") };
+            const picojson::object& cache_object{ throwable_get<picojson::object>(cache) };
+            const std::string str{ throwable_find<std::string>(cache_object, "string") };
+            const int tokens{ static_cast<int>(throwable_find<double>(cache_object, "tokens")) };
             lru_cache.insert({ str, tokens });
         }
         config.lru_cache = lru_cache;
