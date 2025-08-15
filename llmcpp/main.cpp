@@ -312,6 +312,35 @@ struct sd_txt2img_parameters
     bool abg_remover_enable{};
 };
 
+struct sb_generation_parameters
+{
+    std::string host;
+    std::string port;
+    std::string target;
+    std::string text_file;
+    std::string output_file;
+
+    std::string text;
+    std::string encoding;
+    std::string model_name;
+    int model_id{};
+    std::string speaker_name;
+    int speaker_id{};
+    double sdp_ratio{};
+    double noise{};
+    double noisew{};
+    double length{};
+    std::string language;
+    bool auto_split{};
+    double split_interval{};
+    std::string assist_text;
+    double assist_text_weight{};
+    std::string style;
+    double style_weight{};
+    std::string reference_audio_path{};
+};
+
+
 using macros = std::map<std::string, std::string>;
 
 struct token_count_string
@@ -360,6 +389,7 @@ struct config
     tg_prompt_parameters tg_prompt_params;
     tg_completions_parameters tg_completions_params;
     sd_txt2img_parameters sd_txt2img_params;
+    sb_generation_parameters sb_generation_params;
     mutable lru_cache lru_cache;
     macros macros;
 };
@@ -624,6 +654,18 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
     return result;
 }
 
+std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
+{
+    const std::filesystem::path file_path{ expand_macro(path, config.macros) };
+    if (file_path.is_relative())
+    {
+        const std::filesystem::path base_path{ expand_macro(config.base_path, config.macros) };
+        return base_path / file_path;
+
+    }
+    return file_path;
+}
+
 void send_automatic1111_txt2img_request(
     const config& config,
     const std::string& prompt,
@@ -784,9 +826,9 @@ void send_automatic1111_txt2img_request(
         ss_response << response.body();
         picojson::value response_json;
         picojson::parse(response_json, ss_response);
-        
+
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& images{ throwable_find<picojson::array>(object, "images")};
+        const picojson::array& images{ throwable_find<picojson::array>(object, "images") };
         const std::string base64_image_data{ throwable_at<std::string>(images, 0) };
 
         if (base64_image_data.empty())
@@ -818,16 +860,111 @@ void send_automatic1111_txt2img_request(
     }
 }
 
-std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
+void send_style_bert_voice_request(
+    const config& config,
+    const std::string& text
+)
 {
-    const std::filesystem::path file_path{ expand_macro(path, config.macros) };
-    if (file_path.is_relative())
-    {
-        const std::filesystem::path base_path{ expand_macro(config.base_path, config.macros) };
-        return base_path / file_path;
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
 
+    try
+    {
+        net::io_context ioc;
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
+
+        auto const results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
+        tcp_stream.connect(results);
+
+        picojson::object request_body_json;
+
+        request_body_json.insert(std::make_pair("text", picojson::value{ text }));
+        //if (!config.sb_generation_params.encoding.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("encoding", picojson::value{ config.sb_generation_params.encoding }));
+        //}
+        //if (!config.sb_generation_params.model_name.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("model_name", picojson::value{ config.sb_generation_params.model_name }));
+        //}
+        //else
+        //{
+        //    request_body_json.insert(std::make_pair("model_id", picojson::value{ static_cast<double>(config.sb_generation_params.model_id) }));
+        //}
+        //if (!config.sb_generation_params.speaker_name.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("speaker_name", picojson::value{ config.sb_generation_params.speaker_name }));
+        //}
+        //else
+        //{
+        //    request_body_json.insert(std::make_pair("speaker_id", picojson::value{ static_cast<double>(config.sb_generation_params.speaker_id) }));
+        //}
+        //request_body_json.insert(std::make_pair("sdp_ratio", picojson::value{ config.sb_generation_params.sdp_ratio }));
+        //request_body_json.insert(std::make_pair("noise", picojson::value{ config.sb_generation_params.noise }));
+        //request_body_json.insert(std::make_pair("noisew", picojson::value{ config.sb_generation_params.noisew }));
+        //request_body_json.insert(std::make_pair("length", picojson::value{ config.sb_generation_params.length }));
+        //request_body_json.insert(std::make_pair("language", picojson::value{ config.sb_generation_params.language }));
+        //request_body_json.insert(std::make_pair("auto_split", picojson::value{ config.sb_generation_params.auto_split }));
+        //request_body_json.insert(std::make_pair("split_interval", picojson::value{ config.sb_generation_params.split_interval }));
+        //if (!config.sb_generation_params.assist_text.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("assist_text", picojson::value{ config.sb_generation_params.assist_text }));
+        //    request_body_json.insert(std::make_pair("assist_text_weight", picojson::value{ config.sb_generation_params.assist_text_weight }));
+        //}
+        //if (!config.sb_generation_params.style.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("style", picojson::value{ config.sb_generation_params.style }));
+        //    request_body_json.insert(std::make_pair("style_weight", picojson::value{ config.sb_generation_params.style_weight }));
+        //}
+        //if (!config.sb_generation_params.reference_audio_path.empty())
+        //{
+        //    request_body_json.insert(std::make_pair("reference_audio_path", picojson::value{ config.sb_generation_params.reference_audio_path }));
+        //}
+
+        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+        http::request<http::string_body> request{ http::verb::post, config.sb_generation_params.target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.sb_generation_params.host);
+        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        request.set(http::field::content_type, "application/json; charset=UTF-8");
+        request.body() = request_body;
+        request.prepare_payload();
+
+        http::write(tcp_stream, request);
+
+        beast::flat_buffer buffer;
+        http::response<http::string_body> response;
+        http::read(tcp_stream, buffer, response);
+
+        std::stringstream ss_response;
+        ss_response << response.body();
+
+        {
+            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config.macros) };
+            const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
+            boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
+            if (!ofs.is_open())
+            {
+                throw file_open_exception{} << error_info::path{ output_file_path };
+            }
+            ofs.write(ss_response.str().data(), ss_response.str().size());
+        }
+
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
     }
-    return file_path;
+    catch (const std::exception& exception)
+    {
+        throw file_open_exception{} << error_info::description{ exception.what() };
+    }
 }
 
 std::vector<item> parse_item_list(const std::string& str)
@@ -1587,7 +1724,7 @@ int parse_commandline(
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "produce help message")
-            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg or sd")
+            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg | sd | sb")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
@@ -1595,7 +1732,7 @@ int parse_commandline(
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-            
+
             ("tg-system-prompts-file", po::value<std::string>(&config.tg_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "TG system prompt file path")
             ("tg-examples-file", po::value<std::string>(&config.tg_prompt_params.examples_file)->default_value("examples.txt"), "TG exmaples file path")
             ("tg-history-file", po::value<std::string>(&config.tg_prompt_params.history_file)->default_value("history.txt"), "TG history file path")
@@ -1675,7 +1812,7 @@ int parse_commandline(
             ("sd-target", po::value<std::string>(&config.sd_txt2img_params.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
             ("sd-prompt-file", po::value<std::string>(&config.sd_txt2img_params.prompt_file)->default_value("prompt.txt"), "SD prompt file")
             ("sd-negative-prompt-file", po::value<std::string>(&config.sd_txt2img_params.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
-            ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("output.png"), "SD output PNG file")
+            ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
             ("sd-prompt", po::value<std::string>(&config.sd_txt2img_params.prompt)->default_value(""), "SD prompt")
             ("sd-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.negative_prompt)->default_value(""), "SD negative prompt")
             ("sd-styles", po::value<std::vector<std::string>>(&config.sd_txt2img_params.styles), "SD styles")
@@ -1733,6 +1870,30 @@ int parse_commandline(
             ("sd-ad-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer negative prompt")
             ("sd-infotext", po::value<std::string>(&config.sd_txt2img_params.infotext)->default_value(""), "SD infotext")
             ("sd-abg-remover-enable", po::bool_switch(&config.sd_txt2img_params.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+
+            ("sb-host", po::value<std::string>(&config.sb_generation_params.host)->default_value("localhost"), "SB host")
+            ("sb-port", po::value<std::string>(&config.sb_generation_params.port)->default_value("5001"), "SB port")
+            ("sb-target", po::value<std::string>(&config.sb_generation_params.target)->default_value("/voice"), "SB voide target")
+            ("sb-text-file", po::value<std::string>(&config.sb_generation_params.text_file)->default_value("text.txt"), "SB text file")
+            ("sb-output-file", po::value<std::string>(&config.sb_generation_params.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
+            ("sb-text", po::value<std::string>(&config.sb_generation_params.text)->default_value(""), "SB text")
+            ("sb-encoding", po::value<std::string>(&config.sb_generation_params.encoding)->default_value(""), "SB encoding")
+            ("sb-model-name", po::value<std::string>(&config.sb_generation_params.model_name)->default_value(""), "SB model name")
+            ("sb-model-id", po::value<int>(&config.sb_generation_params.model_id)->default_value(0), "SB model id")
+            ("sb-speaker-name", po::value<std::string>(&config.sb_generation_params.speaker_name)->default_value(""), "SB speaker name")
+            ("sb-speaker-id", po::value<int>(&config.sb_generation_params.speaker_id)->default_value(0), "SB speaker id")
+            ("sb-sdp-ratio", po::value<double>(&config.sb_generation_params.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
+            ("sb-noise", po::value<double>(&config.sb_generation_params.noise)->default_value(0.6, "0.6"), "SB noise")
+            ("sb-noisew", po::value<double>(&config.sb_generation_params.noisew)->default_value(0.8, "0.8"), "SB noisew")
+            ("sb-length", po::value<double>(&config.sb_generation_params.length)->default_value(1), "SB length")
+            ("sb-language", po::value<std::string>(&config.sb_generation_params.language)->default_value(""), "SB language")
+            ("sb-auto-split", po::bool_switch(&config.sb_generation_params.auto_split)->default_value(true), "SB auto split")
+            ("sb-split-interval", po::value<double>(&config.sb_generation_params.split_interval)->default_value(0.5, "0.5"), "SB split interval")
+            ("sb-assist-text", po::value<std::string>(&config.sb_generation_params.assist_text)->default_value(""), "SB assist text")
+            ("sb-assist-text-weight", po::value<double>(&config.sb_generation_params.assist_text_weight)->default_value(1), "SB assist text weight")
+            ("sb-style", po::value<std::string>(&config.sb_generation_params.style)->default_value(""), "SB style")
+            ("sb-style-weight", po::value<double>(&config.sb_generation_params.style_weight)->default_value(1), "SB style weight")
+            ("sb-reference-audio-path", po::value<std::string>(&config.sb_generation_params.reference_audio_path)->default_value(""), "SB reference audio path")
             ;
 
         po::variables_map vm;
@@ -1755,9 +1916,13 @@ int parse_commandline(
         {
             ;
         }
+        else if (config.mode == "sb")
+        {
+            ;
+        }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "mode options must be tg or sd.";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be tg | sd | sb.";
             return 1;
         }
 
@@ -1960,6 +2125,21 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         }
 
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
+    }
+    else if (config.mode == "sb")
+    {
+        std::string text_string;
+        if (!config.sb_generation_params.text.empty())
+        {
+            text_string = expand_macro(config.sb_generation_params.text, config.macros);
+        }
+        else
+        {
+            const std::filesystem::path text_file_path{ string_to_path_by_config(config.sb_generation_params.text_file, config) };
+            read_file_to_string(text_file_path, text_string);
+            text_string = expand_macro(text_string, config.macros);
+        }
+        send_style_bert_voice_request(config, text_string);
     }
 }
 
