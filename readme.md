@@ -31,7 +31,7 @@
 | --- | --- | --- | --- |
 | --mode | モード | tg | `(tg|sd|sb)` のいずれか |
 | --base-path | 各種パスの基準となるパス | . |  |
-| --log-level | ログレベル() | info | `(trace|debug|info|warning|error|fatal)` のいずれか |
+| --log-level | ログレベル | info | `(trace|debug|info|warning|error|fatal)` のいずれか |
 | --log-file | ログファイル | log.txt |  |
 | --verbose, -v | ログ出力をコンソールに冗長に出力する | true |  |
 | --number-iterations, -N | 処理を反復する回数 | 1 | `-1` を指定すると実行を停止するまで無限に処理を反復する。 |
