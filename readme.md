@@ -24,7 +24,7 @@
 	* https://www.boost.org/
 * C++20+
 
-## oobabooga/text-generation-webui の使用例
+## oobabooga/text-generation-webui の使用法
 oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) を導入し、下記の準備をする。
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
@@ -82,7 +82,7 @@ LLM に渡すプロンプトは、
 LLMに小説を生成させる場合、`history.txt` は作成された文章になる。
 LLMとチャットをする場合、`history.txt` は会話の履歴になる。
 
-## AUTOMATIC1111/stable-diffusion-webui
+## AUTOMATIC1111/stable-diffusion-webui の使用法
 AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui) を導入し、下記の準備をする。
 
 1. `webui-user.bat` など実行環境と対応するスクリプトを編集し、`COMMANDLINE_ARGS` に `--api` を追加する。他のサーバーに割り当てるポートを考慮して適宜 `--port 7861` 等を追加する。
@@ -92,7 +92,7 @@ AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-di
 
 `llmcpp --mode sd --sd-port 7861 --sd-width 832 --sd-height 1216 --sd-step 30 --sd-prompt "sky"`
 
-## litagin02/Style-Bert-VITS2
+## litagin02/Style-Bert-VITS2 の使用法
 litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を導入し、下記の準備をする。
 
 1. `config.yml` を編集し、他のサーバーに割り当てるポートを考慮して適宜 `port: 5001` のように変更する。
