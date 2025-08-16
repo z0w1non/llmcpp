@@ -393,6 +393,7 @@ struct config
     sb_generation_parameters sb_generation_params;
     mutable lru_cache lru_cache;
     macros macros;
+    mutable std::optional<std::string> opt_stdin;
 };
 
 struct llm_response
@@ -437,16 +438,19 @@ void read_file_to_string(const std::filesystem::path& file, std::string& result)
 
 int generate_random_seed();
 
-std::string include_predefiend_macro(const std::string& right);
+std::string include_predefiend_macro(const config& config, const std::string& right);
 
-std::string datetime_predefiend_macro(const std::string&);
+std::string datetime_predefiend_macro(const config& config, const std::string&);
+
+std::string stdin_predefiend_macro(const config& config, const std::string&);
 
 std::optional<std::string> expand_predefined_macro(
+    const config& config,
     const std::string& name,
     const std::string& arguments
 );
 
-std::string expand_macro(const std::string& str, const macros& macros, int depth = 0);
+std::string expand_macro(const std::string& str, const config& macros, int depth = 0);
 std::filesystem::path string_to_path_by_config(const std::string& path, const config& config);
 void send_automatic1111_txt2img_request(
     const config& config,
@@ -633,7 +637,7 @@ int generate_random_seed()
     return distribution(random_engine);
 }
 
-std::string include_predefiend_macro(const std::string& right)
+std::string include_predefiend_macro(const config& config, const std::string& right)
 {
     std::string result;
     std::filesystem::path macro_file{ right };
@@ -645,7 +649,7 @@ std::string include_predefiend_macro(const std::string& right)
     return result;
 }
 
-std::string datetime_predefiend_macro(const std::string&)
+std::string datetime_predefiend_macro(const config& config, const std::string&)
 {
     boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
     boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
@@ -655,15 +659,27 @@ std::string datetime_predefiend_macro(const std::string&)
     return oss.str();
 }
 
+std::string stdin_predefiend_macro(const config& config, const std::string&)
+{
+    if (config.opt_stdin)
+    {
+        return *config.opt_stdin;
+    }
+    config.opt_stdin = std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
+    return *config.opt_stdin;
+}
+
 std::optional<std::string> expand_predefined_macro(
+    const config& cfg,
     const std::string& name,
     const std::string& arguments
 )
 {
-    const static std::map<std::string, std::function<std::string(const std::string&)>> predefiend_macro_impls
+    const static std::map<std::string, std::function<std::string(const config&, const std::string&)>> predefiend_macro_impls
     {
         {"include", include_predefiend_macro},
-        {"datetime", datetime_predefiend_macro}
+        {"datetime", datetime_predefiend_macro},
+        {"stdin", stdin_predefiend_macro}
     };
 
     auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&name](const auto& pair) { return boost::iequals(name, pair.first); });
@@ -675,7 +691,7 @@ std::optional<std::string> expand_predefined_macro(
         {
             try
             {
-                return found->second(arguments);
+                return found->second(cfg, arguments);
             }
             catch (const runtime_exception& exception)
             {
@@ -692,7 +708,7 @@ std::optional<std::string> expand_predefined_macro(
     return std::nullopt;
 }
 
-std::string expand_macro(const std::string& str, const macros& macros, int depth)
+std::string expand_macro(const std::string& str, const config& config, int depth)
 {
     constexpr int max_recursive_count = 32;
     if (depth > max_recursive_count)
@@ -725,7 +741,7 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
             name = macro_string;
         }
 
-        std::optional<std::string> predefined_macro_result{ expand_predefined_macro(name, arguments) };
+        std::optional<std::string> predefined_macro_result{ expand_predefined_macro(config, name, arguments) };
         if (predefined_macro_result)
         {
             expanded_string = *predefined_macro_result;
@@ -734,14 +750,14 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
         }
         else
         {
-            auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
+            auto found = std::find_if(config.macros.begin(), config.macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
 
-            if (found != macros.end())
+            if (found != config.macros.end())
             {
                 expanded_string = found->second;
                 if ("{{" + macro_string + "}}" != expanded_string)
                 {
-                    expanded_string = expand_macro(expanded_string, macros, depth + 1);
+                    expanded_string = expand_macro(expanded_string, config, depth + 1);
                 }
                 result += expanded_string;
                 BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
@@ -758,10 +774,10 @@ std::string expand_macro(const std::string& str, const macros& macros, int depth
 
 std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
 {
-    const std::filesystem::path file_path{ expand_macro(path, config.macros) };
+    const std::filesystem::path file_path{ expand_macro(path, config) };
     if (file_path.is_relative())
     {
-        const std::filesystem::path base_path{ expand_macro(config.base_path, config.macros) };
+        const std::filesystem::path base_path{ expand_macro(config.base_path, config) };
         return base_path / file_path;
 
     }
@@ -869,12 +885,12 @@ void send_automatic1111_txt2img_request(
             object.insert(std::make_pair("ad_model", picojson::value{ config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model }));
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
             {
-                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config.macros) };
+                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config) };
                 object.insert(std::make_pair("ad_prompt", picojson::value{ ad_prompt }));
             }
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
             {
-                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config.macros) };
+                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config) };
                 object.insert(std::make_pair("ad_negative_prompt", picojson::value{ ad_negative_prompt }));
             }
             args_array.push_back(picojson::value{ true });
@@ -984,7 +1000,7 @@ void send_style_bert_voice_request(
         boost::url target{ config.sb_generation_params.target };
         target.params().set("text", text);
         //target.params().set("encoding", "utf-8");
-        
+
         if (!config.sb_generation_params.model_name.empty())
         {
             target.params().set("model_name", config.sb_generation_params.model_name);
@@ -1043,14 +1059,14 @@ void send_style_bert_voice_request(
         http::read(tcp_stream, buffer, response);
         if (response.result_int() != 200)
         {
-            throw socket_exception{} << error_info::http::response::result_int{ response.result_int()};
+            throw socket_exception{} << error_info::http::response::result_int{ response.result_int() };
         }
 
         std::stringstream ss_response;
         ss_response << response.body();
 
         {
-            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config.macros) };
+            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
             const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
             boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
             if (!ofs.is_open())
@@ -1513,7 +1529,7 @@ std::string generate_and_complete_text(
     {
         initial_prompts_size = initial_prompts.size();
     }
-    initial_prompts += expand_macro(prefix, config.macros);
+    initial_prompts += expand_macro(prefix, config);
     if (config.tg_prompt_params.skip_generation_prefix)
     {
         initial_prompts_size = initial_prompts.size();
@@ -2078,7 +2094,7 @@ std::string prompts::to_string(const config& config) const
             std::vector<std::string> temp;
             for (; first != last; ++first)
             {
-                const std::string macro_expanded_string{ expand_macro(*first, config.macros) };
+                const std::string macro_expanded_string{ expand_macro(*first, config) };
                 const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
                 if (written_tokens + next_tokens > max_tokens)
                 {
@@ -2187,7 +2203,7 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
     if (config.mode == "tg")
     {
         std::string prompts_string = prompts.to_string(config);
-        prompts_string = expand_macro(prompts_string, config.macros);
+        prompts_string = expand_macro(prompts_string, config);
 
         try
         {
@@ -2215,25 +2231,25 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         std::string prompt_string;
         if (!config.sd_txt2img_params.prompt.empty())
         {
-            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config.macros);
+            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config);
         }
         else
         {
             const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
             read_file_to_string(prompt_file_path, prompt_string);
-            prompt_string = expand_macro(prompt_string, config.macros);
+            prompt_string = expand_macro(prompt_string, config);
         }
 
         std::string negative_prompt_string;
         if (!config.sd_txt2img_params.prompt.empty())
         {
-            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config.macros);
+            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config);
         }
         else
         {
             const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
             read_file_to_string(negative_prompt_file_path, negative_prompt_string);
-            negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
+            negative_prompt_string = expand_macro(negative_prompt_string, config);
         }
 
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
@@ -2243,13 +2259,13 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         std::string text_string;
         if (!config.sb_generation_params.text.empty())
         {
-            text_string = expand_macro(config.sb_generation_params.text, config.macros);
+            text_string = expand_macro(config.sb_generation_params.text, config);
         }
         else
         {
             const std::filesystem::path text_file_path{ string_to_path_by_config(config.sb_generation_params.text_file, config) };
             read_file_to_string(text_file_path, text_string);
-            text_string = expand_macro(text_string, config.macros);
+            text_string = expand_macro(text_string, config);
         }
         send_style_bert_voice_request(config, text_string);
     }
