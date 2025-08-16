@@ -29,7 +29,7 @@
 
 | オプション | 概要 | デフォルト値 | 備考 |
 | --- | --- | --- | --- |
-| --mode | モード | tg |  |
+| --mode | モード | tg | `(tg|sd|sb)` のいずれか |
 | --base-path | 各種パスの基準となるパス | . |  |
 | --log-level | ログレベル() | info | `(trace|debug|info|warning|error|fatal)` のいずれか |
 | --log-file | ログファイル | log.txt |  |
