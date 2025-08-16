@@ -1,7 +1,15 @@
 # llmcpp
 
 ## 概要
-llmcpp は、oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) により提供される Open-API 互換の Web API を利用して、ローカル環境でテキスト生成する作業を支援する CLI のフロントエンドである。
+ローカル環境で生成AIによりテキストや画像、音声を生成する作業を支援する CLI のフロントエンドである。
+
+* 想定するバックエンド
+	* テキスト生成
+		* oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui)
+	* 画像生成
+		* AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+	* 音声生成
+		* litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2)
 
 ## 機能
 * 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する要素の比率を調整する。
