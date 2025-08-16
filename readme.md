@@ -24,33 +24,32 @@
 	* https://www.boost.org/
 * C++20+
 
+## 共通設定
+下記の設定は、対象とするバックエンドに依存せず共通して参照される。
+
+| オプション | 概要 | デフォルト値 | 備考 |
+| --- | --- | --- | --- |
+| --mode | モード | tg |  |
+| --base-path | 各種パスの基準となるパス | . |  |
+| --log-level | ログレベル() | info | `(trace|debug|info|warning|error|fatal)` のいずれか |
+| --log-file | ログファイル | log.txt |  |
+| --verbose, -v | ログ出力をコンソールに冗長に出力する | true |  |
+| --number-iterations, -N | 処理を反復する回数 | 1 | `-1` を指定すると実行を停止するまで無限に処理を反復する。 |
+| --define, -D | マクロ | "" | 詳細は後述 |
+| --phases | phase | "" | 詳細は後述 |
+
 ## oobabooga/text-generation-webui の使用法
 oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) を導入し、下記の準備をする。
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
-llmcpp は下記のファイルを読み込む。
+下記の関連ファイルが読み込まれれる。
 
 | オプション | 概要 | デフォルト値 | 必須/任意 |
 | --- | --- | --- | --- |
 | --tg-system-prompts-file | システムプロンプト | system_prompts.txt | 必須 |
 | --tg-examples-file | 生成したいテキストの例 | examples.txt | 任意 |
-| --tg-history-file| 直近に生成されたテキスト | history.txt | 任意 |
-
-各ファイルを探索するディレクトリを変更する場合、`--base-path` オプションで指定する。
-ログはデフォルトで下記に出力される。
-
-| オプション | 概要 | デフォルト値 |
-| --- | --- | --- |
-| --log-file | ログファイル | log.txt |
-
-ログをコンソールに冗長に出力する場合、`-v` オプションを指定する。
-
-```
-> llmcpp -v
-```
-
-ログに出力する情報を範囲を変更する場合、 `--log-level` オプションに続き、`(trace|debug|info|warning|error|fatal)` のいずれか指定する。デフォルトでは `info` が使用される。
+| --tg-history-file | 直近に生成されたテキスト | history.txt | 任意 |
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
 
