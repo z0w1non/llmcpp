@@ -30,6 +30,7 @@
 #include <boost/date_time/time_facet.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
+#include <boost/url.hpp>
 #include <system_error>
 #include <string>
 #include <sstream>
@@ -321,7 +322,6 @@ struct sb_generation_parameters
     std::string output_file;
 
     std::string text;
-    std::string encoding;
     std::string model_name;
     int model_id{};
     std::string speaker_name;
@@ -879,59 +879,59 @@ void send_style_bert_voice_request(
         auto const results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
         tcp_stream.connect(results);
 
-        picojson::object request_body_json;
-
-        request_body_json.insert(std::make_pair("text", picojson::value{ text }));
-        if (!config.sb_generation_params.encoding.empty())
-        {
-            request_body_json.insert(std::make_pair("encoding", picojson::value{ config.sb_generation_params.encoding }));
-        }
+        boost::url target{ config.sb_generation_params.target };
+        target.params().set("text", text);
+        //target.params().set("encoding", "utf-8");
+        
         if (!config.sb_generation_params.model_name.empty())
         {
-            request_body_json.insert(std::make_pair("model_name", picojson::value{ config.sb_generation_params.model_name }));
+            target.params().set("model_name", config.sb_generation_params.model_name);
         }
         else
         {
-            request_body_json.insert(std::make_pair("model_id", picojson::value{ static_cast<double>(config.sb_generation_params.model_id) }));
+            target.params().set("model_id", std::to_string(config.sb_generation_params.model_id));
         }
+
         if (!config.sb_generation_params.speaker_name.empty())
         {
-            request_body_json.insert(std::make_pair("speaker_name", picojson::value{ config.sb_generation_params.speaker_name }));
+            target.params().set("speaker_name", config.sb_generation_params.speaker_name);
         }
         else
         {
-            request_body_json.insert(std::make_pair("speaker_id", picojson::value{ static_cast<double>(config.sb_generation_params.speaker_id) }));
+            target.params().set("speaker_id", std::to_string(config.sb_generation_params.speaker_id));
         }
-        request_body_json.insert(std::make_pair("sdp_ratio", picojson::value{ config.sb_generation_params.sdp_ratio }));
-        request_body_json.insert(std::make_pair("noise", picojson::value{ config.sb_generation_params.noise }));
-        request_body_json.insert(std::make_pair("noisew", picojson::value{ config.sb_generation_params.noisew }));
-        request_body_json.insert(std::make_pair("length", picojson::value{ config.sb_generation_params.length }));
-        request_body_json.insert(std::make_pair("language", picojson::value{ config.sb_generation_params.language }));
-        request_body_json.insert(std::make_pair("auto_split", picojson::value{ config.sb_generation_params.auto_split }));
-        request_body_json.insert(std::make_pair("split_interval", picojson::value{ config.sb_generation_params.split_interval }));
+
+        target.params().set("sdp_ratio", std::to_string(config.sb_generation_params.sdp_ratio));
+        target.params().set("noise", std::to_string(config.sb_generation_params.noise));
+        target.params().set("noisew", std::to_string(config.sb_generation_params.noisew));
+        target.params().set("length", std::to_string(config.sb_generation_params.length));
+        target.params().set("language", config.sb_generation_params.language);
+        target.params().set("auto_split", config.sb_generation_params.auto_split ? "true" : "false");
+        target.params().set("split_interval", std::to_string(config.sb_generation_params.split_interval));
+
         if (!config.sb_generation_params.assist_text.empty())
         {
-            request_body_json.insert(std::make_pair("assist_text", picojson::value{ config.sb_generation_params.assist_text }));
-            request_body_json.insert(std::make_pair("assist_text_weight", picojson::value{ config.sb_generation_params.assist_text_weight }));
+            target.params().set("assist_text", config.sb_generation_params.assist_text);
+            target.params().set("assist_text_weight", std::to_string(config.sb_generation_params.assist_text_weight));
         }
+
         if (!config.sb_generation_params.style.empty())
         {
-            request_body_json.insert(std::make_pair("style", picojson::value{ config.sb_generation_params.style }));
-            request_body_json.insert(std::make_pair("style_weight", picojson::value{ config.sb_generation_params.style_weight }));
+            target.params().set("style", config.sb_generation_params.style);
+            target.params().set("style_weight", std::to_string(config.sb_generation_params.style_weight));
         }
+
         if (!config.sb_generation_params.reference_audio_path.empty())
         {
-            request_body_json.insert(std::make_pair("reference_audio_path", picojson::value{ config.sb_generation_params.reference_audio_path }));
+            target.params().set("reference_audio_path", config.sb_generation_params.reference_audio_path);
         }
 
-        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.sb_generation_params.target, 11 }; // HTTP/1.1
+        http::request<http::string_body> request{ http::verb::get, target, 11 }; // HTTP/1.1
         request.set(http::field::host, config.sb_generation_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = request_body;
         request.prepare_payload();
 
         http::write(tcp_stream, request);
@@ -1881,7 +1881,6 @@ int parse_commandline(
             ("sb-text-file", po::value<std::string>(&config.sb_generation_params.text_file)->default_value("text.txt"), "SB text file")
             ("sb-output-file", po::value<std::string>(&config.sb_generation_params.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
             ("sb-text", po::value<std::string>(&config.sb_generation_params.text)->default_value(""), "SB text")
-            ("sb-encoding", po::value<std::string>(&config.sb_generation_params.encoding)->default_value("utf-8"), "SB encoding")
             ("sb-model-name", po::value<std::string>(&config.sb_generation_params.model_name)->default_value(""), "SB model name")
             ("sb-model-id", po::value<int>(&config.sb_generation_params.model_id)->default_value(0), "SB model id")
             ("sb-speaker-name", po::value<std::string>(&config.sb_generation_params.speaker_name)->default_value(""), "SB speaker name")
