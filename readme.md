@@ -5,11 +5,13 @@
 
 * 想定するバックエンド
 	* テキスト生成
-		* oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui)
+		* oobabooga/text-generation-webui (https://github.com/oobabooga/text-generation-webui)
 	* 画像生成
 		* AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 	* 音声生成
 		* litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2)
+
+それぞれのバックエンドが提供する GUI を手動で操作する手間から解放し、生成する対象に依存しない統一的なインターフェースを提供し、創作活動を支援する。
 
 ## 機能
 * 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する要素の比率を調整する。
