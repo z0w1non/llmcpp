@@ -43,6 +43,8 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
+`--mode tg` と `--tg-` から始まるオプションを適宜指定する。
+
 下記の関連ファイルが読み込まれれる。
 
 | オプション | 概要 | デフォルト値 | 必須/任意 |
@@ -87,6 +89,7 @@ AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-di
 1. `webui-user.bat` など実行環境と対応するスクリプトを編集し、`COMMANDLINE_ARGS` に `--api` を追加する。他のサーバーに割り当てるポートを考慮して適宜 `--port 7861` 等を追加する。
 2. `webui-user.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
+`--mode sd` と `--sd-` から始まるオプションを適宜指定する。
 下記のようなコマンドで画像を生成する。
 
 `llmcpp --mode sd --sd-port 7861 --sd-width 832 --sd-height 1216 --sd-step 30 --sd-prompt "sky"`
@@ -97,6 +100,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 1. `config.yml` を編集し、他のサーバーに割り当てるポートを考慮して適宜 `port: 5001` のように変更する。
 2. `Server.bat` を実行し、サーバーを起動する。
 
+`--mode sb` と `--sb-` から始まるオプションを適宜指定する。
 下記のようなコマンドで音声を生成する。
 
 `llmcpp --mode sb --sd-port 5001 --sb-model-name "amitaro" --sb-speaker-id 0 --sb-language JP --sb-text "こんにちは"`
