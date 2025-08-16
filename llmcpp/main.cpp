@@ -110,6 +110,7 @@ struct tg_prompt_parameters
     std::string output_file;
     std::string example_separator;
     std::string generation_prefix;
+    bool skip_generation_prefix{};
     std::string retry_generation_prefix;
     std::string paragraphs_file;
 };
@@ -1507,8 +1508,16 @@ std::string generate_and_complete_text(
 )
 {
     std::string initial_prompts = prompts;
-    const std::size_t initial_prompts_size = initial_prompts.size();
+    std::size_t initial_prompts_size;
+    if (!config.tg_prompt_params.skip_generation_prefix)
+    {
+        initial_prompts_size = initial_prompts.size();
+    }
     initial_prompts += expand_macro(prefix, config.macros);
+    if (config.tg_prompt_params.skip_generation_prefix)
+    {
+        initial_prompts_size = initial_prompts.size();
+    }
     const int initial_tokens = send_oobabooga_token_count_request(config, initial_prompts);
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
@@ -1844,6 +1853,7 @@ int parse_commandline(
             ("tg-output-file", po::value<std::string>(&config.tg_prompt_params.output_file)->default_value("history.txt"), "TG output file path")
             ("tg-example-separator", po::value<std::string>(&config.tg_prompt_params.example_separator)->default_value("***"), "TG separator to be inserted before and after examples")
             ("tg-generation-prefix", po::value<std::string>(&config.tg_prompt_params.generation_prefix)->default_value(""), "TG generation prefix")
+            ("tg-skip-generation-prefix", po::bool_switch(&config.tg_prompt_params.skip_generation_prefix)->default_value(false), "TG skip generation prefix")
             ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "TG prefix to be used after a failed text generation")
             ("tg-paragraphs-file", po::value<std::string>(&config.tg_prompt_params.paragraphs_file)->default_value(""), "TG paragraphs file")
             ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "TG host")
@@ -2157,21 +2167,6 @@ void read_prompts(const config& config, prompts& prompts)
         {
             read_file_to_container(history_path, prompts.history);
         }
-    }
-    else if (config.mode == "sd")
-    {
-        const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
-        create_parent_directories(output_file_path);
-
-        const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
-        std::string prompt_string;
-        read_file_to_string(prompt_file_path, prompt_string);
-        prompt_string = expand_macro(prompt_string, config.macros);
-
-        const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
-        std::string negative_prompt_string;
-        read_file_to_string(negative_prompt_file_path, negative_prompt_string);
-        negative_prompt_string = expand_macro(negative_prompt_string, config.macros);
     }
 }
 
