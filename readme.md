@@ -105,7 +105,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 `--mode sb` と `--sb-` から始まるオプションを適宜指定する。
 下記のようなコマンドで音声を生成する。
 
-`llmcpp --mode sb --sd-port 5001 --sb-model-name "amitaro" --sb-speaker-id 0 --sb-language JP --sb-text "こんにちは"`
+`llmcpp --mode sb --sb-port 5001 --sb-model-name "amitaro" --sb-speaker-id 0 --sb-language JP --sb-text "こんにちは"`
 
 ### 共通オプション
 ## 反復
