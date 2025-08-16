@@ -2194,10 +2194,23 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         std::string prompts_string = prompts.to_string(config);
         prompts_string = expand_macro(prompts_string, config.macros);
 
-        const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
-        BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-
-        write_response(config, response);
+        try
+        {
+            const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
+            BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
+            write_response(config, response);
+        }
+        catch (const text_generation_exception& exception)
+        {
+            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
+            if (!config.tg_prompt_params.retry_generation_prefix.empty())
+            {
+                BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
+                const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.retry_generation_prefix) };
+                BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
+                write_response(config, response);
+            }
+        }
     }
     else if (config.mode == "sd")
     {
@@ -2278,20 +2291,7 @@ void iterate(config& config)
         for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
         {
             set_phases_macro(config.phases, phase_index, config.macros);
-
-            try
-            {
-                generate_and_output(config, prompts, config.tg_prompt_params.generation_prefix);
-            }
-            catch (const text_generation_exception& exception)
-            {
-                BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-                if (!config.tg_prompt_params.retry_generation_prefix.empty())
-                {
-                    BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-                    generate_and_output(config, prompts, config.tg_prompt_params.retry_generation_prefix);
-                }
-            }
+            generate_and_output(config, prompts, config.tg_prompt_params.generation_prefix);
         }
 
         write_cache(config);
