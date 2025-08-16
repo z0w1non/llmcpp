@@ -413,6 +413,107 @@ struct prompts
 };
 
 template<typename Value>
+const Value& throwable_get(const picojson::value& value);
+
+template<typename Value>
+const Value& throwable_at(const picojson::array& array, std::size_t index);
+
+template<typename Value>
+const Value& throwable_find(const picojson::object& object, const std::string& key);
+
+std::string base64_decode(const std::string& encoded_string);
+std::string trim(const std::string& str);
+
+template <typename Container>
+void split_string_by_new_line(const std::string& str, Container& container);
+
+void create_parent_directories(const std::filesystem::path& path);
+
+template <typename Container>
+void read_file_to_container(const std::filesystem::path& file, Container& container);
+
+void read_file_to_string(const std::filesystem::path& file, std::string& result);
+
+int generate_random_seed();
+
+std::string include_predefiend_macro(const std::string& right);
+
+std::string datetime_predefiend_macro(const std::string&);
+
+std::optional<std::string> expand_predefined_macro(
+    const std::string& name,
+    const std::string& arguments
+);
+
+std::string expand_macro(const std::string& str, const macros& macros, int depth = 0);
+std::filesystem::path string_to_path_by_config(const std::string& path, const config& config);
+void send_automatic1111_txt2img_request(
+    const config& config,
+    const std::string& prompt,
+    const std::string& negative_prompt,
+    const std::filesystem::path& path
+);
+
+void send_style_bert_voice_request(
+    const config& config,
+    const std::string& text
+);
+
+std::vector<item> parse_item_list(const std::string& str);
+
+void write_item_list(const config& config, const std::string& task);
+
+llm_response send_oobabooga_completions_request(
+    const config& config,
+    const std::string& prompt,
+    const tg_completions_parameters& params
+);
+
+int send_oobabooga_token_count_request(const config& config, const std::string& prompt);
+void write_cache(const config& config);
+void read_cache(const config& config);
+
+std::string generate_and_complete_text(
+    const config& config,
+    const std::string& prompts,
+    const std::string& prefix
+);
+
+std::string unescape_string(const std::string& str);
+
+void parse_predefined_macros(const std::vector<std::string>& predefined_macros, macros& macros);
+void init_logging_with_nowide_cout();
+void init_logging_with_nowide_file_log(const std::filesystem::path& log);
+void init_logging(const config& config);
+void init_chat_mode(config& config);
+
+void set_phases_macro(
+    const std::vector<std::string>& phases,
+    std::size_t phase_index,
+    std::map<std::string, std::string>& macros
+);
+
+void set_paragraphs_to_phases(
+    const std::vector<item>& paragraphs,
+    std::vector<std::string>& phases
+);
+
+void init_tg_mode(config& config);
+
+int parse_commandline(
+    int argc,
+    char** argv,
+    config& config
+);
+
+void read_prompts(const config& config, prompts& prompts);
+void write_response(const config& config, const std::string& response);
+void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix);
+void set_seed(config& config);
+void iterate(config& config);
+int exception_safe_main(int argc, char** argv);
+
+template<typename Value>
 const Value& throwable_get(const picojson::value& value)
 {
     if (!value.is<Value>())
@@ -590,7 +691,7 @@ std::optional<std::string> expand_predefined_macro(
     return std::nullopt;
 }
 
-std::string expand_macro(const std::string& str, const macros& macros, int depth = 0)
+std::string expand_macro(const std::string& str, const macros& macros, int depth)
 {
     constexpr int max_recursive_count = 32;
     if (depth > max_recursive_count)
