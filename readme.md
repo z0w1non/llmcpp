@@ -92,7 +92,7 @@ AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-di
 
 `llmcpp --mode sd --sd-port 7861 --sd-width 832 --sd-height 1216 --sd-step 30 --sd-prompt "sky"`
 
-## Style-Bert-VITS2
+## litagin02/Style-Bert-VITS2
 litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を導入し、下記の準備をする。
 
 1. `config.yml` を編集し、他のサーバーに割り当てるポートを考慮して適宜 `port: 5001` のように変更する。
