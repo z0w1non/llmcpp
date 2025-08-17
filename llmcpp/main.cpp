@@ -2199,6 +2199,10 @@ void write_response(const config& config, const std::string& response)
         throw file_open_exception{} << error_info::path{ output_file_path };
     }
     ofs << response;
+    if (!config.verbose)
+    {
+        boost::nowide::cout << response << std::flush;
+    }
 }
 
 void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
