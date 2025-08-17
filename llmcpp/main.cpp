@@ -640,11 +640,7 @@ int generate_random_seed()
 std::string include_predefiend_macro(const config& config, const std::string& right)
 {
     std::string result;
-    std::filesystem::path macro_file{ right };
-    if (!std::filesystem::exists(macro_file))
-    {
-        macro_file.replace_extension(".txt");
-    }
+    const std::filesystem::path macro_file{ string_to_path_by_config(right + ".txt", config)};
     read_file_to_string(macro_file, result);
     return result;
 }
