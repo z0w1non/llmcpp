@@ -2066,6 +2066,9 @@ int parse_commandline(
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.tg_prompt_params.generation_prefix = unescape_string(config.tg_prompt_params.generation_prefix);
         config.tg_prompt_params.retry_generation_prefix = unescape_string(config.tg_prompt_params.retry_generation_prefix);
+        config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
+        config.sd_txt2img_params.negative_prompt = unescape_string(config.sd_txt2img_params.negative_prompt);
+        config.sb_generation_params.text = unescape_string(config.sb_generation_params.text);
 
         parse_predefined_macros(config.predefined_macros, config.macros);
     }
