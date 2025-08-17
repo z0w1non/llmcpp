@@ -2337,6 +2337,11 @@ int exception_safe_main(int argc, char** argv)
         BOOST_LOG_TRIVIAL(error) << exception.what();
         return -1;
     }
+    catch (...)
+    {
+        BOOST_LOG_TRIVIAL(error) << "Unknown exception caught.";
+        return -1;
+    }
 
     return 0;
 }
