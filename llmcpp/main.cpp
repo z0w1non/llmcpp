@@ -113,6 +113,7 @@ struct tg_prompt_parameters
     bool skip_generation_prefix{};
     std::string retry_generation_prefix;
     std::string paragraphs_file;
+    int insert_max_sample{};
 };
 
 struct tg_completions_parameters
@@ -436,7 +437,8 @@ void read_file_to_container(const std::filesystem::path& file, Container& contai
 
 void read_file_to_string(const std::filesystem::path& file, std::string& result);
 
-int generate_random_seed();
+template<typename Integer>
+Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
 std::string include_predefiend_macro(const config& config, const std::string& right);
 
@@ -450,7 +452,7 @@ std::optional<std::string> expand_predefined_macro(
     const std::string& arguments
 );
 
-std::string expand_macro(const std::string& str, const config& macros, int depth = 0);
+std::string expand_macro(const std::string& str, const config& config, const macros& macros, int depth = 0);
 std::filesystem::path string_to_path_by_config(const std::string& path, const config& config);
 void send_automatic1111_txt2img_request(
     const config& config,
@@ -503,6 +505,10 @@ void set_paragraphs_to_phases(
     std::vector<std::string>& phases
 );
 
+std::string insert_text(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample, std::size_t insert_position);
+std::string insert_text_random(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample);
+std::string insert_text(const config& config, prompts& prompts);
+
 void init_tg_mode(config& config);
 
 int parse_commandline(
@@ -513,7 +519,9 @@ int parse_commandline(
 
 void read_prompts(const config& config, prompts& prompts);
 void write_response(const config& config, const std::string& response);
-void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix);
+void tg_append_mode(const config& config, prompts& prompts);
+void tg_insert_mode(const config& config, prompts& prompts);
+void generate_and_output(const config& config, prompts& prompts);
 void set_seed(config& config);
 void iterate(config& config);
 int exception_safe_main(int argc, char** argv);
@@ -564,8 +572,8 @@ std::string trim(const std::string& str)
 {
     const std::regex leading_spaces{ R"(^\s+)", std::regex_constants::ECMAScript };
     const std::regex trailing_spaces{ R"(\s+$)", std::regex_constants::ECMAScript };
-    std::string trimmed_string = std::regex_replace(str, leading_spaces, "");
-    trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, "");
+    std::string trimmed_string = std::regex_replace(str, leading_spaces, {});
+    trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
     return trimmed_string;
 }
 
@@ -629,18 +637,19 @@ void read_file_to_string(const std::filesystem::path& file, std::string& result)
     result = file_content;
 }
 
-int generate_random_seed()
+template<typename Integer>
+Integer random(Integer min, Integer max)
 {
     static std::random_device seed_gen;
     static std::default_random_engine random_engine(seed_gen());
-    static std::uniform_int_distribution<> distribution(0, std::numeric_limits<int>::max());
+    static std::uniform_int_distribution<Integer> distribution(min, max);
     return distribution(random_engine);
 }
 
 std::string include_predefiend_macro(const config& config, const std::string& right)
 {
     std::string result;
-    const std::filesystem::path macro_file{ string_to_path_by_config(right + ".txt", config)};
+    const std::filesystem::path macro_file{ string_to_path_by_config(right + ".txt", config) };
     read_file_to_string(macro_file, result);
     return result;
 }
@@ -704,7 +713,7 @@ std::optional<std::string> expand_predefined_macro(
     return std::nullopt;
 }
 
-std::string expand_macro(const std::string& str, const config& config, int depth)
+std::string expand_macro(const std::string& str, const config& config, const macros& macros, int depth)
 {
     constexpr int max_recursive_count = 32;
     if (depth > max_recursive_count)
@@ -753,7 +762,7 @@ std::string expand_macro(const std::string& str, const config& config, int depth
                 expanded_string = found->second;
                 if ("{{" + macro_string + "}}" != expanded_string)
                 {
-                    expanded_string = expand_macro(expanded_string, config, depth + 1);
+                    expanded_string = expand_macro(expanded_string, config, macros, depth + 1);
                 }
                 result += expanded_string;
                 BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
@@ -770,10 +779,10 @@ std::string expand_macro(const std::string& str, const config& config, int depth
 
 std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
 {
-    const std::filesystem::path file_path{ expand_macro(path, config) };
+    const std::filesystem::path file_path{ expand_macro(path, config, config.macros) };
     if (file_path.is_relative())
     {
-        const std::filesystem::path base_path{ expand_macro(config.base_path, config) };
+        const std::filesystem::path base_path{ expand_macro(config.base_path, config, config.macros) };
         return base_path / file_path;
 
     }
@@ -881,12 +890,12 @@ void send_automatic1111_txt2img_request(
             object.insert(std::make_pair("ad_model", picojson::value{ config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model }));
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
             {
-                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config) };
+                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config, config.macros) };
                 object.insert(std::make_pair("ad_prompt", picojson::value{ ad_prompt }));
             }
             if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
             {
-                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config) };
+                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config, config.macros) };
                 object.insert(std::make_pair("ad_negative_prompt", picojson::value{ ad_negative_prompt }));
             }
             args_array.push_back(picojson::value{ true });
@@ -1062,7 +1071,7 @@ void send_style_bert_voice_request(
         ss_response << response.body();
 
         {
-            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
+            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config, config.macros) };
             const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
             boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
             if (!ofs.is_open())
@@ -1525,7 +1534,7 @@ std::string generate_and_complete_text(
     {
         initial_prompts_size = initial_prompts.size();
     }
-    initial_prompts += expand_macro(prefix, config);
+    initial_prompts += expand_macro(prefix, config, config.macros);
     if (config.tg_prompt_params.skip_generation_prefix)
     {
         initial_prompts_size = initial_prompts.size();
@@ -1798,6 +1807,45 @@ void set_paragraphs_to_phases(
     }
 }
 
+std::string insert_text(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample, std::size_t insert_position)
+{
+    if (text.size() < 2)
+    {
+        return {};
+    }
+
+    std::size_t prev_sample_begin = std::max(static_cast<int>(0), (static_cast<int>(insert_position) - static_cast<int>(max_sample)));
+    std::size_t next_sample_end = std::min(static_cast<int>(text.size()), (static_cast<int>(insert_position) + static_cast<int>(max_sample)));
+
+    std::string prev_sample{ std::accumulate(text.data() + prev_sample_begin, text.data() + insert_position, std::string{}) };
+    std::string next_sample{ std::accumulate(text.data() + insert_position, text.data() + next_sample_end, std::string{}) };
+
+
+    std::map<std::string, std::string> macros{ config.macros };
+    macros["prev_sample"] = prev_sample;
+    macros["next_sample"] = next_sample;
+
+    const std::string macro_expanded = expand_macro(insert_prompts, config, macros);
+    const std::string response = generate_and_complete_text(config, macro_expanded, config.tg_prompt_params.generation_prefix);
+    text.insert(text.begin() + insert_position, response);
+
+    return response;
+}
+
+std::string insert_text_random(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample)
+{
+    const std::size_t insert_position = random(static_cast<std::size_t>(1), text.size() - 1);
+    return insert_text(config, text, insert_prompts, max_sample, insert_position);
+}
+
+std::string insert_text(const config& config, prompts& prompts)
+{
+    std::vector<std::string> text{ prompts.history.size() };
+    std::copy(prompts.history.begin(), prompts.history.end(), text.begin());
+    const std::string insert_prompts{ std::accumulate(text.begin(), text.end(), std::string{}) };
+    return insert_text_random(config, text, insert_prompts, config.tg_prompt_params.insert_max_sample);
+}
+
 void init_tg_mode(config& config)
 {
     if (!config.tg_prompt_params.paragraphs_file.empty())
@@ -1868,6 +1916,7 @@ int parse_commandline(
             ("tg-skip-generation-prefix", po::bool_switch(&config.tg_prompt_params.skip_generation_prefix)->default_value(false), "TG skip generation prefix")
             ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "TG prefix to be used after a failed text generation")
             ("tg-paragraphs-file", po::value<std::string>(&config.tg_prompt_params.paragraphs_file)->default_value(""), "TG paragraphs file")
+            ("tg-insert-max-sample", po::value<int>(&config.tg_prompt_params.insert_max_sample)->default_value(5), "TG insert max sample")
             ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "TG host")
             ("tg-port", po::value<std::string>(&config.tg_completions_params.port)->default_value("5000"), "TG port")
             ("tg-api-key", po::value<std::string>(&config.tg_completions_params.api_key)->default_value(""), "TG API key")
@@ -2093,7 +2142,7 @@ std::string prompts::to_string(const config& config) const
             std::vector<std::string> temp;
             for (; first != last; ++first)
             {
-                const std::string macro_expanded_string{ expand_macro(*first, config) };
+                const std::string macro_expanded_string{ expand_macro(*first, config, config.macros) };
                 const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
                 if (written_tokens + next_tokens > max_tokens)
                 {
@@ -2201,29 +2250,48 @@ void write_response(const config& config, const std::string& response)
     }
 }
 
-void generate_and_output(const config& config, prompts& prompts, const std::string& generation_prefix)
+void tg_append_mode(const config& config, prompts& prompts)
 {
-    if (config.mode == "tg")
-    {
-        std::string prompts_string = prompts.to_string(config);
-        prompts_string = expand_macro(prompts_string, config);
+    std::string prompts_string = prompts.to_string(config);
+    prompts_string = expand_macro(prompts_string, config, config.macros);
 
-        try
+    try
+    {
+        const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.generation_prefix) };
+        BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
+        write_response(config, response);
+    }
+    catch (const text_generation_exception& exception)
+    {
+        BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
+        if (!config.tg_prompt_params.retry_generation_prefix.empty())
         {
-            const std::string response{ generate_and_complete_text(config, prompts_string, generation_prefix) };
+            BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
+            const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.retry_generation_prefix) };
             BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
             write_response(config, response);
         }
-        catch (const text_generation_exception& exception)
+    }
+}
+
+void tg_insert_mode(const config& config, prompts& prompts)
+{
+    const std::string response{ insert_text(config, prompts) };
+    BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
+    write_response(config, response);
+}
+
+void generate_and_output(const config& config, prompts& prompts)
+{
+    if (config.mode == "tg")
+    {
+        if (config.tg_prompt_params.insert_max_sample == 0)
         {
-            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-            if (!config.tg_prompt_params.retry_generation_prefix.empty())
-            {
-                BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-                const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.retry_generation_prefix) };
-                BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-                write_response(config, response);
-            }
+            tg_append_mode(config, prompts);
+        }
+        else
+        {
+            insert_text(config, prompts);
         }
     }
     else if (config.mode == "sd")
@@ -2234,25 +2302,25 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         std::string prompt_string;
         if (!config.sd_txt2img_params.prompt.empty())
         {
-            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config);
+            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config, config.macros);
         }
         else
         {
             const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
             read_file_to_string(prompt_file_path, prompt_string);
-            prompt_string = expand_macro(prompt_string, config);
+            prompt_string = expand_macro(prompt_string, config, config.macros);
         }
 
         std::string negative_prompt_string;
         if (!config.sd_txt2img_params.prompt.empty())
         {
-            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config);
+            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config, config.macros);
         }
         else
         {
             const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
             read_file_to_string(negative_prompt_file_path, negative_prompt_string);
-            negative_prompt_string = expand_macro(negative_prompt_string, config);
+            negative_prompt_string = expand_macro(negative_prompt_string, config, config.macros);
         }
 
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
@@ -2262,13 +2330,13 @@ void generate_and_output(const config& config, prompts& prompts, const std::stri
         std::string text_string;
         if (!config.sb_generation_params.text.empty())
         {
-            text_string = expand_macro(config.sb_generation_params.text, config);
+            text_string = expand_macro(config.sb_generation_params.text, config, config.macros);
         }
         else
         {
             const std::filesystem::path text_file_path{ string_to_path_by_config(config.sb_generation_params.text_file, config) };
             read_file_to_string(text_file_path, text_string);
-            text_string = expand_macro(text_string, config);
+            text_string = expand_macro(text_string, config, config.macros);
         }
         send_style_bert_voice_request(config, text_string);
     }
@@ -2278,8 +2346,8 @@ void set_seed(config& config)
 {
     if (config.seed == -1)
     {
-        config.tg_completions_params.seed = generate_random_seed();
-        config.sd_txt2img_params.seed = generate_random_seed();
+        config.tg_completions_params.seed = random<int>(0);
+        config.sd_txt2img_params.seed = random<int>(0);
     }
     else
     {
@@ -2305,7 +2373,7 @@ void iterate(config& config)
         for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
         {
             set_phases_macro(config.phases, phase_index, config.macros);
-            generate_and_output(config, prompts, config.tg_prompt_params.generation_prefix);
+            generate_and_output(config, prompts);
         }
 
         write_cache(config);
