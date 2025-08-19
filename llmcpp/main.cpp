@@ -2290,7 +2290,7 @@ void generate_and_output(const config& config, prompts& prompts)
         }
         else
         {
-            insert_text(config, prompts);
+            tg_insert_mode(config, prompts);
         }
     }
     else if (config.mode == "sd")
