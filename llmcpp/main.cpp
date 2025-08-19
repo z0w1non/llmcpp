@@ -1406,6 +1406,7 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         {
             picojson::value response_json;
             std::stringstream ss_response_body(response.body());
+            BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
             picojson::parse(response_json, ss_response_body);
 
             const picojson::object& object{ throwable_get<picojson::object>(response_json) };
@@ -1914,7 +1915,7 @@ int parse_commandline(
             ("tg-skip-generation-prefix", po::bool_switch(&config.tg_prompt_params.skip_generation_prefix)->default_value(false), "TG skip generation prefix")
             ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "TG prefix to be used after a failed text generation")
             ("tg-paragraphs-file", po::value<std::string>(&config.tg_prompt_params.paragraphs_file)->default_value(""), "TG paragraphs file")
-            ("tg-insert-max-sample", po::value<int>(&config.tg_prompt_params.insert_max_sample)->default_value(5), "TG insert max sample")
+            ("tg-insert-max-sample", po::value<int>(&config.tg_prompt_params.insert_max_sample)->default_value(0), "TG insert max sample")
             ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "TG host")
             ("tg-port", po::value<std::string>(&config.tg_completions_params.port)->default_value("5000"), "TG port")
             ("tg-api-key", po::value<std::string>(&config.tg_completions_params.api_key)->default_value(""), "TG API key")
