@@ -410,7 +410,7 @@ struct prompts
 {
     std::vector<std::string> system_prompts;
     std::vector<std::string> examples;
-    std::deque<std::string> history;
+    std::vector<std::string> history;
 
     std::string to_string(const config& config) const;
 };
@@ -518,7 +518,7 @@ int parse_commandline(
 );
 
 void read_prompts(const config& config, prompts& prompts);
-void write_response(const config& config, const std::string& response);
+void write_response(const config& config, const std::string& response, std::ios_base::openmode mode);
 void tg_append_mode(const config& config, prompts& prompts);
 void tg_insert_mode(const config& config, prompts& prompts);
 void generate_and_output(const config& config, prompts& prompts);
@@ -755,9 +755,9 @@ std::string expand_macro(const std::string& str, const config& config, const mac
         }
         else
         {
-            auto found = std::find_if(config.macros.begin(), config.macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
+            auto found = std::find_if(macros.begin(), macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
 
-            if (found != config.macros.end())
+            if (found != macros.end())
             {
                 expanded_string = found->second;
                 if ("{{" + macro_string + "}}" != expanded_string)
@@ -1840,10 +1840,8 @@ std::string insert_text_random(const config& config, std::vector<std::string>& t
 
 std::string insert_text(const config& config, prompts& prompts)
 {
-    std::vector<std::string> text{ prompts.history.size() };
-    std::copy(prompts.history.begin(), prompts.history.end(), text.begin());
-    const std::string insert_prompts{ std::accumulate(text.begin(), text.end(), std::string{}) };
-    return insert_text_random(config, text, insert_prompts, config.tg_prompt_params.insert_max_sample);
+    const std::string insert_prompts{ std::accumulate(prompts.system_prompts.begin(), prompts.system_prompts.end(), std::string{}) };
+    return insert_text_random(config, prompts.history, insert_prompts, config.tg_prompt_params.insert_max_sample);
 }
 
 void init_tg_mode(config& config)
@@ -2234,11 +2232,11 @@ void read_prompts(const config& config, prompts& prompts)
     }
 }
 
-void write_response(const config& config, const std::string& response)
+void write_response(const config& config, const std::string& response, std::ios_base::openmode mode)
 {
     const std::filesystem::path output_file_path{ string_to_path_by_config(config.tg_prompt_params.output_file, config) };
     create_parent_directories(output_file_path);
-    boost::nowide::ofstream ofs{ output_file_path, std::ios_base::app };
+    boost::nowide::ofstream ofs{ output_file_path, mode };
     if (!ofs.is_open())
     {
         throw file_open_exception{} << error_info::path{ output_file_path };
@@ -2259,7 +2257,7 @@ void tg_append_mode(const config& config, prompts& prompts)
     {
         const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.generation_prefix) };
         BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-        write_response(config, response);
+        write_response(config, response, std::ios_base::app);
     }
     catch (const text_generation_exception& exception)
     {
@@ -2269,7 +2267,7 @@ void tg_append_mode(const config& config, prompts& prompts)
             BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
             const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.retry_generation_prefix) };
             BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-            write_response(config, response);
+            write_response(config, response, std::ios_base::out | std::ios_base::app);
         }
     }
 }
@@ -2278,7 +2276,8 @@ void tg_insert_mode(const config& config, prompts& prompts)
 {
     const std::string response{ insert_text(config, prompts) };
     BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-    write_response(config, response);
+    const std::string history{ std::accumulate(prompts.history.begin(), prompts.history.end(), std::string{}) };
+    write_response(config, history, std::ios_base::out);
 }
 
 void generate_and_output(const config& config, prompts& prompts)
