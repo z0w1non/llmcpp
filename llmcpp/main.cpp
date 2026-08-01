@@ -2224,7 +2224,6 @@ int parse_commandline(
             ("kc-max-length", po::value<int>(&config.kc_generation_params.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
             ("kc-rep-pen", po::value<double>(&config.kc_generation_params.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
             ("kc-rep-pen-range", po::value<int>(&config.kc_generation_params.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-
             ("kc-sampler-order", po::value<std::vector<int>>(&config.kc_generation_params.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
             ("kc-sampler-seed", po::value<int>(&config.kc_generation_params.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
             ("kc-stop-sequence", po::value<std::vector<std::string>>(&config.kc_generation_params.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
