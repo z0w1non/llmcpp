@@ -52,6 +52,15 @@ vcpkg integrate install
 ```(config.ini)
 # ポート番号の設定
 llm-port = 5001
+
+# Gemma v4 向けの設定例
+llm-generation-prefix = <end_of_turn>\n<start_of_turn>model\n
+llm-skip-generation-prefix = true
+llm-system-prompts-prefix = <start_of_turn>user\n
+kc-stop-sequence = <end_of_turn>
+kc-temperature = 1.0
+kc-top-k = 64
+kc-top-p = 0.95
 ```
 
 ## oobabooga/text-generation-webui の使用法
@@ -203,6 +212,9 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
+
+## Gemma v4向けini
+
 
 ## 課題
 Gemma v4 の構文に対応できるよう仕組みを拡張する。

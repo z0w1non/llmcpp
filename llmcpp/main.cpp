@@ -121,12 +121,13 @@ struct llm_prompt_parameters
     std::string completions_target;
     std::string token_count_target;
 
-    std::string system_turn_start;
-    std::string system_turn_end;
-    std::string user_turn_start;
-    std::string user_turn_end;
-    std::string example_start;
-    std::string example_end;
+    std::string system_prompts_prefix;
+    //std::string system_turn_start;
+    //std::string system_turn_end;
+    //std::string user_turn_start;
+    //std::string user_turn_end;
+    //std::string example_start;
+    //std::string example_end;
 };
 
 struct config;
@@ -605,7 +606,7 @@ int parse_commandline(
 void read_prompts(const config& config, prompts& prompts);
 void write_response(const config& config, const std::string& response, std::ios_base::openmode mode);
 void llm_append_mode(const config& config, prompts& prompts);
-void tg_insert_mode(const config& config, prompts& prompts);
+void llm_insert_mode(const config& config, prompts& prompts);
 void generate_and_output(const config& config, prompts& prompts);
 void set_seed(config& config);
 void iterate(config& config);
@@ -2151,6 +2152,7 @@ int parse_commandline(
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
+            ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
 
             ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
             ("llm-examples-file", po::value<std::string>(&config.llm_prompt_params.examples_file)->default_value("examples.txt"), "LLM exmaples file path")
@@ -2167,6 +2169,11 @@ int parse_commandline(
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
             ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
+            ("llm-system-prompts-prefix", po::value<std::string>(&config.llm_prompt_params.system_prompts_prefix)->default_value(""), "LLM system prompts prefix")
+            //("llm-system-turn-start", po::value<std::string>(&config.llm_prompt_params.system_turn_start)->default_value(""), "LLM system turn start")
+            //("llm-system-turn-end", po::value<std::string>(&config.llm_prompt_params.system_turn_end)->default_value(""), "LLM system turn end")
+            //("llm-user-turn-start", po::value<std::string>(&config.llm_prompt_params.user_turn_start)->default_value(""), "LLM  turn start")
+            //("llm-user-turn-end", po::value<std::string>(&config.llm_prompt_params.user_turn_end)->default_value(""), "LLM user turn end")
 
             ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "TG min completion tokens")
             ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "TG max completion iterations")
@@ -2184,7 +2191,6 @@ int parse_commandline(
             ("tg-suffix", po::value<std::string>(&config.tg_completions_params.suffix)->default_value(""), "TG suffix")
             ("tg-temperature", po::value<double>(&config.tg_completions_params.temperature)->default_value(1.0), "TG temperature")
             ("tg-top-p", po::value<double>(&config.tg_completions_params.top_p)->default_value(1.0), "TG top p")
-            ("tg-seed", po::value<int>(&config.seed)->default_value(-1), "TG seed value")
             ("tg-dynatemp-low", po::value<double>(&config.tg_completions_params.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
             ("tg-dynatemp-high", po::value<double>(&config.tg_completions_params.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
             ("tg-dynatemp-exponent", po::value<double>(&config.tg_completions_params.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
@@ -2413,9 +2419,11 @@ int parse_commandline(
 
         std::transform(config.tg_completions_params.stop.begin(), config.tg_completions_params.stop.end(), config.tg_completions_params.stop.begin(), unescape_string);
         std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
+        std::transform(config.kc_generation_params.stop_sequence.begin(), config.kc_generation_params.stop_sequence.end(), config.kc_generation_params.stop_sequence.begin(), unescape_string);
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
         config.llm_prompt_params.retry_generation_prefix = unescape_string(config.llm_prompt_params.retry_generation_prefix);
+        config.llm_prompt_params.system_prompts_prefix = unescape_string(config.llm_prompt_params.system_prompts_prefix);
         config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
         config.sd_txt2img_params.negative_prompt = unescape_string(config.sd_txt2img_params.negative_prompt);
         config.sb_generation_params.text = unescape_string(config.sb_generation_params.text);
@@ -2467,6 +2475,19 @@ std::string prompts::to_string(const config& config) const
         };
 
     int remaining_tokens = config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens;
+
+    auto try_append_string = [&config, &result, &remaining_tokens](const std::string& str)
+        {
+            const std::string macro_expanded_string{ expand_macro(str, config, config.macros) };
+            const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
+            if (remaining_tokens >= next_tokens)
+            {
+                result += str;
+                remaining_tokens -= next_tokens;
+            }
+        };
+
+    try_append_string(config.llm_prompt_params.system_prompts_prefix);
 
     std::string system_prompts_string;
     int system_prompts_tokens{};
@@ -2579,7 +2600,7 @@ void llm_append_mode(const config& config, prompts& prompts)
     }
 }
 
-void tg_insert_mode(const config& config, prompts& prompts)
+void llm_insert_mode(const config& config, prompts& prompts)
 {
     const std::string response{ insert_text(config, prompts) };
     BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
@@ -2597,7 +2618,7 @@ void generate_and_output(const config& config, prompts& prompts)
         }
         else
         {
-            tg_insert_mode(config, prompts);
+            llm_insert_mode(config, prompts);
         }
     }
     else if (config.mode == "sd")
@@ -2653,11 +2674,13 @@ void set_seed(config& config)
     if (config.seed == -1)
     {
         config.tg_completions_params.seed = random<int>(0);
+        config.kc_generation_params.sampler_seed = random<int>(0, 999999);
         config.sd_txt2img_params.seed = random<int>(0);
     }
     else
     {
         config.tg_completions_params.seed = config.seed;
+        config.kc_generation_params.sampler_seed = config.seed;
         config.sd_txt2img_params.seed = config.seed;
     }
 }
