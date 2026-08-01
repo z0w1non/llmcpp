@@ -128,7 +128,7 @@ rem 起動用バッチの例
 cd /d %~dp0
 set model=models/gemma-4-E4B-it-Q8_0.gguf
 
-koboldcpp.exe --model %model%
+koboldcpp.exe --model %model% ^
   --gpulayers 99 ^
   --contextsize 8192 ^
   --usecuda ^
