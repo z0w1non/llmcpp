@@ -133,9 +133,7 @@ koboldcpp.exe --model %model%
   --contextsize 8192 ^
   --usecuda ^
   --jinja ^
-  --threads 4 ^
-  --smartcontext ^
-  --port 5001
+  --port 5000
 ```
 
 ## AUTOMATIC1111/stable-diffusion-webui の使用法
