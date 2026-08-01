@@ -2371,11 +2371,12 @@ int parse_commandline(
             if (std::filesystem::exists(config_file_path) && std::filesystem::is_regular_file(config_file_path))
             {
                 boost::nowide::ifstream ifs{ config_file_path };
-                if (ifs)
+                if (!ifs.is_open())
                 {
-                    po::store(po::parse_config_file(ifs, allowed_options), vm, true);
-                    po::notify(vm);
+                    throw file_open_exception{} << error_info::path{ config_file_path };
                 }
+                po::store(po::parse_config_file(ifs, allowed_options), vm, true);
+                po::notify(vm);
             }
         }
 
