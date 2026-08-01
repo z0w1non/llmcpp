@@ -63,6 +63,13 @@ kc-top-k = 64
 kc-top-p = 0.95
 ```
 
+モード名は下記の通り、それぞれと対応するバックエンドの略称である。
+
+tg: Text-Generation-webui
+kc: KoboldCpp
+sd: Stable-Diffusion-webui
+sb: Style-Bert-VITS2
+
 ## oobabooga/text-generation-webui の使用法
 oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) を導入し、下記の準備をする。
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
