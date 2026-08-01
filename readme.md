@@ -89,10 +89,11 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
-1. `system_prompts.txt` の内容をプロンプトに追加する。
-2. `history.txt` の内容を、末尾の行から優先して可能な限り、本来の順序でプロンプトに追加する。
-3. `examples.txt` の内容を、可能な限り、本来の順序でプロンプトに追加する。
-4. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。
+1. `--llm-system-prompts-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
+2. `system_prompts.txt` の内容をプロンプトに追加する。
+3. `history.txt` の内容を、末尾の行から優先して可能な限り、本来の順序でプロンプトに追加する。
+4. `examples.txt` の内容を、可能な限り、本来の順序でプロンプトに追加する。
+5. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
 
 LLM に渡すプロンプトは、
 ここでいう可能な限りとは、「`--tg-truncation-length` オプションで指定しているコンテキストの最大トークン数(デフォルトの値は `4096`)から、`--tg-max-tokens` オプションで指定している LLM により生成されるテキストの最大トークン数(デフォルトの値は `512`)を差し引いたトークン数を超過しない限り」を意味する。
