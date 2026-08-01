@@ -41,10 +41,18 @@ vcpkg integrate install
 | --base-path | 各種パスの基準となるパス | . |  |
 | --log-level | ログレベル | info | `(trace\|debug\|info\|warning\|error\|fatal)` のいずれか |
 | --log-file | ログファイル | log.txt |  |
+| --config-file | デフォルトのコマンドラインオプションを定義した設定ファイル | config.ini |  |
 | --verbose, -v | ログ出力をコンソールに冗長に出力する | true |  |
 | --number-iterations, -N | 処理を反復する回数 | 1 | `-1` を指定すると実行を停止するまで無限に処理を反復する。 |
 | --define, -D | マクロ | "" | 詳細は後述 |
 | --phases | phase | "" | 詳細は後述 |
+
+`config-file` で指定した設定ファイルは、INI 形式を想定した構文解析により読み込まれる。コマンドラインと設定ファイルの双方が共通するコマンドラインオプションを指定している場合、コマンドラインで指定された方を優先する。
+
+```(config.ini)
+# ポート番号の設定
+llm-port = 5001
+```
 
 ## oobabooga/text-generation-webui の使用法
 oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) を導入し、下記の準備をする。

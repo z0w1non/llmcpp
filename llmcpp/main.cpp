@@ -120,6 +120,13 @@ struct llm_prompt_parameters
     std::string api_key;
     std::string completions_target;
     std::string token_count_target;
+
+    std::string system_turn_start;
+    std::string system_turn_end;
+    std::string user_turn_start;
+    std::string user_turn_end;
+    std::string example_start;
+    std::string example_end;
 };
 
 struct config;
@@ -469,6 +476,7 @@ struct config
     std::string base_path;
     std::string log_level;
     std::string log_file;
+    std::string config_file;
     bool verbose{};
     int number_iterations{};
     std::vector<std::string> predefined_macros;
@@ -2131,13 +2139,14 @@ int parse_commandline(
         };
         config.tg_completions_params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
-        po::options_description desc("Allowed options");
-        desc.add_options()
+        po::options_description allowed_options("Allowed options");
+        allowed_options.add_options()
             ("help,h", "produce help message")
             ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg | kc | sd | sb")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
+            ("config-file,c", po::value<std::string>(&config.config_file)->default_value("config.ini"), "config file path")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
@@ -2158,7 +2167,7 @@ int parse_commandline(
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
             ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
-            
+
             ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "TG min completion tokens")
             ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "TG max completion iterations")
             ("tg-model", po::value<std::string>(&config.tg_completions_params.model)->default_value("", "TG model"))
@@ -2349,13 +2358,30 @@ int parse_commandline(
             ("sb-reference-audio-path", po::value<std::string>(&config.sb_generation_params.reference_audio_path)->default_value(""), "SB reference audio path")
             ;
 
+        po::options_description config_file_options;
+        config_file_options.add(allowed_options);
+
         po::variables_map vm;
-        po::store(po::parse_command_line(argc, argv, desc), vm, true);
+        po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
         po::notify(vm);
+
+        if (vm.count("config-file"))
+        {
+            const std::filesystem::path config_file_path{ string_to_path_by_config(config.config_file, config) };
+            if (std::filesystem::exists(config_file_path) && std::filesystem::is_regular_file(config_file_path))
+            {
+                boost::nowide::ifstream ifs{ config_file_path };
+                if (ifs)
+                {
+                    po::store(po::parse_config_file(ifs, allowed_options), vm, true);
+                    po::notify(vm);
+                }
+            }
+        }
 
         if (vm.count("help"))
         {
-            boost::nowide::cout << desc << std::endl;
+            boost::nowide::cout << allowed_options << std::endl;
             return 1;
         }
 
