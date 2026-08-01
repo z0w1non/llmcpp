@@ -212,9 +212,3 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
-
-## Gemma v4向けini
-
-
-## 課題
-Gemma v4 の構文に対応できるよう仕組みを拡張する。
