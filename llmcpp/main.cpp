@@ -102,7 +102,7 @@ runtime_exception::runtime_exception()
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
 
-struct tg_prompt_parameters
+struct llm_prompt_parameters
 {
     std::string system_prompts_file;
     std::string examples_file;
@@ -114,17 +114,30 @@ struct tg_prompt_parameters
     std::string retry_generation_prefix;
     std::string paragraphs_file;
     int insert_max_sample{};
-};
 
-struct tg_completions_parameters
-{
     std::string host;
     std::string port;
     std::string api_key;
-
     std::string completions_target;
     std::string token_count_target;
+};
 
+struct config;
+
+struct text_generation_parameters
+{
+    virtual ~text_generation_parameters() {}
+    virtual std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const = 0;
+    virtual std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+    virtual std::string get_request_body_for_token_count(const std::string& prompt) const = 0;
+    virtual int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+    virtual int get_max_tokens() const = 0;
+    virtual int get_truncation_length() const = 0;
+};
+
+struct tg_completions_parameters
+    : public text_generation_parameters
+{
     std::string model;
     int best_of{};
     bool echo{};
@@ -185,6 +198,83 @@ struct tg_completions_parameters
     std::string negative_prompt;
     std::string dry_sequence_breakers;
     std::string grammar_string;
+
+    std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const override;
+    std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+    std::string get_request_body_for_token_count(const std::string& prompt) const override;
+    int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+
+    int get_max_tokens() const override
+    {
+        return max_tokens;
+    }
+
+    int get_truncation_length() const override
+    {
+        return truncation_length;
+    }
+};
+
+struct kc_generation_parameters
+    : public text_generation_parameters
+{
+    int max_context_length{};
+    int max_length{};
+    std::string prompt;
+    double rep_pen{};
+    int rep_pen_range{};
+    std::vector<int> sampler_order;
+    int sampler_seed{};
+    std::vector<std::string> stop_sequence;
+    double temperature{};
+    double tfs{};
+    double top_a{};
+    double top_k{};
+    double top_p{};
+    double min_p{};
+    double typical{};
+    bool use_default_badwordsids{};
+    double dynatemp_range{};
+    double smoothing_factor{};
+    double dynatemp_exponent{};
+    int mirostat{};
+    double mirostat_tau{};
+    double mirostat_eta{};
+    std::string genkey;
+    std::string grammar;
+    bool grammar_retain_state{};
+    std::string memory;
+    std::vector<std::string> images;
+    bool trim_stop;
+    bool render_special{};
+    bool bypass_eos{};
+    std::vector<std::string> banned_tokens;
+    //std::vector<std::pair<std::string, double>> logit_bias;
+    double dry_multiplier{};
+    double dry_base{};
+    int dry_allowed_length{};
+    int dry_penalty_last_n{};
+    std::vector<std::string> dry_sequence_breakers;
+    double xtc_threshold{};
+    double xtc_probability{};
+    double nsigma{};
+    bool logprobs{};
+    bool replace_instruct_placeholders{};
+
+    std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const override;
+    std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+    std::string get_request_body_for_token_count(const std::string& prompt) const override;
+    int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+
+    int get_max_tokens() const override
+    {
+        return max_length;;
+    }
+
+    int get_truncation_length() const override
+    {
+        return max_context_length;
+    }
 };
 
 struct adetailer_parametesrs
@@ -388,22 +478,15 @@ struct config
     int min_completion_tokens{};
     int max_completion_iterations{};
 
-    tg_prompt_parameters tg_prompt_params;
+    llm_prompt_parameters llm_prompt_params;
     tg_completions_parameters tg_completions_params;
+    kc_generation_parameters kc_generation_params;
+    text_generation_parameters* llm_backend_params{};
     sd_txt2img_parameters sd_txt2img_params;
     sb_generation_parameters sb_generation_params;
     mutable lru_cache lru_cache;
     macros macros;
     mutable std::optional<std::string> opt_stdin;
-};
-
-struct llm_response
-{
-    std::string text;
-    std::string finish_reason;
-    int prompt_tokens{};
-    int completion_tokens{};
-    int total_tokens{};
 };
 
 struct prompts
@@ -470,13 +553,7 @@ std::vector<item> parse_item_list(const std::string& str);
 
 void write_item_list(const config& config, const std::string& task);
 
-llm_response send_oobabooga_completions_request(
-    const config& config,
-    const std::string& prompt,
-    const tg_completions_parameters& params
-);
-
-int send_oobabooga_token_count_request(const config& config, const std::string& prompt);
+int send_token_count_request(const config& config, const std::string& prompt);
 void write_cache(const config& config);
 void read_cache(const config& config);
 
@@ -509,7 +586,7 @@ std::string insert_text(const config& config, std::vector<std::string>& text, co
 std::string insert_text_random(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample);
 std::string insert_text(const config& config, prompts& prompts);
 
-void init_tg_mode(config& config);
+void init_llm_mode(config& config);
 
 int parse_commandline(
     int argc,
@@ -519,7 +596,7 @@ int parse_commandline(
 
 void read_prompts(const config& config, prompts& prompts);
 void write_response(const config& config, const std::string& response, std::ios_base::openmode mode);
-void tg_append_mode(const config& config, prompts& prompts);
+void llm_append_mode(const config& config, prompts& prompts);
 void tg_insert_mode(const config& config, prompts& prompts);
 void generate_and_output(const config& config, prompts& prompts);
 void set_seed(config& config);
@@ -1164,10 +1241,11 @@ void write_item_list(const config& config, const std::string& task)
     }
 }
 
-llm_response send_oobabooga_completions_request(
+std::string send_completions_request(
     const config& config,
     const std::string& prompt,
-    const tg_completions_parameters& params
+    const text_generation_parameters& params,
+    int max_tokens
 )
 {
     namespace beast = boost::beast;
@@ -1175,138 +1253,28 @@ llm_response send_oobabooga_completions_request(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    llm_response result;
-
     try
     {
         net::io_context ioc;
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const auto results = resolver.resolve(config.tg_completions_params.host, config.tg_completions_params.port);
+        const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
         tcp_stream.connect(results);
 
-        picojson::object request_body_json;
-        request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
-
-        if (!params.model.empty())
-        {
-            request_body_json.insert(std::make_pair("model", picojson::value{ params.model }));
-        }
-
-        request_body_json.insert(std::make_pair("best_of", picojson::value{ static_cast<double>(params.best_of) }));
-        request_body_json.insert(std::make_pair("echo", picojson::value{ params.echo }));
-        request_body_json.insert(std::make_pair("frequency_penalty", picojson::value{ params.frequency_penalty }));
-        //request_body_json.insert(std::make_pair("logit_bias", picojson::value{ params.logit_bias }));
-        request_body_json.insert(std::make_pair("logprobs", picojson::value{ params.logprobs }));
-        request_body_json.insert(std::make_pair("max_tokens", picojson::value{ static_cast<double>(params.max_tokens) }));
-        request_body_json.insert(std::make_pair("n", picojson::value{ static_cast<double>(params.n) }));
-        request_body_json.insert(std::make_pair("presence_penalty", picojson::value{ params.presence_penalty }));
-
-        if (!params.stop.empty())
-        {
-            picojson::array stop_array;
-            for (const std::string& str : params.stop)
-            {
-                stop_array.push_back(picojson::value{ str });
-            }
-            request_body_json.insert(std::make_pair("stop", picojson::value{ stop_array }));
-        }
-
-        request_body_json.insert(std::make_pair("stream", picojson::value{ params.stream }));
-
-        if (!params.suffix.empty())
-        {
-            request_body_json.insert(std::make_pair("suffix", picojson::value{ params.suffix }));
-        }
-
-        request_body_json.insert(std::make_pair("temperature", picojson::value{ params.temperature }));
-        request_body_json.insert(std::make_pair("top_p", picojson::value{ params.top_p }));
-
-        if (params.seed != -1)
-        {
-            request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(params.seed) }));
-        }
-
-        request_body_json.insert(std::make_pair("max_tokens", picojson::value{ static_cast<double>(params.max_tokens) }));
-
-        if (!params.user.empty())
-        {
-            request_body_json.insert(std::make_pair("user", picojson::value{ params.user }));
-        }
-
-        if (!params.preset.empty())
-        {
-            request_body_json.insert(std::make_pair("preset", picojson::value{ params.preset }));
-        }
-
-        request_body_json.insert(std::make_pair("dynatemp_low", picojson::value{ params.dynatemp_low }));
-        request_body_json.insert(std::make_pair("dynatemp_high", picojson::value{ params.dynatemp_high }));
-        request_body_json.insert(std::make_pair("dynatemp_exponent", picojson::value{ params.dynatemp_exponent }));
-        request_body_json.insert(std::make_pair("smoothing_factor", picojson::value{ params.smoothing_factor }));
-        request_body_json.insert(std::make_pair("smoothing_curve", picojson::value{ params.smoothing_curve }));
-        request_body_json.insert(std::make_pair("min_p", picojson::value{ params.min_p }));
-        request_body_json.insert(std::make_pair("top_k", picojson::value{ static_cast<double>(params.top_k) }));
-        request_body_json.insert(std::make_pair("typical_p", picojson::value{ params.typical_p }));
-        request_body_json.insert(std::make_pair("xtc_threshold", picojson::value{ params.xtc_threshold }));
-        request_body_json.insert(std::make_pair("xtc_probability", picojson::value{ params.xtc_probability }));
-        request_body_json.insert(std::make_pair("epsilon_cutoff", picojson::value{ params.epsilon_cutoff }));
-        request_body_json.insert(std::make_pair("eta_cutoff", picojson::value{ params.eta_cutoff }));
-        request_body_json.insert(std::make_pair("tfs", picojson::value{ params.tfs }));
-        request_body_json.insert(std::make_pair("top_a", picojson::value{ params.top_a }));
-        request_body_json.insert(std::make_pair("top_n_sigma", picojson::value{ params.top_n_sigma }));
-        request_body_json.insert(std::make_pair("dry_multiplier", picojson::value{ params.dry_multiplier }));
-        request_body_json.insert(std::make_pair("dry_allowed_length", picojson::value{ static_cast<double>(params.dry_allowed_length) }));
-        request_body_json.insert(std::make_pair("dry_base", picojson::value{ params.dry_base }));
-        request_body_json.insert(std::make_pair("repetition_penalty", picojson::value{ params.repetition_penalty }));
-        request_body_json.insert(std::make_pair("encoder_repetition_penalty", picojson::value{ params.encoder_repetition_penalty }));
-        request_body_json.insert(std::make_pair("no_repeat_ngram_size", picojson::value{ static_cast<double>(params.no_repeat_ngram_size) }));
-        request_body_json.insert(std::make_pair("repetition_penalty_range", picojson::value{ static_cast<double>(params.repetition_penalty_range) }));
-        request_body_json.insert(std::make_pair("penalty_alpha", picojson::value{ params.penalty_alpha }));
-        request_body_json.insert(std::make_pair("guidance_scale", picojson::value{ params.guidance_scale }));
-        request_body_json.insert(std::make_pair("mirostat_mode", picojson::value{ static_cast<double>(params.mirostat_mode) }));
-        request_body_json.insert(std::make_pair("mirostat_tau", picojson::value{ params.mirostat_tau }));
-        request_body_json.insert(std::make_pair("mirostat_eta", picojson::value{ params.mirostat_eta }));
-        request_body_json.insert(std::make_pair("prompt_lookup_num_tokens", picojson::value{ static_cast<double>(params.prompt_lookup_num_tokens) }));
-        request_body_json.insert(std::make_pair("max_tokens_second", picojson::value{ static_cast<double>(params.max_tokens_second) }));
-        request_body_json.insert(std::make_pair("do_sample", picojson::value{ params.do_sample }));
-        request_body_json.insert(std::make_pair("dynamic_temperature", picojson::value{ static_cast<double>(params.max_tokens_second) }));
-        request_body_json.insert(std::make_pair("temperature_last", picojson::value{ params.temperature_last }));
-        request_body_json.insert(std::make_pair("auto_max_new_tokens", picojson::value{ params.auto_max_new_tokens }));
-        request_body_json.insert(std::make_pair("ban_eos_token", picojson::value{ params.ban_eos_token }));
-        request_body_json.insert(std::make_pair("add_bos_token", picojson::value{ params.add_bos_token }));
-        request_body_json.insert(std::make_pair("skip_special_tokens", picojson::value{ params.skip_special_tokens }));
-        request_body_json.insert(std::make_pair("static_cache", picojson::value{ params.static_cache }));
-        request_body_json.insert(std::make_pair("truncation_length", picojson::value{ static_cast<double>(params.truncation_length) }));
-
-        if (!params.sampler_priority.empty())
-        {
-            picojson::array sampler_priority_array;
-            for (const std::string& str : params.sampler_priority)
-            {
-                sampler_priority_array.push_back(picojson::value{ str });
-            }
-            request_body_json.insert(std::make_pair("sampler_priority", picojson::value{ sampler_priority_array }));
-        }
-
-        request_body_json.insert(std::make_pair("custom_token_bans", picojson::value{ params.custom_token_bans }));
-        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ params.negative_prompt }));
-        request_body_json.insert(std::make_pair("dry_sequence_breakers", picojson::value{ params.dry_sequence_breakers }));
-        request_body_json.insert(std::make_pair("grammar_string", picojson::value{ params.grammar_string }));
-
-        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        const std::string request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.tg_completions_params.completions_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.tg_completions_params.host);
+        http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.llm_prompt_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
         request.prepare_payload();
 
-        if (!config.tg_completions_params.api_key.empty())
+        if (!config.llm_prompt_params.api_key.empty())
         {
-            request.set(http::field::authorization, ("Bearer ") + config.tg_completions_params.api_key);
+            request.set(http::field::authorization, ("Bearer ") + config.llm_prompt_params.api_key);
         }
 
         http::write(tcp_stream, request);
@@ -1324,17 +1292,7 @@ llm_response send_oobabooga_completions_request(
 
         if (response.result() == http::status::ok)
         {
-            picojson::value response_json;
-            std::stringstream ss_response_body(response.body());
-            picojson::parse(response_json, ss_response_body);
-            const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-            const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
-            const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
-            result.text = throwable_find<std::string>(choice, "text");
-            const picojson::object& usage{ throwable_find<picojson::object>(object, "usage") };
-            result.prompt_tokens = static_cast<int>(throwable_find<double>(usage, "prompt_tokens"));
-            result.completion_tokens = static_cast<int>(throwable_find<double>(usage, "completion_tokens"));
-            result.total_tokens = static_cast<int>(throwable_find<double>(usage, "total_tokens"));
+            return params.parse_response_for_text_completions(response);
         }
         else
         {
@@ -1357,10 +1315,279 @@ llm_response send_oobabooga_completions_request(
         throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + exception.what() };
     }
 
-    return result;
+    return {};
 }
 
-int send_oobabooga_token_count_request(const config& config, const std::string& prompt)
+std::string tg_completions_parameters::get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const
+{
+    picojson::object request_body_json;
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+
+    if (!model.empty())
+    {
+        request_body_json.insert(std::make_pair("model", picojson::value{ model }));
+    }
+
+    request_body_json.insert(std::make_pair("best_of", picojson::value{ static_cast<double>(best_of) }));
+    request_body_json.insert(std::make_pair("echo", picojson::value{ echo }));
+    request_body_json.insert(std::make_pair("frequency_penalty", picojson::value{ frequency_penalty }));
+    //request_body_json.insert(std::make_pair("logit_bias", picojson::value{ logit_bias }));
+    request_body_json.insert(std::make_pair("logprobs", picojson::value{ logprobs }));
+    request_body_json.insert(std::make_pair("max_tokens", picojson::value{ static_cast<double>(max_tokens) }));
+    request_body_json.insert(std::make_pair("n", picojson::value{ static_cast<double>(n) }));
+    request_body_json.insert(std::make_pair("presence_penalty", picojson::value{ presence_penalty }));
+
+    if (!stop.empty())
+    {
+        picojson::array stop_array;
+        for (const std::string& str : stop)
+        {
+            stop_array.push_back(picojson::value{ str });
+        }
+        request_body_json.insert(std::make_pair("stop", picojson::value{ stop_array }));
+    }
+
+    request_body_json.insert(std::make_pair("stream", picojson::value{ stream }));
+
+    if (!suffix.empty())
+    {
+        request_body_json.insert(std::make_pair("suffix", picojson::value{ suffix }));
+    }
+
+    request_body_json.insert(std::make_pair("temperature", picojson::value{ temperature }));
+    request_body_json.insert(std::make_pair("top_p", picojson::value{ top_p }));
+
+    if (seed != -1)
+    {
+        request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(seed) }));
+    }
+
+    if (!user.empty())
+    {
+        request_body_json.insert(std::make_pair("user", picojson::value{ user }));
+    }
+
+    if (!preset.empty())
+    {
+        request_body_json.insert(std::make_pair("preset", picojson::value{ preset }));
+    }
+
+    request_body_json.insert(std::make_pair("dynatemp_low", picojson::value{ dynatemp_low }));
+    request_body_json.insert(std::make_pair("dynatemp_high", picojson::value{ dynatemp_high }));
+    request_body_json.insert(std::make_pair("dynatemp_exponent", picojson::value{ dynatemp_exponent }));
+    request_body_json.insert(std::make_pair("smoothing_factor", picojson::value{ smoothing_factor }));
+    request_body_json.insert(std::make_pair("smoothing_curve", picojson::value{ smoothing_curve }));
+    request_body_json.insert(std::make_pair("min_p", picojson::value{ min_p }));
+    request_body_json.insert(std::make_pair("top_k", picojson::value{ static_cast<double>(top_k) }));
+    request_body_json.insert(std::make_pair("typical_p", picojson::value{ typical_p }));
+    request_body_json.insert(std::make_pair("xtc_threshold", picojson::value{ xtc_threshold }));
+    request_body_json.insert(std::make_pair("xtc_probability", picojson::value{ xtc_probability }));
+    request_body_json.insert(std::make_pair("epsilon_cutoff", picojson::value{ epsilon_cutoff }));
+    request_body_json.insert(std::make_pair("eta_cutoff", picojson::value{ eta_cutoff }));
+    request_body_json.insert(std::make_pair("tfs", picojson::value{ tfs }));
+    request_body_json.insert(std::make_pair("top_a", picojson::value{ top_a }));
+    request_body_json.insert(std::make_pair("top_n_sigma", picojson::value{ top_n_sigma }));
+    request_body_json.insert(std::make_pair("dry_multiplier", picojson::value{ dry_multiplier }));
+    request_body_json.insert(std::make_pair("dry_allowed_length", picojson::value{ static_cast<double>(dry_allowed_length) }));
+    request_body_json.insert(std::make_pair("dry_base", picojson::value{ dry_base }));
+    request_body_json.insert(std::make_pair("repetition_penalty", picojson::value{ repetition_penalty }));
+    request_body_json.insert(std::make_pair("encoder_repetition_penalty", picojson::value{ encoder_repetition_penalty }));
+    request_body_json.insert(std::make_pair("no_repeat_ngram_size", picojson::value{ static_cast<double>(no_repeat_ngram_size) }));
+    request_body_json.insert(std::make_pair("repetition_penalty_range", picojson::value{ static_cast<double>(repetition_penalty_range) }));
+    request_body_json.insert(std::make_pair("penalty_alpha", picojson::value{ penalty_alpha }));
+    request_body_json.insert(std::make_pair("guidance_scale", picojson::value{ guidance_scale }));
+    request_body_json.insert(std::make_pair("mirostat_mode", picojson::value{ static_cast<double>(mirostat_mode) }));
+    request_body_json.insert(std::make_pair("mirostat_tau", picojson::value{ mirostat_tau }));
+    request_body_json.insert(std::make_pair("mirostat_eta", picojson::value{ mirostat_eta }));
+    request_body_json.insert(std::make_pair("prompt_lookup_num_tokens", picojson::value{ static_cast<double>(prompt_lookup_num_tokens) }));
+    request_body_json.insert(std::make_pair("max_tokens_second", picojson::value{ static_cast<double>(max_tokens_second) }));
+    request_body_json.insert(std::make_pair("do_sample", picojson::value{ do_sample }));
+    request_body_json.insert(std::make_pair("dynamic_temperature", picojson::value{ static_cast<double>(max_tokens_second) }));
+    request_body_json.insert(std::make_pair("temperature_last", picojson::value{ temperature_last }));
+    request_body_json.insert(std::make_pair("auto_max_new_tokens", picojson::value{ auto_max_new_tokens }));
+    request_body_json.insert(std::make_pair("ban_eos_token", picojson::value{ ban_eos_token }));
+    request_body_json.insert(std::make_pair("add_bos_token", picojson::value{ add_bos_token }));
+    request_body_json.insert(std::make_pair("skip_special_tokens", picojson::value{ skip_special_tokens }));
+    request_body_json.insert(std::make_pair("static_cache", picojson::value{ static_cache }));
+    request_body_json.insert(std::make_pair("truncation_length", picojson::value{ static_cast<double>(truncation_length) }));
+
+    if (!sampler_priority.empty())
+    {
+        picojson::array sampler_priority_array;
+        for (const std::string& str : sampler_priority)
+        {
+            sampler_priority_array.push_back(picojson::value{ str });
+        }
+        request_body_json.insert(std::make_pair("sampler_priority", picojson::value{ sampler_priority_array }));
+    }
+
+    request_body_json.insert(std::make_pair("custom_token_bans", picojson::value{ custom_token_bans }));
+    request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ negative_prompt }));
+    request_body_json.insert(std::make_pair("dry_sequence_breakers", picojson::value{ dry_sequence_breakers }));
+    request_body_json.insert(std::make_pair("grammar_string", picojson::value{ grammar_string }));
+
+    return picojson::value{ request_body_json }.serialize();
+}
+
+std::string tg_completions_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+{
+    picojson::value response_json;
+    std::stringstream ss_response_body(response.body());
+    picojson::parse(response_json, ss_response_body);
+    const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+    const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
+    const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
+    return throwable_find<std::string>(choice, "text");
+}
+
+std::string tg_completions_parameters::get_request_body_for_token_count(const std::string& prompt) const
+{
+    picojson::object request_body_json;
+    request_body_json.insert(std::make_pair("text", picojson::value{ prompt }));
+    return picojson::value{ request_body_json }.serialize();
+}
+
+int tg_completions_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+{
+    picojson::value response_json;
+    std::stringstream ss_response_body(response.body());
+    BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
+    picojson::parse(response_json, ss_response_body);
+    const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+    return static_cast<int>(throwable_find<double>(object, "length"));
+}
+
+std::string kc_generation_parameters::get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const
+{
+    picojson::object request_body_json;
+
+    request_body_json.insert(std::make_pair("max_context_length", picojson::value{ static_cast<double>(max_context_length) }));
+    request_body_json.insert(std::make_pair("max_length", picojson::value{ static_cast<double>(max_tokens) }));
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+    request_body_json.insert(std::make_pair("rep_pen", picojson::value{ static_cast<double>(rep_pen) }));
+    request_body_json.insert(std::make_pair("rep_pen_range", picojson::value{ static_cast<double>(rep_pen_range) }));
+
+
+    if (!sampler_order.empty())
+    {
+        picojson::array sampler_order_array;
+        for (const auto& so : sampler_order)
+        {
+            sampler_order_array.push_back(picojson::value{ static_cast<double>(so) });
+        }
+        request_body_json.insert(std::make_pair("sampler_order", picojson::value{ sampler_order_array }));
+    }
+
+    if (sampler_seed != -1)
+    {
+        request_body_json.insert(std::make_pair("sampler_seed", picojson::value{ static_cast<double>(sampler_seed) }));
+    }
+
+    if (!stop_sequence.empty())
+    {
+        picojson::array stop_sequence_array;
+        for (const auto& ss : stop_sequence)
+        {
+            stop_sequence_array.push_back(picojson::value{ ss });
+        }
+        request_body_json.insert(std::make_pair("stop_sequence", picojson::value{ stop_sequence_array }));
+    }
+
+    request_body_json.insert(std::make_pair("temperature", picojson::value{ temperature }));
+    request_body_json.insert(std::make_pair("tfs", picojson::value{ tfs }));
+    request_body_json.insert(std::make_pair("top_a", picojson::value{ top_a }));
+    request_body_json.insert(std::make_pair("top_k", picojson::value{ top_k }));
+    request_body_json.insert(std::make_pair("top_p", picojson::value{ top_p }));
+    request_body_json.insert(std::make_pair("min_p", picojson::value{ min_p }));
+    request_body_json.insert(std::make_pair("typical", picojson::value{ typical }));
+    request_body_json.insert(std::make_pair("use_default_badwordsids", picojson::value{ use_default_badwordsids }));
+    request_body_json.insert(std::make_pair("dynatemp_range", picojson::value{ dynatemp_range }));
+    request_body_json.insert(std::make_pair("smoothing_factor", picojson::value{ smoothing_factor }));
+    request_body_json.insert(std::make_pair("dynatemp_exponent", picojson::value{ dynatemp_exponent }));
+    request_body_json.insert(std::make_pair("mirostat", picojson::value{ static_cast<double>(mirostat) }));
+    request_body_json.insert(std::make_pair("mirostat_tau", picojson::value{ mirostat_tau }));
+    request_body_json.insert(std::make_pair("mirostat_eta", picojson::value{ mirostat_eta }));
+    request_body_json.insert(std::make_pair("genkey", picojson::value{ genkey }));
+    request_body_json.insert(std::make_pair("grammar", picojson::value{ grammar }));
+    request_body_json.insert(std::make_pair("grammar_retain_state", picojson::value{ grammar_retain_state }));
+    request_body_json.insert(std::make_pair("memory", picojson::value{ memory }));
+
+    if (!images.empty())
+    {
+        picojson::array images_array;
+        for (const auto& image : images)
+        {
+            images_array.push_back(picojson::value{ image });
+        }
+        request_body_json.insert(std::make_pair("images", picojson::value{ images_array }));
+    }
+
+    request_body_json.insert(std::make_pair("trim_stop", picojson::value{ trim_stop }));
+    request_body_json.insert(std::make_pair("render_special", picojson::value{ render_special }));
+    request_body_json.insert(std::make_pair("bypass_eos", picojson::value{ bypass_eos }));
+
+    if (!banned_tokens.empty())
+    {
+        picojson::array banned_tokens_array;
+        for (const auto& banned_token : banned_tokens)
+        {
+            banned_tokens_array.push_back(picojson::value{ banned_token });
+        }
+        request_body_json.insert(std::make_pair("banned_tokens", picojson::value{ banned_tokens_array }));
+    }
+
+    request_body_json.insert(std::make_pair("dry_multiplier", picojson::value{ dry_multiplier }));
+    request_body_json.insert(std::make_pair("dry_base", picojson::value{ dry_base }));
+    request_body_json.insert(std::make_pair("dry_allowed_length", picojson::value{ static_cast<double>(dry_allowed_length) }));
+    request_body_json.insert(std::make_pair("dry_penalty_last_n", picojson::value{ static_cast<double>(dry_penalty_last_n) }));
+
+    if (!dry_sequence_breakers.empty())
+    {
+        picojson::array dry_sequence_breakers_array;
+        for (const auto& dry_sequence_breaker : dry_sequence_breakers)
+        {
+            dry_sequence_breakers_array.push_back(picojson::value{ dry_sequence_breaker });
+        }
+        request_body_json.insert(std::make_pair("dry_sequence_breakers", picojson::value{ dry_sequence_breakers_array }));
+    }
+
+    request_body_json.insert(std::make_pair("xtc_probability", picojson::value{ xtc_probability }));
+    request_body_json.insert(std::make_pair("nsigma", picojson::value{ nsigma }));
+    request_body_json.insert(std::make_pair("logprobs", picojson::value{ logprobs }));
+    request_body_json.insert(std::make_pair("replace_instruct_placeholders", picojson::value{ replace_instruct_placeholders }));
+
+    return picojson::value{ request_body_json }.serialize();
+}
+
+std::string kc_generation_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+{
+    picojson::value response_json;
+    std::stringstream ss_response_body(response.body());
+    picojson::parse(response_json, ss_response_body);
+    const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+    const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
+    const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
+    return throwable_find<std::string>(result, "text");
+}
+
+std::string kc_generation_parameters::get_request_body_for_token_count(const std::string& prompt) const
+{
+    picojson::object request_body_json;
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+    return picojson::value{ request_body_json }.serialize();
+}
+
+int kc_generation_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+{
+    picojson::value response_json;
+    std::stringstream ss_response_body(response.body());
+    BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
+    picojson::parse(response_json, ss_response_body);
+    const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+    return static_cast<int>(throwable_find<double>(object, "value"));
+}
+
+int send_token_count_request(const config& config, const std::string& prompt)
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
@@ -1373,17 +1600,14 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        auto const results = resolver.resolve(config.tg_completions_params.host, config.tg_completions_params.port);
+        auto const results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
         tcp_stream.connect(results);
 
-        picojson::object request_body_json;
-        request_body_json.insert(std::make_pair("text", picojson::value{ prompt }));
-
-        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.tg_completions_params.token_count_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.tg_completions_params.host);
+        http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.llm_prompt_params.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
@@ -1404,13 +1628,7 @@ int send_oobabooga_token_count_request(const config& config, const std::string& 
 
         if (response.result() == http::status::ok)
         {
-            picojson::value response_json;
-            std::stringstream ss_response_body(response.body());
-            BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
-            picojson::parse(response_json, ss_response_body);
-
-            const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-            return static_cast<int>(throwable_find<double>(object, "length"));
+            return config.llm_backend_params->parse_response_for_token_count(response);
 
         }
         else
@@ -1448,7 +1666,7 @@ int get_tokens_from_cache(const config& config, const std::string& str)
     }
     else
     {
-        tokens = send_oobabooga_token_count_request(config, str);
+        tokens = send_token_count_request(config, str);
         config.lru_cache.insert({ str, tokens });
     }
 
@@ -1531,16 +1749,16 @@ std::string generate_and_complete_text(
 {
     std::string initial_prompts = prompts;
     std::size_t initial_prompts_size;
-    if (!config.tg_prompt_params.skip_generation_prefix)
+    if (!config.llm_prompt_params.skip_generation_prefix)
     {
         initial_prompts_size = initial_prompts.size();
     }
     initial_prompts += expand_macro(prefix, config, config.macros);
-    if (config.tg_prompt_params.skip_generation_prefix)
+    if (config.llm_prompt_params.skip_generation_prefix)
     {
         initial_prompts_size = initial_prompts.size();
     }
-    const int initial_tokens = send_oobabooga_token_count_request(config, initial_prompts);
+    const int initial_tokens = send_token_count_request(config, initial_prompts);
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
 
@@ -1555,38 +1773,32 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int remaining_context = config.tg_completions_params.truncation_length - current_tokens;
+        int remaining_context = config.llm_backend_params->get_truncation_length() - current_tokens;
         if (remaining_context <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
             break;
         }
 
-        int tokens_to_generate = std::min(config.tg_completions_params.max_tokens, remaining_context);
+        int tokens_to_generate = std::min(config.llm_backend_params->get_max_tokens(), remaining_context);
         if (tokens_to_generate <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting.";
             break;
         }
 
-        tg_completions_parameters temp_params = config.tg_completions_params;
-        temp_params.max_tokens = tokens_to_generate;
-        llm_response response = send_oobabooga_completions_request(
-            config, current_text, temp_params
+        int max_tokens = tokens_to_generate;
+        const std::string response = send_completions_request(
+            config, current_text, *config.llm_backend_params, max_tokens
         );
 
-        if (response.text.empty())
+        if (response.empty())
         {
             break;
         }
 
-        current_text += response.text;
-        current_tokens = send_oobabooga_token_count_request(config, current_text);
-
-        if (response.finish_reason == "stop")
-        {
-            break;
-        }
+        current_text += response;
+        current_tokens = send_token_count_request(config, current_text);
     }
 
     return current_text.substr(initial_prompts_size);
@@ -1753,9 +1965,9 @@ void init_chat_mode(config& config)
     {
         config.phases = { "{{user}}", "{{char}}" };
     }
-    if (config.tg_prompt_params.generation_prefix.empty())
+    if (config.llm_prompt_params.generation_prefix.empty())
     {
-        config.tg_prompt_params.generation_prefix = "\\n{{phase}}: ";
+        config.llm_prompt_params.generation_prefix = "\\n{{phase}}: ";
     }
 }
 
@@ -1827,7 +2039,7 @@ std::string insert_text(const config& config, std::vector<std::string>& text, co
     macros["next_sample"] = next_sample;
 
     const std::string macro_expanded = expand_macro(insert_prompts, config, macros);
-    const std::string response = generate_and_complete_text(config, macro_expanded, config.tg_prompt_params.generation_prefix);
+    const std::string response = generate_and_complete_text(config, macro_expanded, config.llm_prompt_params.generation_prefix);
     text.insert(text.begin() + insert_position, response);
 
     return response;
@@ -1842,19 +2054,44 @@ std::string insert_text_random(const config& config, std::vector<std::string>& t
 std::string insert_text(const config& config, prompts& prompts)
 {
     const std::string insert_prompts{ std::accumulate(prompts.system_prompts.begin(), prompts.system_prompts.end(), std::string{}) };
-    return insert_text_random(config, prompts.history, insert_prompts, config.tg_prompt_params.insert_max_sample);
+    return insert_text_random(config, prompts.history, insert_prompts, config.llm_prompt_params.insert_max_sample);
 }
 
-void init_tg_mode(config& config)
+void init_llm_mode(config& config)
 {
-    if (!config.tg_prompt_params.paragraphs_file.empty())
+    if (!config.llm_prompt_params.paragraphs_file.empty())
     {
         config.phases.clear();
-        std::filesystem::path plot_file_path{ string_to_path_by_config(config.tg_prompt_params.paragraphs_file, config) };
+        std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm_prompt_params.paragraphs_file, config) };
         std::string content;
         read_file_to_string(plot_file_path, content);
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
+    }
+
+    if (config.mode == "tg")
+    {
+        config.llm_backend_params = &config.tg_completions_params;
+        if (config.llm_prompt_params.completions_target.empty())
+        {
+            config.llm_prompt_params.completions_target = "/v1/completions";
+        }
+        if (config.llm_prompt_params.token_count_target.empty())
+        {
+            config.llm_prompt_params.token_count_target = "/v1/internal/token-count";
+        }
+    }
+    else if (config.mode == "kc")
+    {
+        config.llm_backend_params = &config.kc_generation_params;
+        if (config.llm_prompt_params.completions_target.empty())
+        {
+            config.llm_prompt_params.completions_target = "/api/v1/generate";
+        }
+        if (config.llm_prompt_params.token_count_target.empty())
+        {
+            config.llm_prompt_params.token_count_target = "/api/extra/tokencount";
+        }
     }
 }
 
@@ -1897,7 +2134,7 @@ int parse_commandline(
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "produce help message")
-            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg | sd | sb")
+            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg | kc | sd | sb")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
@@ -1906,21 +2143,22 @@ int parse_commandline(
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
 
-            ("tg-system-prompts-file", po::value<std::string>(&config.tg_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "TG system prompt file path")
-            ("tg-examples-file", po::value<std::string>(&config.tg_prompt_params.examples_file)->default_value("examples.txt"), "TG exmaples file path")
-            ("tg-history-file", po::value<std::string>(&config.tg_prompt_params.history_file)->default_value("history.txt"), "TG history file path")
-            ("tg-output-file", po::value<std::string>(&config.tg_prompt_params.output_file)->default_value("history.txt"), "TG output file path")
-            ("tg-example-separator", po::value<std::string>(&config.tg_prompt_params.example_separator)->default_value("***"), "TG separator to be inserted before and after examples")
-            ("tg-generation-prefix", po::value<std::string>(&config.tg_prompt_params.generation_prefix)->default_value(""), "TG generation prefix")
-            ("tg-skip-generation-prefix", po::bool_switch(&config.tg_prompt_params.skip_generation_prefix)->default_value(false), "TG skip generation prefix")
-            ("tg-retry-generation-prefix", po::value<std::string>(&config.tg_prompt_params.retry_generation_prefix)->default_value(""), "TG prefix to be used after a failed text generation")
-            ("tg-paragraphs-file", po::value<std::string>(&config.tg_prompt_params.paragraphs_file)->default_value(""), "TG paragraphs file")
-            ("tg-insert-max-sample", po::value<int>(&config.tg_prompt_params.insert_max_sample)->default_value(0), "TG insert max sample")
-            ("tg-host", po::value<std::string>(&config.tg_completions_params.host)->default_value("localhost"), "TG host")
-            ("tg-port", po::value<std::string>(&config.tg_completions_params.port)->default_value("5000"), "TG port")
-            ("tg-api-key", po::value<std::string>(&config.tg_completions_params.api_key)->default_value(""), "TG API key")
-            ("tg-completions-target", po::value<std::string>(&config.tg_completions_params.completions_target)->default_value("/v1/completions"), "TG completions target")
-            ("tg-token-count-target", po::value<std::string>(&config.tg_completions_params.token_count_target)->default_value("/v1/internal/token-count"), "TG token count target")
+            ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
+            ("llm-examples-file", po::value<std::string>(&config.llm_prompt_params.examples_file)->default_value("examples.txt"), "LLM exmaples file path")
+            ("llm-history-file", po::value<std::string>(&config.llm_prompt_params.history_file)->default_value("history.txt"), "LLM history file path")
+            ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("history.txt"), "LLM output file path")
+            ("llm-example-separator", po::value<std::string>(&config.llm_prompt_params.example_separator)->default_value("***"), "LLM separator to be inserted before and after examples")
+            ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
+            ("llm-skip-generation-prefix", po::bool_switch(&config.llm_prompt_params.skip_generation_prefix)->default_value(false), "LLM skip generation prefix")
+            ("llm-retry-generation-prefix", po::value<std::string>(&config.llm_prompt_params.retry_generation_prefix)->default_value(""), "LLM prefix to be used after a failed text generation")
+            ("llm-paragraphs-file", po::value<std::string>(&config.llm_prompt_params.paragraphs_file)->default_value(""), "LLM paragraphs file")
+            ("llm-insert-max-sample", po::value<int>(&config.llm_prompt_params.insert_max_sample)->default_value(0), "LLM insert max sample")
+            ("llm-host", po::value<std::string>(&config.llm_prompt_params.host)->default_value("localhost"), "LLM host")
+            ("llm-port", po::value<std::string>(&config.llm_prompt_params.port)->default_value("5000"), "LLM port")
+            ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
+            ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
+            ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
+            
             ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "TG min completion tokens")
             ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "TG max completion iterations")
             ("tg-model", po::value<std::string>(&config.tg_completions_params.model)->default_value("", "TG model"))
@@ -1981,6 +2219,48 @@ int parse_commandline(
             ("tg-negative-prompt", po::value<std::string>(&config.tg_completions_params.negative_prompt)->default_value(""), "TG negative prompt")
             ("tg-dry-sequence-breakers", po::value<std::string>(&config.tg_completions_params.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
             ("tg-grammar-string", po::value<std::string>(&config.tg_completions_params.grammar_string)->default_value(""), "TG grammar-string")
+
+            ("kc-max-context-length", po::value<int>(&config.kc_generation_params.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+            ("kc-max-length", po::value<int>(&config.kc_generation_params.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+            ("kc-rep-pen", po::value<double>(&config.kc_generation_params.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+            ("kc-rep-pen-range", po::value<int>(&config.kc_generation_params.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+
+            ("kc-sampler-order", po::value<std::vector<int>>(&config.kc_generation_params.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+            ("kc-sampler-seed", po::value<int>(&config.kc_generation_params.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+            ("kc-stop-sequence", po::value<std::vector<std::string>>(&config.kc_generation_params.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+            ("kc-temperature", po::value<double>(&config.kc_generation_params.temperature)->default_value(1.0), "Temperature value.")
+            ("kc-tfs", po::value<double>(&config.kc_generation_params.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-top-a", po::value<double>(&config.kc_generation_params.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+            ("kc-top-k", po::value<double>(&config.kc_generation_params.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+            ("kc-top-p", po::value<double>(&config.kc_generation_params.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-min-p", po::value<double>(&config.kc_generation_params.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-typical", po::value<double>(&config.kc_generation_params.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-use-default-badwordsids", po::bool_switch(&config.kc_generation_params.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+            ("kc-dynatemp_range", po::value<double>(&config.kc_generation_params.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+            ("kc-smoothing-factor", po::value<double>(&config.kc_generation_params.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+            ("kc-dynatemp-exponent", po::value<double>(&config.kc_generation_params.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+            ("kc-mirostat", po::value<int>(&config.kc_generation_params.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+            ("kc-mirostat-tau", po::value<double>(&config.kc_generation_params.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+            ("kc-mirostat-eta", po::value<double>(&config.kc_generation_params.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+            ("kc-genkey", po::value<std::string>(&config.kc_generation_params.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+            ("kc-grammar", po::value<std::string>(&config.kc_generation_params.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+            ("kc-grammar-retain-state", po::bool_switch(&config.kc_generation_params.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+            ("kc-memory", po::value<std::string>(&config.kc_generation_params.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+            ("kc-images", po::value<std::vector<std::string>>(&config.kc_generation_params.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+            ("kc-trim-stop", po::bool_switch(&config.kc_generation_params.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+            ("kc-render-special", po::bool_switch(&config.kc_generation_params.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+            ("kc-bypass-eos", po::bool_switch(&config.kc_generation_params.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+            ("kc-banned-tokens", po::value<std::vector<std::string>>(&config.kc_generation_params.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+            ("kc-dry-multiplier", po::value<double>(&config.kc_generation_params.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+            ("kc-dry-base", po::value<double>(&config.kc_generation_params.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+            ("kc-dry-allowed-length", po::value<int>(&config.kc_generation_params.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+            ("kc-dry-penalty-last-n", po::value<int>(&config.kc_generation_params.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+            ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&config.kc_generation_params.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+            ("kc-xtc-threshold", po::value<double>(&config.kc_generation_params.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+            ("kc-xtc-probability", po::value<double>(&config.kc_generation_params.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+            ("kc-nsigma", po::value<double>(&config.kc_generation_params.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+            ("kc-logprobs", po::bool_switch(&config.kc_generation_params.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+            ("kc-replace-instruct-placeholders", po::bool_switch(&config.kc_generation_params.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
 
             ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
             ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7860"), "SD port")
@@ -2082,9 +2362,9 @@ int parse_commandline(
 
         init_logging(config);
 
-        if (config.mode == "tg")
+        if (config.mode == "tg" || config.mode == "kc")
         {
-            init_tg_mode(config);
+            init_llm_mode(config);
         }
         else if (config.mode == "sd")
         {
@@ -2096,7 +2376,7 @@ int parse_commandline(
         }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "mode options must be tg | sd | sb.";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be tg | kc | sd | sb.";
             return 1;
         }
 
@@ -2108,8 +2388,8 @@ int parse_commandline(
         std::transform(config.tg_completions_params.stop.begin(), config.tg_completions_params.stop.end(), config.tg_completions_params.stop.begin(), unescape_string);
         std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
-        config.tg_prompt_params.generation_prefix = unescape_string(config.tg_prompt_params.generation_prefix);
-        config.tg_prompt_params.retry_generation_prefix = unescape_string(config.tg_prompt_params.retry_generation_prefix);
+        config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
+        config.llm_prompt_params.retry_generation_prefix = unescape_string(config.llm_prompt_params.retry_generation_prefix);
         config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
         config.sd_txt2img_params.negative_prompt = unescape_string(config.sd_txt2img_params.negative_prompt);
         config.sb_generation_params.text = unescape_string(config.sb_generation_params.text);
@@ -2183,22 +2463,22 @@ std::string prompts::to_string(const config& config) const
 
     std::string examples_string;
     {
-        if (!config.tg_prompt_params.example_separator.empty())
+        if (!config.llm_prompt_params.example_separator.empty())
         {
-            remaining_tokens -= (static_cast<int>(config.tg_prompt_params.example_separator.size()) + 2) * 2;
+            remaining_tokens -= (static_cast<int>(config.llm_prompt_params.example_separator.size()) + 2) * 2;
         }
         int written_tokens = 0;
         try_append(examples.begin(), examples.end(), examples_string, remaining_tokens, written_tokens, false);
         if (written_tokens > 0)
         {
-            if (!config.tg_prompt_params.example_separator.empty())
+            if (!config.llm_prompt_params.example_separator.empty())
             {
                 std::string temp = "\n";
-                temp += config.tg_prompt_params.example_separator;
+                temp += config.llm_prompt_params.example_separator;
                 temp += "\n";
                 temp += examples_string;
                 temp += "\n";
-                temp += config.tg_prompt_params.example_separator;
+                temp += config.llm_prompt_params.example_separator;
                 temp += "\n";
                 std::swap(examples_string, temp);
             }
@@ -2214,18 +2494,18 @@ std::string prompts::to_string(const config& config) const
 
 void read_prompts(const config& config, prompts& prompts)
 {
-    if (config.mode == "tg")
+    if (config.mode == "tg" || config.mode == "kc")
     {
-        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.tg_prompt_params.system_prompts_file, config) };
+        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.llm_prompt_params.system_prompts_file, config) };
         read_file_to_container(system_prompts_path, prompts.system_prompts);
 
-        const std::filesystem::path examples_path{ string_to_path_by_config(config.tg_prompt_params.examples_file, config) };
+        const std::filesystem::path examples_path{ string_to_path_by_config(config.llm_prompt_params.examples_file, config) };
         if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
         {
             read_file_to_container(examples_path, prompts.examples);
         }
 
-        const std::filesystem::path history_path{ string_to_path_by_config(config.tg_prompt_params.history_file, config) };
+        const std::filesystem::path history_path{ string_to_path_by_config(config.llm_prompt_params.history_file, config) };
         if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
         {
             read_file_to_container(history_path, prompts.history);
@@ -2235,7 +2515,7 @@ void read_prompts(const config& config, prompts& prompts)
 
 void write_response(const config& config, const std::string& response, std::ios_base::openmode mode)
 {
-    const std::filesystem::path output_file_path{ string_to_path_by_config(config.tg_prompt_params.output_file, config) };
+    const std::filesystem::path output_file_path{ string_to_path_by_config(config.llm_prompt_params.output_file, config) };
     create_parent_directories(output_file_path);
     boost::nowide::ofstream ofs{ output_file_path, mode };
     if (!ofs.is_open())
@@ -2249,24 +2529,24 @@ void write_response(const config& config, const std::string& response, std::ios_
     }
 }
 
-void tg_append_mode(const config& config, prompts& prompts)
+void llm_append_mode(const config& config, prompts& prompts)
 {
     std::string prompts_string = prompts.to_string(config);
     prompts_string = expand_macro(prompts_string, config, config.macros);
 
     try
     {
-        const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.generation_prefix) };
+        const std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
         BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
         write_response(config, response, std::ios_base::app);
     }
     catch (const text_generation_exception& exception)
     {
         BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-        if (!config.tg_prompt_params.retry_generation_prefix.empty())
+        if (!config.llm_prompt_params.retry_generation_prefix.empty())
         {
             BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-            const std::string response{ generate_and_complete_text(config, prompts_string, config.tg_prompt_params.retry_generation_prefix) };
+            const std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.retry_generation_prefix) };
             BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
             write_response(config, response, std::ios_base::out | std::ios_base::app);
         }
@@ -2283,11 +2563,11 @@ void tg_insert_mode(const config& config, prompts& prompts)
 
 void generate_and_output(const config& config, prompts& prompts)
 {
-    if (config.mode == "tg")
+    if (config.mode == "tg" || config.mode == "kc")
     {
-        if (config.tg_prompt_params.insert_max_sample == 0)
+        if (config.llm_prompt_params.insert_max_sample == 0)
         {
-            tg_append_mode(config, prompts);
+            llm_append_mode(config, prompts);
         }
         else
         {

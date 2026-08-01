@@ -6,6 +6,7 @@
 * 想定するバックエンド
 	* テキスト生成
 		* oobabooga/text-generation-webui (https://github.com/oobabooga/text-generation-webui)
+		* lostruins/koboldcpp (https://github.com/lostruins/koboldcpp)
 	* 画像生成
 		* AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui)
 	* 音声生成
@@ -26,12 +27,17 @@
 	* https://www.boost.org/
 * C++20+
 
+```
+vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static
+vcpkg integrate install
+```
+
 ## 共通設定
 下記の設定は、対象とするバックエンドに依存せず共通して参照される。
 
 | オプション | 概要 | デフォルト値 | 備考 |
 | --- | --- | --- | --- |
-| --mode | モード | tg | `(tg\|sd\|sb)` のいずれか |
+| --mode | モード | tg | `(tg\|kc\|sd\|sb)` のいずれか |
 | --base-path | 各種パスの基準となるパス | . |  |
 | --log-level | ログレベル | info | `(trace\|debug\|info\|warning\|error\|fatal)` のいずれか |
 | --log-file | ログファイル | log.txt |  |
@@ -45,45 +51,51 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
-`--mode tg` と `--tg-` から始まるオプションを適宜指定する。
+`--mode tg` と `--llm-` および `--tg-` から始まるオプションを適宜指定して llmcpp を実行する。
 
 下記の関連ファイルが読み込まれれる。
 
 | オプション | 概要 | デフォルト値 | 必須/任意 |
 | --- | --- | --- | --- |
-| --tg-system-prompts-file | システムプロンプト | system_prompts.txt | 必須 |
-| --tg-examples-file | 生成したいテキストの例 | examples.txt | 任意 |
-| --tg-history-file | 直近に生成されたテキスト | history.txt | 任意 |
+| --llm-system-prompts-file | システムプロンプト | system_prompts.txt | 必須 |
+| --llm-examples-file | 生成したいテキストの例 | examples.txt | 任意 |
+| --llm-history-file | 直近に生成されたテキスト | history.txt | 任意 |
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
 
 | オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
-| --tg-host | ホスト | localhost |
-| --tg-port | ポート | 5000 |
-| --tg-completions-target | テキストを補完するターゲット | /v1/completions |
-| --tg-token-count-target | トークン数を取得するターゲット | /v1/internal/token-count |
+| --llm-host | ホスト | localhost |
+| --llm-port | ポート | 5000 |
+| --llm-completions-target | テキストを補完するターゲット | tg モードの場合: /v1/completions, kc モードの場合: /api/v1/generate |
+| --llm-token-count-target | トークン数を取得するターゲット | tg モードの場合: /v1/internal/token-count, kc モードの場合: /api/extra/tokencount |
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
 1. `system_prompts.txt` の内容をプロンプトに追加する。
 2. `history.txt` の内容を、末尾の行から優先して可能な限り、本来の順序でプロンプトに追加する。
 3. `examples.txt` の内容を、可能な限り、本来の順序でプロンプトに追加する。
-4. `--tg-generation-prefix` オプションで指定された文字列をプロンプトに追加する。
+4. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。
 
 LLM に渡すプロンプトは、
 ここでいう可能な限りとは、「`--tg-truncation-length` オプションで指定しているコンテキストの最大トークン数(デフォルトの値は `4096`)から、`--tg-max-tokens` オプションで指定している LLM により生成されるテキストの最大トークン数(デフォルトの値は `512`)を差し引いたトークン数を超過しない限り」を意味する。
 つまり llmcpp は、「プロンプト」と「LLM により生成されるテキスト」を足した全体のトークン数が、コンテキストの最大トークン数以下に収まるよう、`history.txt` や `examples.txt` から読み込むテキストの量を調整する。
 
 プロンプトを作成した後、LLM と通信し、テキストを生成する。
-生成されたテキストの先頭には `--tg-generation-prefix` オプションで指定された文字列が含まれる。
-デフォルトでは、生成したテキストは `history.txt` の末尾に追加される。変更する場合は `--tg-output-file` で出力先を指定する。親フォルダが存在しない場合、自動的に作成される。
+生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。
+デフォルトでは、生成したテキストは `history.txt` の末尾に追加される。変更する場合は `--llm-output-file` で出力先を指定する。親フォルダが存在しない場合、自動的に作成される。
 
 繰り返しテキストを生成すると、`history.txt` の内容は増加し、いつかその全量がコンテキストの最大トークン数に収まらなくなる。
 前述の戦略により、`history.txt` の内容は増加した後においても、可能な限り最新の生成されたテキストをプロンプトに含める。
 
 LLMに小説を生成させる場合、`history.txt` は作成された文章になる。
 LLMとチャットをする場合、`history.txt` は会話の履歴になる。
+
+## oobabooga/text-generation-webui の使用法
+lostruins/koboldcpp(https://github.com/lostruins/koboldcpp) を導入し、下記の準備をする。
+1. ` --port 5001` オプションなどを指定して `koboldcpp.exe` を起動する。
+
+`--mode kc` と `--llm-` および `--kc-` から始まるオプションを適宜指定して llmcpp を実行する。
 
 ## AUTOMATIC1111/stable-diffusion-webui の使用法
 AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui) を導入し、下記の準備をする。
@@ -183,3 +195,6 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
+
+## 課題
+Gemma v4 の構文に対応できるよう仕組みを拡張する。
