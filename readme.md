@@ -49,7 +49,7 @@ vcpkg integrate install
 
 `config-file` で指定した設定ファイルは、INI 形式を想定した構文解析により読み込まれる。コマンドラインと設定ファイルの双方が共通するコマンドラインオプションを指定している場合、コマンドラインで指定された方を優先する。
 
-```(config.ini)
+```ini:config.ini
 # ポート番号の設定
 llm-port = 5001
 
