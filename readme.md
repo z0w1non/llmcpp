@@ -53,7 +53,7 @@ vcpkg integrate install
 # ポート番号の設定
 llm-port = 5001
 
-# Gemma v4 向けの設定例
+# Gemma 4 向けの設定例
 llm-generation-prefix = <end_of_turn>\n<start_of_turn>model\n
 llm-skip-generation-prefix = true
 llm-system-prompts-prefix = <start_of_turn>user\n
@@ -76,6 +76,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 2. `start_windows.bat` など実行環境と対応するスクリプトを実行し、サーバーを起動する。
 
 `--mode tg` と `--llm-` および `--tg-` から始まるオプションを適宜指定して llmcpp を実行する。
+使用するモデルはバックエンドが対応している形式であれば何でも構わないが、例として [Gemma 4](https://ai.google.dev/gemma/docs/core?hl=ja) などが挙げられる。
 
 下記の関連ファイルが読み込まれれる。
 
@@ -102,8 +103,6 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 後述する内容の続きを執筆してください。
 ```
-
-
 
 | オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
