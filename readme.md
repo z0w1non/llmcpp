@@ -122,6 +122,22 @@ lostruins/koboldcpp(https://github.com/lostruins/koboldcpp) を導入し、下�
 
 `--mode kc` と `--llm-` および `--kc-` から始まるオプションを適宜指定して llmcpp を実行する。
 
+```bat:run.bat
+rem 起動用バッチの例
+@echo off
+cd /d %~dp0
+set model=models/gemma-4-E4B-it-Q8_0.gguf
+
+koboldcpp.exe --model %model%
+  --gpulayers 99 ^
+  --contextsize 8192 ^
+  --usecuda ^
+  --jinja ^
+  --threads 4 ^
+  --smartcontext ^
+  --port 5001
+```
+
 ## AUTOMATIC1111/stable-diffusion-webui の使用法
 AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui) を導入し、下記の準備をする。
 
