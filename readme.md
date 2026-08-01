@@ -111,7 +111,7 @@ LLMとチャットをする場合、`history.txt` は会話の履歴になる。
 
 ## lostruins/koboldcpp の使用法
 lostruins/koboldcpp(https://github.com/lostruins/koboldcpp) を導入し、下記の準備をする。
-1. ` --port 5001` オプションなどを指定して `koboldcpp.exe` を起動する。
+1. ` --port 5000` オプションなどを指定して `koboldcpp.exe` を起動する。
 
 `--mode kc` と `--llm-` および `--kc-` から始まるオプションを適宜指定して llmcpp を実行する。
 
