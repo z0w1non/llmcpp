@@ -261,7 +261,7 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 llmcpp --create-process --server-executable koboldcpp.exe --server-arguments "--model %model% --port 5001" --server-host localhost --server-port 5001 --server-max-retries 60 --server-wait-time 1000
 ```
 
-`--create-process` が指定された場合、サーバーを起動するコマンドを非同期に実行後、`--server-host` と `--server-port` により指定された IPアドレス とポートと通信が可能になるまで待機する。
+`--create-process` が指定された場合、サーバーを起動するコマンドを非同期に実行後、`--server-host` と `--server-port` により指定された IPアドレス およびポートと通信が可能になるまで待機する。
 `--server-host localhost`, `--server-max-retries 60`, `--server-wait-time 1000` は省略することができる。
 
 ### サーバーの終了
