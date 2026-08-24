@@ -53,6 +53,7 @@
 #include "picojson.h"
 
 #if defined(_WIN32)
+#include <boost/process/v2/windows/creation_flags.hpp>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -517,7 +518,7 @@ struct config
 
     bool create_process{};
     bool terminate_process{};
-    std::string server_executable;
+    std::string server_executable_file;
     std::string server_arguments;
     std::string server_host;
     std::string server_port;
@@ -2184,11 +2185,18 @@ void create_process_async(const std::string& excutable, const std::vector<std::s
     //    BOOST_LOG_TRIVIAL(warning) << "exe not found.";
     //    return;
     //}
-    process::process proc{ ctx, excutable, arguments };
+    process::process proc{ ctx, excutable, arguments, process::windows::create_new_console };
     proc.detach();
 }
 
-std::size_t terminate_process_by_name(const std::string& process_name)
+std::wstring to_lower(const std::wstring& str)
+{
+    std::wstring result{ str };
+    std::transform(result.begin(), result.end(), result.begin(), std::towlower);
+    return result;
+}
+
+std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path)
 {
     std::size_t terminated_count{};
 
@@ -2202,27 +2210,42 @@ std::size_t terminate_process_by_name(const std::string& process_name)
     PROCESSENTRY32W entry;
     entry.dwSize = sizeof(PROCESSENTRY32W);
 
-    std::wstring target_name{ process_name.begin(), process_name.end() };
+    const std::wstring executable_file_path_lower = to_lower(executable_file_path.wstring());
 
     if (Process32FirstW(snapshot, &entry))
     {
         do
         {
-            if (target_name == entry.szExeFile)
+            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+            if (process != nullptr)
             {
-                HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
-                if (process != nullptr)
+                wchar_t current_process_buffer[MAX_PATH]{};
+                DWORD size = MAX_PATH;
+
+                if (QueryFullProcessImageNameW(process, 0, current_process_buffer, &size))
                 {
-                    if (TerminateProcess(process, 1))
+                    const std::filesystem::path current_path{ current_process_buffer };
+                    const std::wstring current_target = executable_file_path.has_parent_path()
+                        ? current_path.wstring()
+                        : current_path.filename().wstring();
+                    const std::wstring current_target_lower = to_lower(current_target);
+
+                    if (current_target_lower == executable_file_path_lower)
                     {
-                        terminated_count += 1;
-                        CloseHandle(process);
+                        if (TerminateProcess(process, 1))
+                        {
+                            terminated_count += 1;
+                        }
                     }
                 }
+
+                CloseHandle(process);
             }
 
         } while (Process32NextW(snapshot, &entry));
     }
+
+    CloseHandle(snapshot);
 #endif
 
     return terminated_count;
@@ -2296,7 +2319,7 @@ int parse_command_line(
 
             ("create-process", po::bool_switch(&config.create_process)->default_value(false), "create process switch")
             ("terminate-process", po::bool_switch(&config.terminate_process)->default_value(false), "terminate process switch")
-            ("server-executable", po::value<std::string>(&config.server_executable)->default_value(""), "server executable")
+            ("server-executable-file", po::value<std::string>(&config.server_executable_file)->default_value(""), "server executable file")
             ("server-arguments", po::value<std::string>(&config.server_arguments), "server arguments")
             ("server-host", po::value<std::string>(&config.server_host)->default_value("localhost"), "server ip")
             ("server-port", po::value<std::string>(&config.server_port)->default_value("5000"), "server port")
@@ -2838,10 +2861,10 @@ void process_create_or_terminate(const config& config)
 {
     if (config.create_process)
     {
-        if (!config.server_executable.empty())
+        if (!config.server_executable_file.empty())
         {
             const std::vector<std::string> arguments = parse_command_line_args(config.server_arguments);
-            create_process_async(config.server_executable, arguments);
+            create_process_async(config.server_executable_file, arguments);
             if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
             {
                 BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
@@ -2850,11 +2873,11 @@ void process_create_or_terminate(const config& config)
     }
     else if (config.terminate_process)
     {
-        if (!config.server_executable.empty())
+        if (!config.server_executable_file.empty())
         {
-            if (terminate_process_by_name(std::filesystem::path{ config.server_executable }.filename().string()) == 0)
+            if (terminate_process_by_path(config.server_executable_file) == 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by name (" << config.server_executable << ").";
+                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << config.server_executable_file << ").";
             }
         }
     }
