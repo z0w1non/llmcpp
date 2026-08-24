@@ -31,6 +31,9 @@
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/url.hpp>
+#include <boost/process/v2/process.hpp>
+#include <boost/process/v2/environment.hpp>
+#include <boost/process/v2/execute.hpp>
 #include <system_error>
 #include <string>
 #include <sstream>
@@ -46,7 +49,13 @@
 #include <memory>
 #include <stdexcept>
 #include <optional>
+#include <thread>
 #include "picojson.h"
+
+#if defined(_WIN32)
+#include <Windows.h>
+#include <tlhelp32.h>
+#endif
 
 class runtime_exception
     : public boost::exception
@@ -66,6 +75,7 @@ class json_parse_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
 class array_index_out_of_bounds_exception : public runtime_exception {};
+class dns_resolution_exception : public runtime_exception {};
 
 namespace error_info
 {
@@ -74,6 +84,11 @@ namespace error_info
     using wrapped_std_exception = boost::error_info<struct tag_wrapped_std_exception, std::exception>;
     using wrapped_boost_exception = boost::error_info<struct tag_wrapped_boost_exception, boost::exception>;
     using path = boost::error_info<struct tag_file_path, std::filesystem::path>;
+
+    namespace asio
+    {
+        using error_code = boost::error_info<struct tag_error_code, boost::beast::error_code>;
+    }
 
     namespace http
     {
@@ -473,7 +488,7 @@ struct item
 
 struct config
 {
-    std::string mode{};
+    std::string mode;
     std::string base_path;
     std::string log_level;
     std::string log_file;
@@ -486,6 +501,15 @@ struct config
     int seed{};
     int min_completion_tokens{};
     int max_completion_iterations{};
+
+    bool create_process{};
+    bool terminate_process{};
+    std::string server_executable;
+    std::string server_arguments;
+    std::string server_host;
+    std::string server_port;
+    int server_max_retries;
+    int server_wait_ms;
 
     llm_prompt_parameters llm_prompt_params;
     tg_completions_parameters tg_completions_params;
@@ -597,7 +621,7 @@ std::string insert_text(const config& config, prompts& prompts);
 
 void init_llm_mode(config& config);
 
-int parse_commandline(
+int parse_command_line(
     int argc,
     char** argv,
     config& config
@@ -2104,7 +2128,110 @@ void init_llm_mode(config& config)
     }
 }
 
-int parse_commandline(
+bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms)
+{
+    boost::system::error_code error_code;
+
+    boost::asio::io_context ctx;
+    boost::asio::ip::tcp::resolver resolver{ ctx };
+    auto results = resolver.resolve(host, port, error_code);
+    if (error_code || results.empty())
+    {
+        throw dns_resolution_exception{} << error_info::asio::error_code{ error_code };
+    }
+
+    boost::asio::ip::tcp::endpoint endpoint = *results.begin();;
+    for (unsigned int retries = 0; retries < max_retries; ++retries)
+    {
+        boost::asio::ip::tcp::socket socket{ ctx };
+        socket.connect(endpoint, error_code);
+        if (!error_code)
+        {
+            socket.close();
+            return true;
+        }
+
+        BOOST_LOG_TRIVIAL(trace)
+            << "[Waiting " << (retries + 1) << "/" << max_retries << "] "
+            << host << ":" << port << " (" << error_code.message() << ")";
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+    }
+
+    return false;
+}
+
+void create_process_async(const std::string& excutable, const std::vector<std::string>& arguments)
+{
+    namespace process = boost::process::v2;
+    boost::asio::io_context ctx;
+    //auto exe = process::environment::find_executable(boost::filesystem::path{ excutable });
+    //if (exe.empty())
+    //{
+    //    BOOST_LOG_TRIVIAL(warning) << "exe not found.";
+    //    return;
+    //}
+    process::process proc{ ctx, excutable, arguments };
+    proc.detach();
+}
+
+std::size_t terminate_process_by_name(const std::string& process_name)
+{
+    std::size_t terminated_count{};
+
+#if defined(_WIN32)
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+    {
+        return 0;
+    }
+
+    PROCESSENTRY32W entry;
+    entry.dwSize = sizeof(PROCESSENTRY32W);
+
+    std::wstring target_name{ process_name.begin(), process_name.end() };
+
+    if (Process32FirstW(snapshot, &entry))
+    {
+        do
+        {
+            if (target_name == entry.szExeFile)
+            {
+                HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+                if (process != nullptr)
+                {
+                    if (TerminateProcess(process, 1))
+                    {
+                        terminated_count += 1;
+                        CloseHandle(process);
+                    }
+                }
+            }
+
+        } while (Process32NextW(snapshot, &entry));
+    }
+#endif
+
+    return terminated_count;
+}
+
+std::vector<std::string> parse_command_line_args(const std::string& args)
+{
+    boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
+    boost::tokenizer<boost::escaped_list_separator<char>> tokenizer{ args, separator };
+
+    std::vector<std::string> result;
+    for (const std::string& token : tokenizer)
+    {
+        if (!token.empty())
+        {
+            result.push_back(token);
+        }
+    }
+    return result;
+}
+
+int parse_command_line(
     int argc,
     char** argv,
     config& config
@@ -2153,6 +2280,15 @@ int parse_commandline(
             ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros), "define macro by key-value pair")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
             ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
+
+            ("create-process", po::bool_switch(&config.create_process)->default_value(false), "create process switch")
+            ("terminate-process", po::bool_switch(&config.terminate_process)->default_value(false), "terminate process switch")
+            ("server-executable", po::value<std::string>(&config.server_executable)->default_value(""), "server executable")
+            ("server-arguments", po::value<std::string>(&config.server_arguments), "server arguments")
+            ("server-host", po::value<std::string>(&config.server_host)->default_value("localhost"), "server ip")
+            ("server-port", po::value<std::string>(&config.server_port)->default_value("5000"), "server port")
+            ("server-max-retries", po::value<int>(&config.server_max_retries)->default_value(60), "server max retries")
+            ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
 
             ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
             ("llm-examples-file", po::value<std::string>(&config.llm_prompt_params.examples_file)->default_value("examples.txt"), "LLM exmaples file path")
@@ -2685,6 +2821,32 @@ void set_seed(config& config)
     }
 }
 
+void process_create_or_terminate(const config& config)
+{
+    if (config.create_process)
+    {
+        if (!config.server_executable.empty())
+        {
+            const std::vector<std::string> arguments = parse_command_line_args(config.server_arguments);
+            create_process_async(config.server_executable, arguments);
+            if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
+            }
+        }
+    }
+    else if (config.terminate_process)
+    {
+        if (!config.server_executable.empty())
+        {
+            if (terminate_process_by_name(std::filesystem::path{ config.server_executable }.filename().string()) == 0)
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by name (" << config.server_executable << ").";
+            }
+        }
+    }
+}
+
 void iterate(config& config)
 {
     read_cache(config);
@@ -2717,12 +2879,19 @@ int exception_safe_main(int argc, char** argv)
     {
         config config;
 
-        if (parse_commandline(argc, argv, config))
+        if (parse_command_line(argc, argv, config))
         {
             return 0;
         }
 
-        iterate(config);
+        if (config.create_process || config.terminate_process)
+        {
+            process_create_or_terminate(config);
+        }
+        else
+        {
+            iterate(config);
+        }
     }
     catch (const boost::exception& exception)
     {

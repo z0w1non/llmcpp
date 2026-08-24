@@ -28,7 +28,7 @@
 * C++20+
 
 ```
-vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static
+vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static boost-process:x64-windows-static
 vcpkg integrate install
 ```
 
@@ -179,7 +179,6 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ## 反復
 `-N` オプションにより処理を反復する回数を指定することができる。デフォルトの値は `1` である。`-1` を指定すると実行を停止するまで無限に処理を反復する。
 
-
 ## マクロ
 囲まれたマクロを以下の文脈で使用することができる。
 
@@ -251,3 +250,21 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
+
+## サーバーの起動と終了
+
+テキストや画像、音声などを横断的に生成したい場合、以下のコマンドラインオプションで動的にサーバーを起動・終了することができる。
+
+### サーバーの起動
+```
+llmcpp --create-process --server-executable koboldcpp.exe --server-arguments "--model %model% --port 5001" --server-host localhost --server-port 5001 --server-max-retries 60 --server-wait-time 1000
+```
+
+`--create-process` が指定された場合、サーバーを起動するコマンドを非同期に実行後、指定されたIPとポートと通信が可能になるまで待機する。
+`--server-host localhost`, `--server-max-retries 60`, `--server-wait-time 1000` は省略することができる。
+
+### サーバーの終了
+```
+llmcpp --terminate-process --server-executable koboldcpp.exe
+```
+`--terminate-process` が指定された場合、指定された実行ファイル名を利用してサーバーのプロセスを終了する。
