@@ -2175,7 +2175,7 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
     return false;
 }
 
-void create_process_async(const std::string& excutable, const std::vector<std::string>& arguments)
+void create_process_async(const std::string& excutable_file, const std::vector<std::string>& arguments)
 {
     namespace process = boost::process::v2;
     boost::asio::io_context ctx;
@@ -2185,7 +2185,7 @@ void create_process_async(const std::string& excutable, const std::vector<std::s
     //    BOOST_LOG_TRIVIAL(warning) << "exe not found.";
     //    return;
     //}
-    process::process proc{ ctx, excutable, arguments, process::windows::create_new_console };
+    process::process proc{ ctx, excutable_file, arguments, process::windows::create_new_console };
     proc.detach();
 }
 
@@ -2219,12 +2219,12 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
             HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
             if (process != nullptr)
             {
-                wchar_t current_process_buffer[MAX_PATH]{};
+                wchar_t current_path_buffer[MAX_PATH]{};
                 DWORD size = MAX_PATH;
 
-                if (QueryFullProcessImageNameW(process, 0, current_process_buffer, &size))
+                if (QueryFullProcessImageNameW(process, 0, current_path_buffer, &size))
                 {
-                    const std::filesystem::path current_path{ current_process_buffer };
+                    const std::filesystem::path current_path{ current_path_buffer };
                     const std::wstring current_target = executable_file_path.has_parent_path()
                         ? current_path.wstring()
                         : current_path.filename().wstring();
