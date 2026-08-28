@@ -87,7 +87,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 主要ファイル
 
 | オプション | 概要 | デフォルト値 |
-| --- | --- | --- | --- |
+| --- | --- | --- |
 | --llm-system-prompts-file | システムプロンプト | system_prompts.txt |
 | --llm-output-file | 出力ファイル | output.txt |
 
