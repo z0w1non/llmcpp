@@ -113,8 +113,6 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 | --- | --- | --- |
 | --llm-host | ホスト | localhost |
 | --llm-port | ポート | 5000 |
-| --llm-completions-target | テキストを補完するターゲット | tg モードの場合: /v1/completions, kc モードの場合: /api/v1/generate |
-| --llm-token-count-target | トークン数を取得するターゲット | tg モードの場合: /v1/internal/token-count, kc モードの場合: /api/extra/tokencount |
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
