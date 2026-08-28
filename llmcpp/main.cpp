@@ -864,6 +864,11 @@ std::string include_tail_predefiend_macro(const config& config, const std::vecto
     }
 
     const std::filesystem::path macro_file{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    if (!std::filesystem::exists(macro_file))
+    {
+        return result;
+    }
+
     const std::string file_content = read_file_to_string(macro_file);
     const std::string expaned_file_content{ expand_macro(file_content, config, config.macros) };
 
