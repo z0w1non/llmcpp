@@ -95,6 +95,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 システムプロンプトとは、例えば以下のようなプロンプトである。
 
 ```
+<|turn>system
 あなたは小説家です。内容の続きを500文字程度だけ執筆してください。
 あとがきや次回予告は不要です。
 登場人物の個性を一貫させてください。
@@ -108,6 +109,10 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 # 直近の内容
 {{include_tail:output,1024}}
+<turn|>
+<|turn>user
+<turn|>
+<|turn>model
 ```
 
 | オプション | 概要 | デフォルト値 |
