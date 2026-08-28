@@ -65,8 +65,8 @@ kc-top-k = 64
 kc-top-p = 0.95
 kc-max-context-length = 8192
 kc-max-length = 4096
-llm-system-reasoning-prefix = <|channel>thought\n
-llm-system-reasoning-suffix = <channel|>
+llm-reasoning-prefix = <|channel>thought\n
+llm-reasoning-suffix = <channel|>
 ```
 
 モード名は下記の通り、それぞれと対応するバックエンドの略称である。
@@ -248,6 +248,31 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
+
+## コードブロック
+`--llm-code-block-extract` オプションを指定することにより、LLM の出力に含まれる markdown 形式のコードブロックをそれぞれファイルとして出力することができる。
+
+````
+```foo.txt
+aaa
+bbb
+ccc
+```
+
+```bar.txt
+aaa
+bbb
+ccc
+```
+
+```stdout
+aaa
+bbb
+ccc
+```
+````
+
+ただし、 `stdout` が指定された場合、そのコードブロックの内容はファイルではなく標準出力に出力される。
 
 ## サーバーの起動と終了
 
