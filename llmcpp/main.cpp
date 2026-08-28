@@ -137,6 +137,7 @@ struct llm_prompt_parameters
     std::string system_prompts_file;
     std::string output_file;
     std::string generation_prefix;
+    std::string generation_suffix;
     bool skip_generation_prefix{};
     std::string retry_generation_prefix;
     std::string paragraphs_file;
@@ -2434,6 +2435,7 @@ int parse_command_line(
             ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
             ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("output.txt"), "LLM output file path")
             ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
+            ("llm-generation-suffix", po::value<std::string>(&config.llm_prompt_params.generation_suffix)->default_value(""), "LLM generation suffix")
             ("llm-skip-generation-prefix", po::bool_switch(&config.llm_prompt_params.skip_generation_prefix)->default_value(false), "LLM skip generation prefix")
             ("llm-retry-generation-prefix", po::value<std::string>(&config.llm_prompt_params.retry_generation_prefix)->default_value(""), "LLM prefix to be used after a failed text generation")
             ("llm-paragraphs-file", po::value<std::string>(&config.llm_prompt_params.paragraphs_file)->default_value(""), "LLM paragraphs file")
@@ -2443,8 +2445,8 @@ int parse_command_line(
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
             ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
-            ("llm-system-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-            ("llm-system-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+            ("llm-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
+            ("llm-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
             //("llm-system-turn-start", po::value<std::string>(&config.llm_prompt_params.system_turn_start)->default_value(""), "LLM system turn start")
             //("llm-system-turn-end", po::value<std::string>(&config.llm_prompt_params.system_turn_end)->default_value(""), "LLM system turn end")
             //("llm-user-turn-start", po::value<std::string>(&config.llm_prompt_params.user_turn_start)->default_value(""), "LLM  turn start")
@@ -2697,6 +2699,7 @@ int parse_command_line(
         std::transform(config.kc_generation_params.stop_sequence.begin(), config.kc_generation_params.stop_sequence.end(), config.kc_generation_params.stop_sequence.begin(), unescape_string);
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
+        config.llm_prompt_params.generation_suffix = unescape_string(config.llm_prompt_params.generation_suffix);
         config.llm_prompt_params.retry_generation_prefix = unescape_string(config.llm_prompt_params.retry_generation_prefix);
         config.llm_prompt_params.reasoning_prefix = unescape_string(config.llm_prompt_params.reasoning_prefix);
         config.llm_prompt_params.reasoning_suffix = unescape_string(config.llm_prompt_params.reasoning_suffix);
@@ -2792,6 +2795,7 @@ void llm_append_mode(const config& config, prompts& prompts)
     {
         std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
         response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
+        response += config.llm_prompt_params.generation_suffix;
         write_response(config, response, std::ios_base::app);
     }
     catch (const text_generation_exception& exception)
@@ -2802,6 +2806,7 @@ void llm_append_mode(const config& config, prompts& prompts)
             BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
             std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.retry_generation_prefix) };
             response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
+            response += config.llm_prompt_params.generation_suffix;
             write_response(config, response, std::ios_base::out | std::ios_base::app);
         }
     }
