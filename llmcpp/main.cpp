@@ -141,7 +141,6 @@ struct llm_prompt_parameters
     bool skip_generation_prefix{};
     std::string retry_generation_prefix;
     std::string paragraphs_file;
-    int insert_max_sample{};
 
     std::string host;
     std::string port;
@@ -151,12 +150,8 @@ struct llm_prompt_parameters
 
     std::string reasoning_prefix;
     std::string reasoning_suffix;
-    //std::string system_turn_start;
-    //std::string system_turn_end;
-    //std::string user_turn_start;
-    //std::string user_turn_end;
-    //std::string example_start;
-    //std::string example_end;
+
+    bool code_block_extract{};
 };
 
 struct config;
@@ -539,8 +534,6 @@ struct config
 struct prompts
 {
     std::vector<std::string> system_prompts;
-    std::vector<std::string> examples;
-    std::vector<std::string> history;
 
     std::string to_string(const config& config) const;
 };
@@ -652,9 +645,8 @@ int parse_command_line(
 );
 
 void read_prompts(const config& config, prompts& prompts);
-void write_response(const config& config, const std::string& response, std::ios_base::openmode mode);
+void write_response(const config& config, const std::string& response, const std::string& filepath, std::ios_base::openmode mode);
 void llm_append_mode(const config& config, prompts& prompts);
-void llm_insert_mode(const config& config, prompts& prompts);
 void generate_and_output(const config& config, prompts& prompts);
 void set_seed(config& config);
 void iterate(config& config);
@@ -1071,12 +1063,27 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("s_tmax", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmax) }));
         request_body_json.insert(std::make_pair("s_tmin", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmin) }));
         request_body_json.insert(std::make_pair("s_noise", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_noise) }));
-        request_body_json.insert(std::make_pair("override_settings", picojson::value{ config.sd_txt2img_params.override_settings }));
+        
+        if (!config.sd_txt2img_params.override_settings.empty())
+        {
+            request_body_json.insert(std::make_pair("override_settings", picojson::value{ config.sd_txt2img_params.override_settings }));
+        }
+        
         request_body_json.insert(std::make_pair("override_settings_restore_afterwards", picojson::value{ config.sd_txt2img_params.override_settings_restore_afterwards }));
-        request_body_json.insert(std::make_pair("refiner_checkpoint", picojson::value{ config.sd_txt2img_params.refiner_checkpoint }));
+
+        if (!config.sd_txt2img_params.refiner_checkpoint.empty())
+        {
+            request_body_json.insert(std::make_pair("refiner_checkpoint", picojson::value{ config.sd_txt2img_params.refiner_checkpoint }));
+        }
+
         request_body_json.insert(std::make_pair("refiner_switch_at", picojson::value{ config.sd_txt2img_params.refiner_switch_at }));
         request_body_json.insert(std::make_pair("disable_extra_networks", picojson::value{ config.sd_txt2img_params.disable_extra_networks }));
-        request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
+        
+        if (!config.sd_txt2img_params.firstpass_image.empty())
+        {
+            request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
+        }
+        
         request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
         request_body_json.insert(std::make_pair("enable_hr", picojson::value{ config.sd_txt2img_params.enable_hr }));
         request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
@@ -1086,9 +1093,14 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
         request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
         request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
-        request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
-        request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ config.sd_txt2img_params.prompt }));
-        request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ config.sd_txt2img_params.negative_prompt }));
+        
+        if (!config.sd_txt2img_params.hr_checkpoint_name.empty())
+        {
+            request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
+        }
+        
+        //request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ prompt }));
+        //request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ negative_prompt }));
         request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
 
         if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
@@ -1158,7 +1170,10 @@ void send_automatic1111_txt2img_request(
         //}
         request_body_json.insert(std::make_pair("alwayson_scripts", picojson::value{ alwayson_scripts }));
 
-        request_body_json.insert(std::make_pair("infotext", picojson::value{ config.sd_txt2img_params.infotext }));
+        if (!config.sd_txt2img_params.infotext.empty())
+        {
+            request_body_json.insert(std::make_pair("infotext", picojson::value{ config.sd_txt2img_params.infotext }));
+        }
 
         const std::string request_body{ picojson::value{ request_body_json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
@@ -2174,43 +2189,6 @@ void set_paragraphs_to_phases(
     }
 }
 
-std::string insert_text(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample, std::size_t insert_position)
-{
-    if (text.size() < 2)
-    {
-        return {};
-    }
-
-    std::size_t prev_sample_begin = std::max(static_cast<int>(0), (static_cast<int>(insert_position) - static_cast<int>(max_sample)));
-    std::size_t next_sample_end = std::min(static_cast<int>(text.size()), (static_cast<int>(insert_position) + static_cast<int>(max_sample)));
-
-    std::string prev_sample{ std::accumulate(text.data() + prev_sample_begin, text.data() + insert_position, std::string{}) };
-    std::string next_sample{ std::accumulate(text.data() + insert_position, text.data() + next_sample_end, std::string{}) };
-
-
-    std::map<std::string, std::string> macros{ config.macros };
-    macros["prev_sample"] = prev_sample;
-    macros["next_sample"] = next_sample;
-
-    const std::string macro_expanded = expand_macro(insert_prompts, config, macros);
-    const std::string response = generate_and_complete_text(config, macro_expanded, config.llm_prompt_params.generation_prefix);
-    text.insert(text.begin() + insert_position, response);
-
-    return response;
-}
-
-std::string insert_text_random(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample)
-{
-    const std::size_t insert_position = random(static_cast<std::size_t>(1), text.size() - 1);
-    return insert_text(config, text, insert_prompts, max_sample, insert_position);
-}
-
-std::string insert_text(const config& config, prompts& prompts)
-{
-    const std::string insert_prompts{ std::accumulate(prompts.system_prompts.begin(), prompts.system_prompts.end(), std::string{}) };
-    return insert_text_random(config, prompts.history, insert_prompts, config.llm_prompt_params.insert_max_sample);
-}
-
 void init_llm_mode(config& config)
 {
     if (!config.llm_prompt_params.paragraphs_file.empty())
@@ -2246,6 +2224,35 @@ void init_llm_mode(config& config)
             config.llm_prompt_params.token_count_target = "/api/extra/tokencount";
         }
     }
+}
+
+std::string sanitize_as_filename(std::string_view name)
+{
+    std::string sanitized{ name.begin(), name.end() };
+    std::replace(sanitized.begin(), sanitized.end(), ' ', '_');
+    const std::regex illegal_chars(R"([:*?"<>|#])");
+    sanitized = std::regex_replace(sanitized, illegal_chars, "");
+    boost::algorithm::trim(sanitized);
+    return sanitized;
+}
+
+std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content)
+{
+    using regex_iterator = std::regex_iterator<std::string_view::const_iterator>;
+    using match = std::match_results<std::string_view::const_iterator>;
+
+    std::map<std::string, std::string> result;
+    const std::regex code_block_regex(R"(```(\S+)\s*\n([\s\S]*?)```)");
+
+    for (regex_iterator iter = regex_iterator(markdown_content.begin(), markdown_content.end(), code_block_regex); iter != regex_iterator{}; ++iter)
+    {
+        const match match{ *iter };
+        const std::string name = sanitize_as_filename(match[1].str());
+        const std::string code = match[2].str();
+        result[name] = code;
+    }
+
+    return result;
 }
 
 bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms)
@@ -2439,7 +2446,6 @@ int parse_command_line(
             ("llm-skip-generation-prefix", po::bool_switch(&config.llm_prompt_params.skip_generation_prefix)->default_value(false), "LLM skip generation prefix")
             ("llm-retry-generation-prefix", po::value<std::string>(&config.llm_prompt_params.retry_generation_prefix)->default_value(""), "LLM prefix to be used after a failed text generation")
             ("llm-paragraphs-file", po::value<std::string>(&config.llm_prompt_params.paragraphs_file)->default_value(""), "LLM paragraphs file")
-            ("llm-insert-max-sample", po::value<int>(&config.llm_prompt_params.insert_max_sample)->default_value(0), "LLM insert max sample")
             ("llm-host", po::value<std::string>(&config.llm_prompt_params.host)->default_value("localhost"), "LLM host")
             ("llm-port", po::value<std::string>(&config.llm_prompt_params.port)->default_value("5000"), "LLM port")
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
@@ -2447,10 +2453,7 @@ int parse_command_line(
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
             ("llm-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
             ("llm-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-            //("llm-system-turn-start", po::value<std::string>(&config.llm_prompt_params.system_turn_start)->default_value(""), "LLM system turn start")
-            //("llm-system-turn-end", po::value<std::string>(&config.llm_prompt_params.system_turn_end)->default_value(""), "LLM system turn end")
-            //("llm-user-turn-start", po::value<std::string>(&config.llm_prompt_params.user_turn_start)->default_value(""), "LLM  turn start")
-            //("llm-user-turn-end", po::value<std::string>(&config.llm_prompt_params.user_turn_end)->default_value(""), "LLM user turn end")
+            ("llm-code-block-extract", po::bool_switch(&config.llm_prompt_params.code_block_extract)->default_value(false), "code block extract switch")
 
             ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "TG min completion tokens")
             ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "TG max completion iterations")
@@ -2770,19 +2773,34 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     return result;
 }
 
-void write_response(const config& config, const std::string& response, std::ios_base::openmode mode)
+void write_response(const config& config, const std::string& response, const std::string & filepath, std::ios_base::openmode mode)
 {
-    const std::filesystem::path output_file_path{ string_to_path_by_config(config.llm_prompt_params.output_file, config) };
-    create_parent_directories(output_file_path);
-    boost::nowide::ofstream ofs{ output_file_path, mode };
+    const std::filesystem::path file_path{ string_to_path_by_config(filepath, config) };
+    create_parent_directories(file_path);
+    boost::nowide::ofstream ofs{ file_path, mode };
     if (!ofs.is_open())
     {
-        throw file_open_exception{} << error_info::path{ output_file_path };
+        throw file_open_exception{} << error_info::path{ file_path };
     }
     ofs << response;
-    if (!config.verbose)
+}
+
+void llm_write_code_block(const config & config, std::string_view markdown)
+{
+    if (config.llm_prompt_params.code_block_extract)
     {
-        boost::nowide::cout << response << std::flush;
+        const std::map<std::string, std::string> blocks{ extract_code_block_from_markdown(markdown) };
+        for (const auto& [name, code] : blocks)
+        {
+            if (name == "stdout")
+            {
+                boost::nowide::cout << code << std::flush;
+            }
+            else
+            {
+                write_response(config, code, name, 0);
+            }
+        }
     }
 }
 
@@ -2796,7 +2814,13 @@ void llm_append_mode(const config& config, prompts& prompts)
         std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
         response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
         response += config.llm_prompt_params.generation_suffix;
-        write_response(config, response, std::ios_base::app);
+        write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+        if (!config.verbose)
+        {
+            boost::nowide::cout << response << std::flush;
+        }
+        llm_write_code_block(config, response);
+
     }
     catch (const text_generation_exception& exception)
     {
@@ -2807,31 +2831,21 @@ void llm_append_mode(const config& config, prompts& prompts)
             std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.retry_generation_prefix) };
             response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
             response += config.llm_prompt_params.generation_suffix;
-            write_response(config, response, std::ios_base::out | std::ios_base::app);
+            write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::out | std::ios_base::app);
+            if (!config.verbose)
+            {
+                boost::nowide::cout << response << std::flush;
+            }
+            llm_write_code_block(config, response);
         }
     }
-}
-
-void llm_insert_mode(const config& config, prompts& prompts)
-{
-    const std::string response{ insert_text(config, prompts) };
-    BOOST_LOG_TRIVIAL(info) << "Text generated.\n```\n" << response << "\n```\n";
-    const std::string history{ std::accumulate(prompts.history.begin(), prompts.history.end(), std::string{}) };
-    write_response(config, history, std::ios_base::out);
 }
 
 void generate_and_output(const config& config, prompts& prompts)
 {
     if (config.mode == "tg" || config.mode == "kc")
     {
-        if (config.llm_prompt_params.insert_max_sample == 0)
-        {
-            llm_append_mode(config, prompts);
-        }
-        else
-        {
-            llm_insert_mode(config, prompts);
-        }
+        llm_append_mode(config, prompts);
     }
     else if (config.mode == "sd")
     {
