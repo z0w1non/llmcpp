@@ -15,7 +15,7 @@
 それぞれのバックエンドが提供する GUI を手動で操作する手間から解放し、生成する対象に依存しない統一的なインターフェースを提供し、創作活動を支援する。
 
 ## 機能
-* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する要素の比率を調整する。
+* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する。(`{{include_tail}}` マクロ)
 * テキストを生成する工程を自然言語による記述で構造化する。(`{{phase}}` マクロ)
 * プロンプトや生成されたテキストを任意の複数のファイルに分割して管理する。(`{{include:<filename>}}` マクロや、マクロに対応したコマンドラインオプション)
 * LLM のトークナイザーが通信により返したトークン数の情報をローカルにキャッシュし高速に再利用する。
@@ -54,14 +54,19 @@ vcpkg integrate install
 # ポート番号の設定
 llm-port = 5001
 
+# 真偽値オプションの設定例
+verbose = true
+
 # Gemma 4 向けの設定例
-llm-generation-prefix = <end_of_turn>\n<start_of_turn>model\n
-llm-skip-generation-prefix = true
-llm-system-prompts-prefix = <start_of_turn>user\n
-kc-stop-sequence = <end_of_turn>
+llm-generation-prefix = <|channel>thought\n
+kc-stop-sequence = <turn|>
 kc-temperature = 1.0
 kc-top-k = 64
 kc-top-p = 0.95
+kc-max-context-length = 8192
+kc-max-length = 4096
+llm-system-reasoning-prefix = <|channel>thought\n
+llm-system-reasoning-suffix = <channel|>
 ```
 
 モード名は下記の通り、それぞれと対応するバックエンドの略称である。
@@ -79,13 +84,12 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 `--mode tg` と `--llm-` および `--tg-` から始まるオプションを適宜指定して llmcpp を実行する。
 使用するモデルはバックエンドが対応している形式であれば何でも構わないが、例として [Gemma 4](https://ai.google.dev/gemma/docs/core?hl=ja) などが挙げられる。
 
-下記の関連ファイルが読み込まれれる。
+主要ファイル
 
-| オプション | 概要 | デフォルト値 | 必須/任意 |
+| オプション | 概要 | デフォルト値 |
 | --- | --- | --- | --- |
-| --llm-system-prompts-file | システムプロンプト | system_prompts.txt | 必須 |
-| --llm-examples-file | 生成したいテキストの例 | examples.txt | 任意 |
-| --llm-history-file | 直近に生成されたテキスト | history.txt | 任意 |
+| --llm-system-prompts-file | システムプロンプト | system_prompts.txt |
+| --llm-output-file | 出力ファイル | output.txt |
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
 システムプロンプトとは、例えば以下のようなプロンプトである。
@@ -102,7 +106,8 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 # 登場人物
 ## (中略)
 
-後述する内容の続きを執筆してください。
+# 直近の内容
+{{include_tail:output,1024}}
 ```
 
 | オプション | 概要 | デフォルト値 |
@@ -114,25 +119,17 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
-1. `--llm-system-prompts-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
-2. `system_prompts.txt` の内容をプロンプトに追加する。
-3. `history.txt` の内容を、末尾の行から優先して可能な限り、本来の順序でプロンプトに追加する。
-4. `examples.txt` の内容を、可能な限り、本来の順序でプロンプトに追加する。
-5. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
-
-LLM に渡すプロンプトは、
-ここでいう可能な限りとは、「`--tg-truncation-length` オプションで指定しているコンテキストの最大トークン数(デフォルトの値は `4096`)から、`--tg-max-tokens` オプションで指定している LLM により生成されるテキストの最大トークン数(デフォルトの値は `512`)を差し引いたトークン数を超過しない限り」を意味する。
-つまり llmcpp は、「プロンプト」と「LLM により生成されるテキスト」を足した全体のトークン数が、コンテキストの最大トークン数以下に収まるよう、`history.txt` や `examples.txt` から読み込むテキストの量を調整する。
+1. `system_prompts.txt` の内容をプロンプトに追加する。
+2. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
 
 プロンプトを作成した後、LLM と通信し、テキストを生成する。
-生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。`--llm-skip-generation-prefix` として `true` を指定することにより、この挙動を変更することができる。
-デフォルトでは、生成したテキストは `history.txt` の末尾に追加される。変更する場合は `--llm-output-file` で出力先を指定する。親フォルダが存在しない場合、自動的に作成される。
+生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。
+この挙動に不都合がある場合、 `--llm-skip-generation-prefix` として `true` を指定することにより、この挙動を変更することができる。
+デフォルトでは、生成したテキストは `output.txt` の末尾に追加される。
+変更する場合は `--llm-output-file` で出力先を指定する。親フォルダが存在しない場合、自動的に作成される。
 
-繰り返しテキストを生成すると、`history.txt` の内容は増加し、いつかその全量がコンテキストの最大トークン数に収まらなくなる。
-前述の戦略により、`history.txt` の内容は増加した後においても、可能な限り最新の生成されたテキストをプロンプトに含める。
-
-LLMに小説を生成させる場合、`history.txt` は作成された文章になる。
-LLMとチャットをする場合、`history.txt` は会話の履歴になる。
+LLMに小説を生成させる場合、`output.txt` は作成された小説になる。
+LLMとチャットをする場合、`output.txt` は会話の履歴になる。
 
 ## lostruins/koboldcpp の使用法
 lostruins/koboldcpp(https://github.com/lostruins/koboldcpp) を導入し、下記の準備をする。
@@ -239,9 +236,12 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 
 これにより、LLM が物語として一貫し、秩序正しいテキストを生成するよう誘導することができる。
 
-### `{{include:<filename>}}`
+### `{{include:<ファイル名>}}`
 `:` の右側で指定されたテキストファイルの内容に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。
 これによりプロンプトを複数のファイルに分割して管理することができる。
+
+### `{{include_tail:<ファイル名>,<トークン数>}}`
+`:` の右側で指定されたテキストファイルの内容のうち、末尾から指定されたトークン数分の文字列に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。例えば `{{include_tail:output,1024}}` のように記述して、直近の出力をプロンプトに含めることができる。
 
 ### `{{datetime}}`
 `yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。主に生成したテキストを生成単位で出力する目的で使用する。

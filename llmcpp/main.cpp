@@ -34,6 +34,7 @@
 #include <boost/process/v2/process.hpp>
 #include <boost/process/v2/environment.hpp>
 #include <boost/process/v2/execute.hpp>
+#include <boost/lexical_cast.hpp>
 #include <system_error>
 #include <string>
 #include <sstream>
@@ -134,10 +135,7 @@ runtime_exception::runtime_exception()
 struct llm_prompt_parameters
 {
     std::string system_prompts_file;
-    std::string examples_file;
-    std::string history_file;
     std::string output_file;
-    std::string example_separator;
     std::string generation_prefix;
     bool skip_generation_prefix{};
     std::string retry_generation_prefix;
@@ -150,7 +148,6 @@ struct llm_prompt_parameters
     std::string completions_target;
     std::string token_count_target;
 
-    std::string system_prompts_prefix;
     std::string reasoning_prefix;
     std::string reasoning_suffix;
     //std::string system_turn_start;
@@ -559,6 +556,13 @@ const Value& throwable_find(const picojson::object& object, const std::string& k
 std::string base64_decode(const std::string& encoded_string);
 std::string trim(const std::string& str);
 
+void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
+
+void try_append(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
+
+template<typename Container>
+std::string concatenate(const Container& strings);
+
 template <typename Container>
 void split_string_by_new_line(const std::string& str, Container& container);
 
@@ -567,16 +571,18 @@ void create_parent_directories(const std::filesystem::path& path);
 template <typename Container>
 void read_file_to_container(const std::filesystem::path& file, Container& container);
 
-void read_file_to_string(const std::filesystem::path& file, std::string& result);
+std::string read_file_to_string(const std::filesystem::path& file);
 
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
-std::string include_predefiend_macro(const config& config, const std::string& right);
+std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
 
-std::string datetime_predefiend_macro(const config& config, const std::string&);
+std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
 
-std::string stdin_predefiend_macro(const config& config, const std::string&);
+std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&);
+
+std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&);
 
 std::optional<std::string> expand_predefined_macro(
     const config& config,
@@ -603,6 +609,7 @@ std::vector<item> parse_item_list(const std::string& str);
 void write_item_list(const config& config, const std::string& task);
 
 int send_token_count_request(const config& config, const std::string& prompt);
+int get_tokens_from_cache(const config& config, const std::string& str);
 void write_cache(const config& config);
 void read_cache(const config& config);
 
@@ -703,6 +710,65 @@ std::string trim(const std::string& str)
     return trimmed_string;
 }
 
+void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens)
+{
+    result = {};
+    tokens = {};
+
+    std::vector<std::string> lines;
+    boost::split(lines, string, boost::is_any_of("\n"));
+    std::vector<std::string> temp;
+
+    auto truncate = [&](auto first, auto last)
+        {
+            for (; first != last; ++first)
+            {
+                const int next_tokens = get_tokens_from_cache(config, *first);
+                if (tokens + next_tokens > max_tokens)
+                {
+                    break;
+                }
+                temp.push_back(*first);
+                tokens += next_tokens;
+            }
+        };
+
+    if (reverse)
+    {
+        truncate(lines.rbegin(), lines.rend());
+        std::reverse(temp.begin(), temp.end());
+    }
+    else
+    {
+        truncate(lines.begin(), lines.end());
+    }
+
+    for (const std::string& line : temp)
+    {
+        result += line;
+    }
+}
+
+void try_append(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens)
+{
+    std::string truncated;
+    int tokens{};
+    truncate_by_tokens(string, remaining_tokens, config, reverse, truncated, tokens);
+    result += string;
+    remaining_tokens -= tokens;
+}
+
+template<typename Container>
+std::string concatenate(const Container& strings)
+{
+    std::string result;
+    for (const std::string& s : strings)
+    {
+        result += s;
+    }
+    return result;
+}
+
 template <typename Container>
 void split_string_by_new_line(const std::string& str, Container& container)
 {
@@ -747,9 +813,9 @@ void read_file_to_container(const std::filesystem::path& file, Container& contai
     }
 }
 
-void read_file_to_string(const std::filesystem::path& file, std::string& result)
+std::string read_file_to_string(const std::filesystem::path& file)
 {
-    result.clear();
+    std::string result;
     if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
     {
         throw file_open_exception{} << error_info::path{ file };
@@ -761,6 +827,7 @@ void read_file_to_string(const std::filesystem::path& file, std::string& result)
     }
     const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
     result = file_content;
+    return result;
 }
 
 template<typename Integer>
@@ -772,15 +839,48 @@ Integer random(Integer min, Integer max)
     return distribution(random_engine);
 }
 
-std::string include_predefiend_macro(const config& config, const std::string& right)
+std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
 {
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    const std::filesystem::path macro_file{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    return read_file_to_string(macro_file);
+}
+
+std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
+{
+    if (arguments.size() < 2)
+    {
+        throw macro_exception{};
+    }
+
     std::string result;
-    const std::filesystem::path macro_file{ string_to_path_by_config(right + ".txt", config) };
-    read_file_to_string(macro_file, result);
+
+    int max_tokens{};
+    try
+    {
+        max_tokens = boost::lexical_cast<unsigned int>(arguments[1]);
+
+    }
+    catch (const boost::bad_lexical_cast&)
+    {
+        throw macro_exception{};
+    }
+
+    const std::filesystem::path macro_file{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    const std::string file_content = read_file_to_string(macro_file);
+    const std::string expaned_file_content{ expand_macro(file_content, config, config.macros) };
+
+    int tokens{};
+    truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
+
     return result;
 }
 
-std::string datetime_predefiend_macro(const config& config, const std::string&)
+std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&)
 {
     boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
     boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
@@ -790,12 +890,13 @@ std::string datetime_predefiend_macro(const config& config, const std::string&)
     return oss.str();
 }
 
-std::string stdin_predefiend_macro(const config& config, const std::string&)
+std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&)
 {
     if (config.opt_stdin)
     {
         return *config.opt_stdin;
     }
+
     config.opt_stdin = std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
     return *config.opt_stdin;
 }
@@ -806,9 +907,10 @@ std::optional<std::string> expand_predefined_macro(
     const std::string& arguments
 )
 {
-    const static std::map<std::string, std::function<std::string(const config&, const std::string&)>> predefiend_macro_impls
+    const static std::map<std::string, std::function<std::string(const config&, const std::vector<std::string>&)>> predefiend_macro_impls
     {
         {"include", include_predefiend_macro},
+        {"include_tail", include_predefiend_macro},
         {"datetime", datetime_predefiend_macro},
         {"stdin", stdin_predefiend_macro}
     };
@@ -822,7 +924,9 @@ std::optional<std::string> expand_predefined_macro(
         {
             try
             {
-                return found->second(cfg, arguments);
+                std::vector<std::string> args;
+                boost::split(args, arguments, boost::is_any_of(","));
+                return found->second(cfg, args);
             }
             catch (const runtime_exception& exception)
             {
@@ -2111,9 +2215,8 @@ void init_llm_mode(config& config)
     if (!config.llm_prompt_params.paragraphs_file.empty())
     {
         config.phases.clear();
-        std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm_prompt_params.paragraphs_file, config) };
-        std::string content;
-        read_file_to_string(plot_file_path, content);
+        const std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm_prompt_params.paragraphs_file, config) };
+        const std::string content = read_file_to_string(plot_file_path);
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
     }
@@ -2329,10 +2432,7 @@ int parse_command_line(
             ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
 
             ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
-            ("llm-examples-file", po::value<std::string>(&config.llm_prompt_params.examples_file)->default_value("examples.txt"), "LLM exmaples file path")
-            ("llm-history-file", po::value<std::string>(&config.llm_prompt_params.history_file)->default_value("history.txt"), "LLM history file path")
-            ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("history.txt"), "LLM output file path")
-            ("llm-example-separator", po::value<std::string>(&config.llm_prompt_params.example_separator)->default_value("***"), "LLM separator to be inserted before and after examples")
+            ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("output.txt"), "LLM output file path")
             ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
             ("llm-skip-generation-prefix", po::bool_switch(&config.llm_prompt_params.skip_generation_prefix)->default_value(false), "LLM skip generation prefix")
             ("llm-retry-generation-prefix", po::value<std::string>(&config.llm_prompt_params.retry_generation_prefix)->default_value(""), "LLM prefix to be used after a failed text generation")
@@ -2343,7 +2443,6 @@ int parse_command_line(
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
             ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
-            ("llm-system-prompts-prefix", po::value<std::string>(&config.llm_prompt_params.system_prompts_prefix)->default_value(""), "LLM system prompts prefix")
             ("llm-system-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
             ("llm-system-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
             //("llm-system-turn-start", po::value<std::string>(&config.llm_prompt_params.system_turn_start)->default_value(""), "LLM system turn start")
@@ -2599,7 +2698,6 @@ int parse_command_line(
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
         config.llm_prompt_params.retry_generation_prefix = unescape_string(config.llm_prompt_params.retry_generation_prefix);
-        config.llm_prompt_params.system_prompts_prefix = unescape_string(config.llm_prompt_params.system_prompts_prefix);
         config.llm_prompt_params.reasoning_prefix = unescape_string(config.llm_prompt_params.reasoning_prefix);
         config.llm_prompt_params.reasoning_suffix = unescape_string(config.llm_prompt_params.reasoning_suffix);
         config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
@@ -2620,99 +2718,10 @@ std::string prompts::to_string(const config& config) const
 {
     std::string result;
 
-    auto try_append = [&config](
-        auto first,
-        auto last,
-        std::string& result,
-        int max_tokens,
-        int& written_tokens,
-        bool reverse,
-        const std::string separator = {}
-        )
-        {
-            std::vector<std::string> temp;
-            for (; first != last; ++first)
-            {
-                const std::string macro_expanded_string{ expand_macro(*first, config, config.macros) };
-                const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
-                if (written_tokens + next_tokens > max_tokens)
-                {
-                    break;
-                }
-                temp.push_back(macro_expanded_string);
-                written_tokens += next_tokens;
-            }
-            if (reverse)
-            {
-                std::reverse(temp.begin(), temp.end());
-            }
-            for (const std::string& line : temp)
-            {
-                result += line;
-            }
-        };
-
     int remaining_tokens = config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens;
 
-    auto try_append_string = [&config, &result, &remaining_tokens](const std::string& str)
-        {
-            const std::string macro_expanded_string{ expand_macro(str, config, config.macros) };
-            const int next_tokens = get_tokens_from_cache(config, macro_expanded_string);
-            if (remaining_tokens >= next_tokens)
-            {
-                result += str;
-                remaining_tokens -= next_tokens;
-            }
-        };
-
-    try_append_string(config.llm_prompt_params.system_prompts_prefix);
-
-    std::string system_prompts_string;
-    int system_prompts_tokens{};
-    {
-        try_append(system_prompts.begin(), system_prompts.end(), system_prompts_string, remaining_tokens, system_prompts_tokens, false);
-    }
-
-    if (remaining_tokens >= system_prompts_tokens)
-    {
-        result += system_prompts_string;
-        remaining_tokens -= system_prompts_tokens;
-    }
-
-    std::string history_string;
-    {
-        int written_tokens = 0;
-        try_append(history.rbegin(), history.rend(), history_string, remaining_tokens, written_tokens, true);
-        remaining_tokens -= written_tokens;
-    }
-
-    std::string examples_string;
-    {
-        if (!config.llm_prompt_params.example_separator.empty())
-        {
-            remaining_tokens -= (static_cast<int>(config.llm_prompt_params.example_separator.size()) + 2) * 2;
-        }
-        int written_tokens = 0;
-        try_append(examples.begin(), examples.end(), examples_string, remaining_tokens, written_tokens, false);
-        if (written_tokens > 0)
-        {
-            if (!config.llm_prompt_params.example_separator.empty())
-            {
-                std::string temp = "\n";
-                temp += config.llm_prompt_params.example_separator;
-                temp += "\n";
-                temp += examples_string;
-                temp += "\n";
-                temp += config.llm_prompt_params.example_separator;
-                temp += "\n";
-                std::swap(examples_string, temp);
-            }
-            remaining_tokens -= written_tokens;
-        }
-    }
-
-    result += examples_string;
-    result += history_string;
+    const std::string expanded_system_prompts{ expand_macro(concatenate(system_prompts), config, config.macros) };
+    try_append(expanded_system_prompts, config, false, result, remaining_tokens);
 
     return result;
 }
@@ -2723,18 +2732,6 @@ void read_prompts(const config& config, prompts& prompts)
     {
         const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.llm_prompt_params.system_prompts_file, config) };
         read_file_to_container(system_prompts_path, prompts.system_prompts);
-
-        const std::filesystem::path examples_path{ string_to_path_by_config(config.llm_prompt_params.examples_file, config) };
-        if (std::filesystem::exists(examples_path) && std::filesystem::is_regular_file(examples_path))
-        {
-            read_file_to_container(examples_path, prompts.examples);
-        }
-
-        const std::filesystem::path history_path{ string_to_path_by_config(config.llm_prompt_params.history_file, config) };
-        if (std::filesystem::exists(history_path) && std::filesystem::is_regular_file(history_path))
-        {
-            read_file_to_container(history_path, prompts.history);
-        }
     }
 }
 
@@ -2844,7 +2841,7 @@ void generate_and_output(const config& config, prompts& prompts)
         else
         {
             const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
-            read_file_to_string(prompt_file_path, prompt_string);
+            prompt_string = read_file_to_string(prompt_file_path);
             prompt_string = expand_macro(prompt_string, config, config.macros);
         }
 
@@ -2856,7 +2853,7 @@ void generate_and_output(const config& config, prompts& prompts)
         else
         {
             const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
-            read_file_to_string(negative_prompt_file_path, negative_prompt_string);
+            negative_prompt_string = read_file_to_string(negative_prompt_file_path);
             negative_prompt_string = expand_macro(negative_prompt_string, config, config.macros);
         }
 
@@ -2872,7 +2869,7 @@ void generate_and_output(const config& config, prompts& prompts)
         else
         {
             const std::filesystem::path text_file_path{ string_to_path_by_config(config.sb_generation_params.text_file, config) };
-            read_file_to_string(text_file_path, text_string);
+            text_string = read_file_to_string(text_file_path);
             text_string = expand_macro(text_string, config, config.macros);
         }
         send_style_bert_voice_request(config, text_string);
