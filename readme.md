@@ -250,16 +250,16 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 標準入力から渡された文字列に展開される。
 
 ## コードブロック単位のファイル出力
-`--llm-code-block-extract` オプションを指定することにより、LLM の出力に含まれる markdown 形式のコードブロックをそれぞれファイルとして出力することができる。
+`--llm-code-block-extract` オプションを指定することにより、LLM の出力に含まれる markdown 形式のコードブロックをそれぞれファイルとして出力することができる。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。
 
 ````
-```foo.txt
+```foo
 aaa
 bbb
 ccc
 ```
 
-```bar.txt
+```bar
 aaa
 bbb
 ccc

@@ -839,8 +839,8 @@ std::string include_predefiend_macro(const config& config, const std::vector<std
         throw macro_exception{};
     }
 
-    const std::filesystem::path macro_file{ string_to_path_by_config(arguments[0] + ".txt", config) };
-    return read_file_to_string(macro_file);
+    const std::filesystem::path file_path{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    return read_file_to_string(file_path);
 }
 
 std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
@@ -863,13 +863,13 @@ std::string include_tail_predefiend_macro(const config& config, const std::vecto
         throw macro_exception{};
     }
 
-    const std::filesystem::path macro_file{ string_to_path_by_config(arguments[0] + ".txt", config) };
-    if (!std::filesystem::exists(macro_file))
+    const std::filesystem::path file_path{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    if (!std::filesystem::exists(file_path))
     {
         return result;
     }
 
-    const std::string file_content = read_file_to_string(macro_file);
+    const std::string file_content = read_file_to_string(file_path);
     const std::string expaned_file_content{ expand_macro(file_content, config, config.macros) };
 
     int tokens{};
@@ -2803,7 +2803,7 @@ void llm_write_code_block(const config & config, std::string_view markdown)
             }
             else
             {
-                write_response(config, code, name, 0);
+                write_response(config, code, name + ".txt", 0);
             }
         }
     }
