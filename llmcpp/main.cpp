@@ -1062,8 +1062,17 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("subseed_strength", picojson::value{ config.sd_txt2img_params.subseed_strength }));
         request_body_json.insert(std::make_pair("seed_resize_from_h", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_h) }));
         request_body_json.insert(std::make_pair("seed_resize_from_w", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_w) }));
-        request_body_json.insert(std::make_pair("sampler_name", picojson::value{ config.sd_txt2img_params.sampler_name }));
-        request_body_json.insert(std::make_pair("scheduler", picojson::value{ config.sd_txt2img_params.scheduler }));
+        
+        if (!config.sd_txt2img_params.sampler_name.empty())
+        {
+            request_body_json.insert(std::make_pair("sampler_name", picojson::value{ config.sd_txt2img_params.sampler_name }));
+        }
+
+        if (!config.sd_txt2img_params.scheduler.empty())
+        {
+            request_body_json.insert(std::make_pair("scheduler", picojson::value{ config.sd_txt2img_params.scheduler }));
+        }
+
         request_body_json.insert(std::make_pair("batch_size", picojson::value{ static_cast<double>(config.sd_txt2img_params.batch_size) }));
         request_body_json.insert(std::make_pair("n_iter", picojson::value{ static_cast<double>(config.sd_txt2img_params.n_iter) }));
         request_body_json.insert(std::make_pair("steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) }));
@@ -1107,7 +1116,12 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
         request_body_json.insert(std::make_pair("firstphase_height", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_height) }));
         request_body_json.insert(std::make_pair("hr_scale", picojson::value{ config.sd_txt2img_params.hr_scale }));
-        request_body_json.insert(std::make_pair("hr_upscaler", picojson::value{ config.sd_txt2img_params.hr_upscaler }));
+        
+        if (!config.sd_txt2img_params.hr_upscaler.empty())
+        {
+            request_body_json.insert(std::make_pair("hr_upscaler", picojson::value{ config.sd_txt2img_params.hr_upscaler }));
+        }
+        
         request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
         request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
         request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
@@ -1694,10 +1708,23 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     request_body_json.insert(std::make_pair("mirostat", picojson::value{ static_cast<double>(mirostat) }));
     request_body_json.insert(std::make_pair("mirostat_tau", picojson::value{ mirostat_tau }));
     request_body_json.insert(std::make_pair("mirostat_eta", picojson::value{ mirostat_eta }));
-    request_body_json.insert(std::make_pair("genkey", picojson::value{ genkey }));
-    request_body_json.insert(std::make_pair("grammar", picojson::value{ grammar }));
+
+    if (!genkey.empty())
+    {
+        request_body_json.insert(std::make_pair("genkey", picojson::value{ genkey }));
+    }
+
+    if (!grammar.empty())
+    {
+        request_body_json.insert(std::make_pair("grammar", picojson::value{ grammar }));
+    }
+
     request_body_json.insert(std::make_pair("grammar_retain_state", picojson::value{ grammar_retain_state }));
-    request_body_json.insert(std::make_pair("memory", picojson::value{ memory }));
+
+    if (!memory.empty())
+    {
+        request_body_json.insert(std::make_pair("memory", picojson::value{ memory }));
+    }
 
     if (!images.empty())
     {
@@ -1996,7 +2023,7 @@ std::string unescape_string(std::string_view str)
     std::stringstream ss;
     bool in_escape = false;
 
-    for (char c : str)
+    for (const char c : str)
     {
         if (in_escape)
         {
@@ -2936,7 +2963,7 @@ void process_create_or_terminate(const config& config)
     {
         if (!config.server_executable_file.empty())
         {
-            const std::vector<std::string> arguments = parse_command_line_args(config.server_arguments);
+            const std::vector<std::string> arguments{ parse_command_line_args(config.server_arguments) };
             create_process_async(config.server_executable_file, arguments);
             if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
             {
