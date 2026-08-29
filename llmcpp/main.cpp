@@ -747,6 +747,23 @@ struct add_pair_into_json_impl<picojson::value>
     }
 };
 
+template<typename Value>
+struct add_pair_into_json_impl<std::vector<Value>>
+{
+    void operator ()(picojson::object& object, std::string_view key, const std::vector<Value>& value)
+    {
+        if (!value.empty())
+        {
+            picojson::array json_array;
+            for (const auto& element : value)
+            {
+                json_array.push_back(picojson::value{ element });
+            }
+            object.insert(std::pair<std::string, picojson::value>{ key, json_array });
+        }
+    }
+};
+
 template<>
 struct add_pair_into_json_impl<std::string_view>
 {
@@ -1566,17 +1583,7 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
     add_pair_into_json(request_body_json, "max_tokens", static_cast<double>(max_tokens));
     add_pair_into_json(request_body_json, "n", static_cast<double>(n));
     add_pair_into_json(request_body_json, "presence_penalty", presence_penalty);
-
-    if (!stop.empty())
-    {
-        picojson::array stop_array;
-        for (const std::string& str : stop)
-        {
-            stop_array.push_back(picojson::value{ str });
-        }
-        add_pair_into_json(request_body_json, "stop", stop_array);
-    }
-
+    add_pair_into_json(request_body_json, "stop", stop);
     add_pair_into_json(request_body_json, "stream", stream);
     add_pair_into_json(request_body_json, "suffix", suffix);
     add_pair_into_json(request_body_json, "temperature", temperature);
@@ -1627,17 +1634,7 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
     add_pair_into_json(request_body_json, "skip_special_tokens", skip_special_tokens);
     add_pair_into_json(request_body_json, "static_cache", static_cache);
     add_pair_into_json(request_body_json, "truncation_length", static_cast<double>(truncation_length));
-
-    if (!sampler_priority.empty())
-    {
-        picojson::array sampler_priority_array;
-        for (const std::string& str : sampler_priority)
-        {
-            sampler_priority_array.push_back(picojson::value{ str });
-        }
-        add_pair_into_json(request_body_json, "sampler_priority", sampler_priority_array);
-    }
-
+    add_pair_into_json(request_body_json, "sampler_priority", sampler_priority);
     add_pair_into_json(request_body_json, "custom_token_bans", custom_token_bans);
     add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
     add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
@@ -1683,32 +1680,14 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     add_pair_into_json(request_body_json, "prompt", std::string{ prompt });
     add_pair_into_json(request_body_json, "rep_pen", static_cast<double>(rep_pen));
     add_pair_into_json(request_body_json, "rep_pen_range", static_cast<double>(rep_pen_range));
-
-    if (!sampler_order.empty())
-    {
-        picojson::array sampler_order_array;
-        for (const auto& so : sampler_order)
-        {
-            sampler_order_array.push_back(picojson::value{ static_cast<double>(so) });
-        }
-        add_pair_into_json(request_body_json, "sampler_order", sampler_order_array);
-    }
+    add_pair_into_json(request_body_json, "sampler_order", sampler_order);
 
     if (sampler_seed != -1)
     {
         add_pair_into_json(request_body_json, "sampler_seed", static_cast<double>(sampler_seed));
     }
 
-    if (!stop_sequence.empty())
-    {
-        picojson::array stop_sequence_array;
-        for (const auto& ss : stop_sequence)
-        {
-            stop_sequence_array.push_back(picojson::value{ ss });
-        }
-        add_pair_into_json(request_body_json, "stop_sequence", stop_sequence_array);
-    }
-
+    add_pair_into_json(request_body_json, "stop_sequence", stop_sequence);
     add_pair_into_json(request_body_json, "temperature", temperature);
     add_pair_into_json(request_body_json, "tfs", tfs);
     add_pair_into_json(request_body_json, "top_a", top_a);
@@ -1727,17 +1706,7 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     add_pair_into_json(request_body_json, "grammar", grammar);
     add_pair_into_json(request_body_json, "grammar_retain_state", grammar_retain_state);
     add_pair_into_json(request_body_json, "memory", memory);
-
-    if (!images.empty())
-    {
-        picojson::array images_array;
-        for (const auto& image : images)
-        {
-            images_array.push_back(picojson::value{ image });
-        }
-        add_pair_into_json(request_body_json, "images", images_array);
-    }
-
+    add_pair_into_json(request_body_json, "images", images);
     add_pair_into_json(request_body_json, "trim_stop", trim_stop);
     add_pair_into_json(request_body_json, "render_special", render_special);
     add_pair_into_json(request_body_json, "bypass_eos", bypass_eos);
