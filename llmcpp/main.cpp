@@ -1578,7 +1578,6 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
     }
 
     add_pair_into_json(request_body_json, "stream", stream);
-
     add_pair_into_json(request_body_json, "suffix", suffix);
     add_pair_into_json(request_body_json, "temperature", temperature);
     add_pair_into_json(request_body_json, "top_p", top_p);
