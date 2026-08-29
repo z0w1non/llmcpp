@@ -640,6 +640,16 @@ std::string sanitize_as_filename(std::string_view name);
 
 std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content);
 
+bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
+
+void create_process_async(std::string_view excutable_file, const std::vector<std::string>& arguments);
+
+std::wstring to_lower(std::wstring_view str);
+
+std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path);
+
+std::vector<std::string> parse_command_line_args(std::string_view args);
+
 int parse_command_line(
     int argc,
     char** argv,
@@ -647,11 +657,23 @@ int parse_command_line(
 );
 
 void read_prompts(const config& config, prompts& prompts);
+
+std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
+
 void write_response(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
+
+void llm_write_code_block(const config& config, std::string_view markdown);
+
 void llm_append_mode(const config& config, prompts& prompts);
+
 void generate_and_output(const config& config, prompts& prompts);
+
 void set_seed(config& config);
+
+void process_create_or_terminate(const config& config);
+
 void iterate(config& config);
+
 int exception_safe_main(int argc, char** argv);
 
 template<typename Value>
@@ -966,7 +988,7 @@ std::string expand_macro(std::string_view str, const config& config, const macro
     const std::regex macro{ R"(\{\{([^}]+)\}\})", std::regex_constants::ECMAScript };
     std::string::size_type last_position = 0;
 
-    for (std::cregex_iterator iter{ str.data(), str.data() + str.size(), macro}, end; iter != end; ++iter)
+    for (std::cregex_iterator iter{ str.data(), str.data() + str.size(), macro }, end; iter != end; ++iter)
     {
         const std::cmatch& match = *iter;
         const std::string macro_string = match[1].str();
@@ -1062,7 +1084,7 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("subseed_strength", picojson::value{ config.sd_txt2img_params.subseed_strength }));
         request_body_json.insert(std::make_pair("seed_resize_from_h", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_h) }));
         request_body_json.insert(std::make_pair("seed_resize_from_w", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_w) }));
-        
+
         if (!config.sd_txt2img_params.sampler_name.empty())
         {
             request_body_json.insert(std::make_pair("sampler_name", picojson::value{ config.sd_txt2img_params.sampler_name }));
@@ -1116,12 +1138,12 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
         request_body_json.insert(std::make_pair("firstphase_height", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_height) }));
         request_body_json.insert(std::make_pair("hr_scale", picojson::value{ config.sd_txt2img_params.hr_scale }));
-        
+
         if (!config.sd_txt2img_params.hr_upscaler.empty())
         {
             request_body_json.insert(std::make_pair("hr_upscaler", picojson::value{ config.sd_txt2img_params.hr_upscaler }));
         }
-        
+
         request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
         request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
         request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
