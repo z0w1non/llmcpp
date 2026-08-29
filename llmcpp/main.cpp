@@ -159,9 +159,9 @@ struct config;
 struct text_generation_parameters
 {
     virtual ~text_generation_parameters() {}
-    virtual std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const = 0;
+    virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
     virtual std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
-    virtual std::string get_request_body_for_token_count(const std::string& prompt) const = 0;
+    virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
     virtual int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
     virtual int get_max_tokens() const = 0;
     virtual int get_truncation_length() const = 0;
@@ -231,9 +231,9 @@ struct tg_completions_parameters
     std::string dry_sequence_breakers;
     std::string grammar_string;
 
-    std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const override;
+    std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
     std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
-    std::string get_request_body_for_token_count(const std::string& prompt) const override;
+    std::string get_request_body_for_token_count(std::string_view prompt) const override;
     int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
 
     int get_max_tokens() const override
@@ -293,9 +293,9 @@ struct kc_generation_parameters
     bool logprobs{};
     bool replace_instruct_placeholders{};
 
-    std::string get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const override;
+    std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
     std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
-    std::string get_request_body_for_token_count(const std::string& prompt) const override;
+    std::string get_request_body_for_token_count(std::string_view prompt) const override;
     int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
 
     int get_max_tokens() const override
@@ -545,10 +545,10 @@ template<typename Value>
 const Value& throwable_at(const picojson::array& array, std::size_t index);
 
 template<typename Value>
-const Value& throwable_find(const picojson::object& object, const std::string& key);
+const Value& throwable_find(const picojson::object& object, std::string_view key);
 
-std::string base64_decode(const std::string& encoded_string);
-std::string trim(const std::string& str);
+std::string base64_decode(std::string_view encoded_string);
+std::string trim(std::string_view str);
 
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
 
@@ -558,7 +558,7 @@ template<typename Container>
 std::string concatenate(const Container& strings);
 
 template <typename Container>
-void split_string_by_new_line(const std::string& str, Container& container);
+void split_string_by_new_line(std::string_view str, Container& container);
 
 void create_parent_directories(const std::filesystem::path& path);
 
@@ -582,40 +582,40 @@ std::string stdin_predefiend_macro(const config& config, const std::vector<std::
 
 std::optional<std::string> expand_predefined_macro(
     const config& config,
-    const std::string& name,
-    const std::string& arguments
+    std::string_view name,
+    std::string_view arguments
 );
 
-std::string expand_macro(const std::string& str, const config& config, const macros& macros, int depth = 0);
-std::filesystem::path string_to_path_by_config(const std::string& path, const config& config);
+std::string expand_macro(std::string_view str, const config& config, const macros& macros, int depth = 0);
+std::filesystem::path string_to_path_by_config(std::string_view path, const config& config);
 void send_automatic1111_txt2img_request(
     const config& config,
-    const std::string& prompt,
-    const std::string& negative_prompt,
+    std::string_view prompt,
+    std::string_view negative_prompt,
     const std::filesystem::path& path
 );
 
 void send_style_bert_voice_request(
     const config& config,
-    const std::string& text
+    std::string_view text
 );
 
-std::vector<item> parse_item_list(const std::string& str);
+std::vector<item> parse_item_list(std::string_view str);
 
-void write_item_list(const config& config, const std::string& task);
+void write_item_list(const config& config, std::string_view task);
 
-int send_token_count_request(const config& config, const std::string& prompt);
-int get_tokens_from_cache(const config& config, const std::string& str);
+int send_token_count_request(const config& config, std::string_view prompt);
+int get_tokens_from_cache(const config& config, std::string_view str);
 void write_cache(const config& config);
 void read_cache(const config& config);
 
 std::string generate_and_complete_text(
     const config& config,
-    const std::string& prompts,
-    const std::string& prefix
+    std::string_view prompts,
+    std::string_view prefix
 );
 
-std::string unescape_string(const std::string& str);
+std::string unescape_string(std::string_view str);
 
 void parse_predefined_macros(const std::vector<std::string>& predefined_macros, macros& macros);
 void init_logging_with_nowide_cout();
@@ -634,11 +634,11 @@ void set_paragraphs_to_phases(
     std::vector<std::string>& phases
 );
 
-std::string insert_text(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample, std::size_t insert_position);
-std::string insert_text_random(const config& config, std::vector<std::string>& text, const std::string& insert_prompts, std::size_t max_sample);
-std::string insert_text(const config& config, prompts& prompts);
-
 void init_llm_mode(config& config);
+
+std::string sanitize_as_filename(std::string_view name);
+
+std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content);
 
 int parse_command_line(
     int argc,
@@ -647,7 +647,7 @@ int parse_command_line(
 );
 
 void read_prompts(const config& config, prompts& prompts);
-void write_response(const config& config, const std::string& response, const std::string& filepath, std::ios_base::openmode mode);
+void write_response(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
 void llm_append_mode(const config& config, prompts& prompts);
 void generate_and_output(const config& config, prompts& prompts);
 void set_seed(config& config);
@@ -680,9 +680,9 @@ const Value& throwable_at(const picojson::array& array, std::size_t index)
 }
 
 template<typename Value>
-const Value& throwable_find(const picojson::object& object, const std::string& key)
+const Value& throwable_find(const picojson::object& object, std::string_view key)
 {
-    auto iter = object.find(key);
+    auto iter = object.find(std::string{ key });
     if (iter == object.end() || !iter->second.is<Value>())
     {
         throw json_parse_exception{};
@@ -690,17 +690,18 @@ const Value& throwable_find(const picojson::object& object, const std::string& k
     return iter->second.get<Value>();
 }
 
-std::string base64_decode(const std::string& encoded_string)
+std::string base64_decode(std::string_view encoded_string)
 {
-    using iterator = boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<std::string::const_iterator>, 8, 6>;
+    using iterator = boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<std::string_view::const_iterator>, 8, 6>;
     return std::string{ iterator{ encoded_string.begin() }, iterator{ encoded_string.end() } };
 }
 
-std::string trim(const std::string& str)
+std::string trim(std::string_view str)
 {
     const std::regex leading_spaces{ R"(^\s+)", std::regex_constants::ECMAScript };
     const std::regex trailing_spaces{ R"(\s+$)", std::regex_constants::ECMAScript };
-    std::string trimmed_string = std::regex_replace(str, leading_spaces, {});
+    std::string trimmed_string{ str };
+    trimmed_string = std::regex_replace(trimmed_string, leading_spaces, {});
     trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
     return trimmed_string;
 }
@@ -765,20 +766,20 @@ std::string concatenate(const Container& strings)
 }
 
 template <typename Container>
-void split_string_by_new_line(const std::string& str, Container& container)
+void split_string_by_new_line(std::string_view str, Container& container)
 {
     size_t start_position = 0;
     size_t end_position = 0;
 
     while ((end_position = str.find('\n', start_position)) != std::string::npos)
     {
-        container.push_back(str.substr(start_position, end_position - start_position + 1));
+        container.push_back(typename Container::value_type{ str.substr(start_position, end_position - start_position + 1) });
         start_position = end_position + 1;
     }
 
     if (start_position < str.length())
     {
-        container.push_back(str.substr(start_position));
+        container.push_back(typename Container::value_type{ str.substr(start_position) });
     }
 }
 
@@ -913,8 +914,8 @@ std::string stdin_predefiend_macro(const config& config, const std::vector<std::
 
 std::optional<std::string> expand_predefined_macro(
     const config& cfg,
-    const std::string& name,
-    const std::string& arguments
+    std::string_view name,
+    std::string_view arguments
 )
 {
     const static std::map<std::string, std::function<std::string(const config&, const std::vector<std::string>&)>> predefiend_macro_impls
@@ -941,7 +942,7 @@ std::optional<std::string> expand_predefined_macro(
             catch (const runtime_exception& exception)
             {
                 BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-                throw macro_exception{} << error_info::macro::name{ name } << error_info::macro::arguments{ arguments };
+                throw macro_exception{} << error_info::macro::name{ std::string{ name } } << error_info::macro::arguments{ std::string{ arguments } };
             }
         }
         catch (const macro_exception& exception)
@@ -953,7 +954,7 @@ std::optional<std::string> expand_predefined_macro(
     return std::nullopt;
 }
 
-std::string expand_macro(const std::string& str, const config& config, const macros& macros, int depth)
+std::string expand_macro(std::string_view str, const config& config, const macros& macros, int depth)
 {
     constexpr int max_recursive_count = 32;
     if (depth > max_recursive_count)
@@ -965,9 +966,9 @@ std::string expand_macro(const std::string& str, const config& config, const mac
     const std::regex macro{ R"(\{\{([^}]+)\}\})", std::regex_constants::ECMAScript };
     std::string::size_type last_position = 0;
 
-    for (std::sregex_iterator iter{ str.begin(), str.end(), macro }, end; iter != end; ++iter)
+    for (std::cregex_iterator iter{ str.data(), str.data() + str.size(), macro}, end; iter != end; ++iter)
     {
-        const std::smatch& match = *iter;
+        const std::cmatch& match = *iter;
         const std::string macro_string = match[1].str();
         std::string expanded_string;
 
@@ -1017,7 +1018,7 @@ std::string expand_macro(const std::string& str, const config& config, const mac
     return result;
 }
 
-std::filesystem::path string_to_path_by_config(const std::string& path, const config& config)
+std::filesystem::path string_to_path_by_config(std::string_view path, const config& config)
 {
     const std::filesystem::path file_path{ expand_macro(path, config, config.macros) };
     if (file_path.is_relative())
@@ -1031,8 +1032,8 @@ std::filesystem::path string_to_path_by_config(const std::string& path, const co
 
 void send_automatic1111_txt2img_request(
     const config& config,
-    const std::string& prompt,
-    const std::string& negative_prompt,
+    std::string_view prompt,
+    std::string_view negative_prompt,
     const std::filesystem::path& path
 )
 {
@@ -1052,8 +1053,8 @@ void send_automatic1111_txt2img_request(
 
         picojson::object request_body_json;
 
-        request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
-        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ negative_prompt }));
+        request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
+        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ std::string{ negative_prompt } }));
 
         //request_body_json.insert(std::make_pair("styles", picojson::value{ config.sd_txt2img_params.styles }));
         request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) }));
@@ -1080,12 +1081,12 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("s_tmax", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmax) }));
         request_body_json.insert(std::make_pair("s_tmin", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmin) }));
         request_body_json.insert(std::make_pair("s_noise", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_noise) }));
-        
+
         if (!config.sd_txt2img_params.override_settings.empty())
         {
             request_body_json.insert(std::make_pair("override_settings", picojson::value{ config.sd_txt2img_params.override_settings }));
         }
-        
+
         request_body_json.insert(std::make_pair("override_settings_restore_afterwards", picojson::value{ config.sd_txt2img_params.override_settings_restore_afterwards }));
 
         if (!config.sd_txt2img_params.refiner_checkpoint.empty())
@@ -1095,12 +1096,12 @@ void send_automatic1111_txt2img_request(
 
         request_body_json.insert(std::make_pair("refiner_switch_at", picojson::value{ config.sd_txt2img_params.refiner_switch_at }));
         request_body_json.insert(std::make_pair("disable_extra_networks", picojson::value{ config.sd_txt2img_params.disable_extra_networks }));
-        
+
         if (!config.sd_txt2img_params.firstpass_image.empty())
         {
             request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
         }
-        
+
         request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
         request_body_json.insert(std::make_pair("enable_hr", picojson::value{ config.sd_txt2img_params.enable_hr }));
         request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
@@ -1110,12 +1111,12 @@ void send_automatic1111_txt2img_request(
         request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
         request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
         request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
-        
+
         if (!config.sd_txt2img_params.hr_checkpoint_name.empty())
         {
             request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
         }
-        
+
         //request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ prompt }));
         //request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ negative_prompt }));
         request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
@@ -1248,7 +1249,7 @@ void send_automatic1111_txt2img_request(
 
 void send_style_bert_voice_request(
     const config& config,
-    const std::string& text
+    std::string_view text
 )
 {
     namespace beast = boost::beast;
@@ -1357,14 +1358,14 @@ void send_style_bert_voice_request(
     }
 }
 
-std::vector<item> parse_item_list(const std::string& str)
+std::vector<item> parse_item_list(std::string_view str)
 {
     std::vector<item> result;
 
     const std::regex item_regex{ R"(^(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
     const std::regex sub_item_regex{ R"(^(?:[ \t]+)(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
 
-    std::istringstream iss{ str };
+    std::istringstream iss{ std::string{ str } };
     std::string line;
     bool is_prev_line_item{};
     while (std::getline(iss, line))
@@ -1399,7 +1400,7 @@ std::vector<item> parse_item_list(const std::string& str)
     return result;
 }
 
-void write_item_list(const config& config, const std::string& task)
+void write_item_list(const config& config, std::string_view task)
 {
     std::vector<item> items = parse_item_list(task);
 
@@ -1429,7 +1430,7 @@ void write_item_list(const config& config, const std::string& task)
 
 std::string send_completions_request(
     const config& config,
-    const std::string& prompt,
+    std::string_view prompt,
     const text_generation_parameters& params,
     int max_tokens
 )
@@ -1504,10 +1505,10 @@ std::string send_completions_request(
     return {};
 }
 
-std::string tg_completions_parameters::get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const
+std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
 {
     picojson::object request_body_json;
-    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
 
     if (!model.empty())
     {
@@ -1626,10 +1627,10 @@ std::string tg_completions_parameters::parse_response_for_text_completions(const
     return throwable_find<std::string>(choice, "text");
 }
 
-std::string tg_completions_parameters::get_request_body_for_token_count(const std::string& prompt) const
+std::string tg_completions_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
     picojson::object request_body_json;
-    request_body_json.insert(std::make_pair("text", picojson::value{ prompt }));
+    request_body_json.insert(std::make_pair("text", picojson::value{ std::string{ prompt } }));
     return picojson::value{ request_body_json }.serialize();
 }
 
@@ -1643,13 +1644,13 @@ int tg_completions_parameters::parse_response_for_token_count(const boost::beast
     return static_cast<int>(throwable_find<double>(object, "length"));
 }
 
-std::string kc_generation_parameters::get_request_body_for_text_completions(const std::string& prompt, int max_tokens) const
+std::string kc_generation_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
 {
     picojson::object request_body_json;
 
     request_body_json.insert(std::make_pair("max_context_length", picojson::value{ static_cast<double>(max_context_length) }));
     request_body_json.insert(std::make_pair("max_length", picojson::value{ static_cast<double>(max_tokens) }));
-    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
     request_body_json.insert(std::make_pair("rep_pen", picojson::value{ static_cast<double>(rep_pen) }));
     request_body_json.insert(std::make_pair("rep_pen_range", picojson::value{ static_cast<double>(rep_pen_range) }));
 
@@ -1756,10 +1757,10 @@ std::string kc_generation_parameters::parse_response_for_text_completions(const 
     return throwable_find<std::string>(result, "text");
 }
 
-std::string kc_generation_parameters::get_request_body_for_token_count(const std::string& prompt) const
+std::string kc_generation_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
     picojson::object request_body_json;
-    request_body_json.insert(std::make_pair("prompt", picojson::value{ prompt }));
+    request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
     return picojson::value{ request_body_json }.serialize();
 }
 
@@ -1773,7 +1774,7 @@ int kc_generation_parameters::parse_response_for_token_count(const boost::beast:
     return static_cast<int>(throwable_find<double>(object, "value"));
 }
 
-int send_token_count_request(const config& config, const std::string& prompt)
+int send_token_count_request(const config& config, std::string_view prompt)
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
@@ -1837,12 +1838,12 @@ int send_token_count_request(const config& config, const std::string& prompt)
     }
 }
 
-int get_tokens_from_cache(const config& config, const std::string& str)
+int get_tokens_from_cache(const config& config, std::string_view str)
 {
     constexpr std::size_t capacity = 1000;
     int tokens{};
 
-    auto iter = config.lru_cache.get<key_tag>().find(str);
+    auto iter = config.lru_cache.get<key_tag>().find(std::string{ str });
     if (iter != config.lru_cache.get<key_tag>().end())
     {
         tokens = iter->tokens;
@@ -1853,7 +1854,7 @@ int get_tokens_from_cache(const config& config, const std::string& str)
     else
     {
         tokens = send_token_count_request(config, str);
-        config.lru_cache.insert({ str, tokens });
+        config.lru_cache.insert({ std::string{ str }, tokens });
     }
 
     if (config.lru_cache.size() > capacity)
@@ -1929,11 +1930,11 @@ void read_cache(const config& config)
 
 std::string generate_and_complete_text(
     const config& config,
-    const std::string& prompts,
-    const std::string& prefix
+    std::string_view prompts,
+    std::string_view prefix
 )
 {
-    std::string initial_prompts = prompts;
+    std::string initial_prompts{ prompts };
     std::size_t initial_prompts_size;
     if (!config.llm_prompt_params.skip_generation_prefix)
     {
@@ -1990,7 +1991,7 @@ std::string generate_and_complete_text(
     return current_text.substr(initial_prompts_size);
 }
 
-std::string unescape_string(const std::string& str)
+std::string unescape_string(std::string_view str)
 {
     std::stringstream ss;
     bool in_escape = false;
@@ -2255,15 +2256,12 @@ std::string sanitize_as_filename(std::string_view name)
 
 std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content)
 {
-    using regex_iterator = std::regex_iterator<std::string_view::const_iterator>;
-    using match = std::match_results<std::string_view::const_iterator>;
-
     std::map<std::string, std::string> result;
     const std::regex code_block_regex(R"(```(\S+)\s*\n([\s\S]*?)```)");
 
-    for (regex_iterator iter = regex_iterator(markdown_content.begin(), markdown_content.end(), code_block_regex); iter != regex_iterator{}; ++iter)
+    for (std::cregex_iterator iter = std::cregex_iterator(markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex); iter != std::cregex_iterator{}; ++iter)
     {
-        const match match{ *iter };
+        const std::cmatch match{ *iter };
         const std::string name = sanitize_as_filename(match[1].str());
         const std::string code = match[2].str();
         result[name] = code;
@@ -2305,7 +2303,7 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
     return false;
 }
 
-void create_process_async(const std::string& excutable_file, const std::vector<std::string>& arguments)
+void create_process_async(std::string_view excutable_file, const std::vector<std::string>& arguments)
 {
     namespace process = boost::process::v2;
     boost::asio::io_context ctx;
@@ -2319,7 +2317,7 @@ void create_process_async(const std::string& excutable_file, const std::vector<s
     proc.detach();
 }
 
-std::wstring to_lower(const std::wstring& str)
+std::wstring to_lower(std::wstring_view str)
 {
     std::wstring result{ str };
     std::transform(result.begin(), result.end(), result.begin(), std::towlower);
@@ -2381,10 +2379,14 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
     return terminated_count;
 }
 
-std::vector<std::string> parse_command_line_args(const std::string& args)
+std::vector<std::string> parse_command_line_args(std::string_view args)
 {
     boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
-    boost::tokenizer<boost::escaped_list_separator<char>> tokenizer{ args, separator };
+    boost::tokenizer<
+        boost::escaped_list_separator<char>,
+        std::string_view::const_iterator,
+        std::string
+    > tokenizer{ args, separator };
 
     std::vector<std::string> result;
     for (const std::string& token : tokenizer)
@@ -2790,7 +2792,7 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     return result;
 }
 
-void write_response(const config& config, const std::string& response, const std::string & filepath, std::ios_base::openmode mode)
+void write_response(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
     const std::filesystem::path file_path{ string_to_path_by_config(filepath, config) };
     create_parent_directories(file_path);
@@ -2802,7 +2804,7 @@ void write_response(const config& config, const std::string& response, const std
     ofs << response;
 }
 
-void llm_write_code_block(const config & config, std::string_view markdown)
+void llm_write_code_block(const config& config, std::string_view markdown)
 {
     if (config.llm_prompt_params.code_block_extract)
     {
