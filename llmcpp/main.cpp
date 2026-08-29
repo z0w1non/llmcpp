@@ -1140,7 +1140,6 @@ void send_automatic1111_txt2img_request(
 
         add_pair_into_json(request_body_json, "prompt", prompt);
         add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
-
         //add_pair_into_json(request_body_json, "styles", config.sd_txt2img_params.styles);
         add_pair_into_json(request_body_json, "seed", static_cast<double>(config.sd_txt2img_params.seed));
         add_pair_into_json(request_body_json, "subseed", static_cast<double>(config.sd_txt2img_params.subseed));
@@ -1710,32 +1709,12 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     add_pair_into_json(request_body_json, "trim_stop", trim_stop);
     add_pair_into_json(request_body_json, "render_special", render_special);
     add_pair_into_json(request_body_json, "bypass_eos", bypass_eos);
-
-    if (!banned_tokens.empty())
-    {
-        picojson::array banned_tokens_array;
-        for (const auto& banned_token : banned_tokens)
-        {
-            banned_tokens_array.push_back(picojson::value{ banned_token });
-        }
-        add_pair_into_json(request_body_json, "banned_tokens", banned_tokens_array);
-    }
-
+    add_pair_into_json(request_body_json, "banned_tokens", banned_tokens);
     add_pair_into_json(request_body_json, "dry_multiplier", dry_multiplier);
     add_pair_into_json(request_body_json, "dry_base", dry_base);
     add_pair_into_json(request_body_json, "dry_allowed_length", static_cast<double>(dry_allowed_length));
     add_pair_into_json(request_body_json, "dry_penalty_last_n", static_cast<double>(dry_penalty_last_n));
-
-    if (!dry_sequence_breakers.empty())
-    {
-        picojson::array dry_sequence_breakers_array;
-        for (const auto& dry_sequence_breaker : dry_sequence_breakers)
-        {
-            dry_sequence_breakers_array.push_back(picojson::value{ dry_sequence_breaker });
-        }
-        add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers_array);
-    }
-
+    add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
     add_pair_into_json(request_body_json, "xtc_probability", xtc_probability);
     add_pair_into_json(request_body_json, "nsigma", nsigma);
     add_pair_into_json(request_body_json, "logprobs", logprobs);
