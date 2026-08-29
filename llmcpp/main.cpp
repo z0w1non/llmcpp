@@ -51,6 +51,7 @@
 #include <stdexcept>
 #include <optional>
 #include <thread>
+#include <type_traits>
 #include "picojson.h"
 
 #if defined(_WIN32)
@@ -729,12 +730,25 @@ std::string trim(std::string_view str)
     return trimmed_string;
 }
 
+template<typename T>
+struct promote_integral_to_double
+{
+    using type = std::conditional_t<
+        std::is_integral_v<T> && !std::is_same_v<std::remove_cv_t<T>, bool>,
+        double,
+        T
+    >;
+};
+
+template<typename T>
+using promote_integral_to_double_t = typename promote_integral_to_double<T>::type;
+
 template<typename Value>
 struct add_pair_into_json_impl
 {
     void operator ()(picojson::object& object, std::string_view key, const Value& value)
     {
-        object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ value } });
+        object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ static_cast<promote_integral_to_double_t<Value>>(value) } });
     }
 };
 
@@ -744,23 +758,6 @@ struct add_pair_into_json_impl<picojson::value>
     void operator ()(picojson::object& object, std::string_view key, const picojson::value& value)
     {
         object.insert(std::pair<std::string, picojson::value>{ key, value });
-    }
-};
-
-template<typename Value>
-struct add_pair_into_json_impl<std::vector<Value>>
-{
-    void operator ()(picojson::object& object, std::string_view key, const std::vector<Value>& value)
-    {
-        if (!value.empty())
-        {
-            picojson::array json_array;
-            for (const auto& element : value)
-            {
-                json_array.push_back(picojson::value{ element });
-            }
-            object.insert(std::pair<std::string, picojson::value>{ key, json_array });
-        }
     }
 };
 
@@ -777,6 +774,15 @@ struct add_pair_into_json_impl<std::string_view>
 };
 
 template<>
+struct add_pair_into_json_impl<char*>
+{
+    void operator ()(picojson::object& object, std::string_view key, const char* value)
+    {
+        add_pair_into_json_impl<std::string_view>{}(object, key, value);
+    }
+};
+
+template<>
 struct add_pair_into_json_impl<std::string>
 {
     void operator ()(picojson::object& object, std::string_view key, const std::string& value)
@@ -788,7 +794,21 @@ struct add_pair_into_json_impl<std::string>
 template<typename Value>
 void add_pair_into_json(picojson::object& object, std::string_view key, const Value& value)
 {
-    add_pair_into_json_impl<Value>{}(object, key, value);
+    add_pair_into_json_impl<std::decay_t<Value>>{}(object, key, value);
+}
+
+template<typename Value>
+void add_pair_into_json_from_vector(picojson::object& object, std::string_view key, const std::vector<Value>& value)
+{
+    if (!value.empty())
+    {
+        picojson::array json_array;
+        for (const auto& element : value)
+        {
+            json_array.push_back(picojson::value{ static_cast<promote_integral_to_double_t<Value>>(element) });
+        }
+        object.insert(std::pair<std::string, picojson::value>{ key, json_array });
+    }
 }
 
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens)
@@ -1193,12 +1213,14 @@ void send_automatic1111_txt2img_request(
         if (config.sd_txt2img_params.abg_remover_enable)
         {
             add_pair_into_json(request_body_json, "script_name", "abg remover");
-            picojson::array args_array;
-            args_array.push_back(picojson::value{ false });
-            args_array.push_back(picojson::value{ false });
-            args_array.push_back(picojson::value{ false });
-            args_array.push_back(picojson::value{ "#000000" });
-            args_array.push_back(picojson::value{ false });
+            picojson::array args_array
+            {
+                picojson::value{ false },
+                picojson::value{ false },
+                picojson::value{ false },
+                picojson::value{ "#000000" },
+                picojson::value{ false }
+            };
             add_pair_into_json(request_body_json, "script_args", args_array);
         }
 
@@ -1582,7 +1604,7 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
     add_pair_into_json(request_body_json, "max_tokens", static_cast<double>(max_tokens));
     add_pair_into_json(request_body_json, "n", static_cast<double>(n));
     add_pair_into_json(request_body_json, "presence_penalty", presence_penalty);
-    add_pair_into_json(request_body_json, "stop", stop);
+    add_pair_into_json_from_vector(request_body_json, "stop", stop);
     add_pair_into_json(request_body_json, "stream", stream);
     add_pair_into_json(request_body_json, "suffix", suffix);
     add_pair_into_json(request_body_json, "temperature", temperature);
@@ -1633,7 +1655,7 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
     add_pair_into_json(request_body_json, "skip_special_tokens", skip_special_tokens);
     add_pair_into_json(request_body_json, "static_cache", static_cache);
     add_pair_into_json(request_body_json, "truncation_length", static_cast<double>(truncation_length));
-    add_pair_into_json(request_body_json, "sampler_priority", sampler_priority);
+    add_pair_into_json_from_vector(request_body_json, "sampler_priority", sampler_priority);
     add_pair_into_json(request_body_json, "custom_token_bans", custom_token_bans);
     add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
     add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
@@ -1679,14 +1701,14 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     add_pair_into_json(request_body_json, "prompt", std::string{ prompt });
     add_pair_into_json(request_body_json, "rep_pen", static_cast<double>(rep_pen));
     add_pair_into_json(request_body_json, "rep_pen_range", static_cast<double>(rep_pen_range));
-    add_pair_into_json(request_body_json, "sampler_order", sampler_order);
+    add_pair_into_json_from_vector(request_body_json, "sampler_order", sampler_order);
 
     if (sampler_seed != -1)
     {
         add_pair_into_json(request_body_json, "sampler_seed", static_cast<double>(sampler_seed));
     }
 
-    add_pair_into_json(request_body_json, "stop_sequence", stop_sequence);
+    add_pair_into_json_from_vector(request_body_json, "stop_sequence", stop_sequence);
     add_pair_into_json(request_body_json, "temperature", temperature);
     add_pair_into_json(request_body_json, "tfs", tfs);
     add_pair_into_json(request_body_json, "top_a", top_a);
@@ -1705,16 +1727,16 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
     add_pair_into_json(request_body_json, "grammar", grammar);
     add_pair_into_json(request_body_json, "grammar_retain_state", grammar_retain_state);
     add_pair_into_json(request_body_json, "memory", memory);
-    add_pair_into_json(request_body_json, "images", images);
+    add_pair_into_json_from_vector(request_body_json, "images", images);
     add_pair_into_json(request_body_json, "trim_stop", trim_stop);
     add_pair_into_json(request_body_json, "render_special", render_special);
     add_pair_into_json(request_body_json, "bypass_eos", bypass_eos);
-    add_pair_into_json(request_body_json, "banned_tokens", banned_tokens);
+    add_pair_into_json_from_vector(request_body_json, "banned_tokens", banned_tokens);
     add_pair_into_json(request_body_json, "dry_multiplier", dry_multiplier);
     add_pair_into_json(request_body_json, "dry_base", dry_base);
     add_pair_into_json(request_body_json, "dry_allowed_length", static_cast<double>(dry_allowed_length));
     add_pair_into_json(request_body_json, "dry_penalty_last_n", static_cast<double>(dry_penalty_last_n));
-    add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
+    add_pair_into_json_from_vector(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
     add_pair_into_json(request_body_json, "xtc_probability", xtc_probability);
     add_pair_into_json(request_body_json, "nsigma", nsigma);
     add_pair_into_json(request_body_json, "logprobs", logprobs);
