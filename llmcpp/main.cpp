@@ -1916,7 +1916,7 @@ int get_tokens_from_cache(const config& config, std::string_view str)
 
 void write_cache(const config& config)
 {
-    if (config.mode != "tg")
+    if (config.mode != "tg" && config.mode != "kc")
     {
         return;
     }
