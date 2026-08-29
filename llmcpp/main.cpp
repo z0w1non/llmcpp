@@ -1133,7 +1133,11 @@ void send_automatic1111_txt2img_request(
             request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
         }
 
-        request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
+        if (!config.sd_txt2img_params.comments.empty())
+        {
+            request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
+        }
+
         request_body_json.insert(std::make_pair("enable_hr", picojson::value{ config.sd_txt2img_params.enable_hr }));
         request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
         request_body_json.insert(std::make_pair("firstphase_height", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_height) }));
@@ -1155,7 +1159,10 @@ void send_automatic1111_txt2img_request(
 
         //request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ prompt }));
         //request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ negative_prompt }));
-        request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
+        if (!config.sd_txt2img_params.force_task_id.empty())
+        {
+            request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
+        }
 
         if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
         {
@@ -1933,7 +1940,7 @@ void write_cache(const config& config)
     json.insert(std::make_pair("cache", picojson::value{ cache }));
     const std::string serialized = picojson::value{ json }.serialize();
 
-    std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
+    const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
     create_parent_directories(cache_path);
     boost::nowide::ofstream ofs{ cache_path };
     ofs << serialized;
