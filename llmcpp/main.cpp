@@ -2823,9 +2823,9 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     {
         const std::string::size_type last = result.find(suffix, first + prefix.length());
         if (last != std::string::npos) {
-            const std::string::size_type deleteLength = (last + suffix.length()) - first;
-            BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result.substr(first, deleteLength) << "\n```\n";
-            result.erase(first, deleteLength);
+            const std::string::size_type remove_length = (last + suffix.length()) - first;
+            BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
+            result.erase(first, remove_length);
         }
         else
         {
