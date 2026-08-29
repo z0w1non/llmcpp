@@ -1159,6 +1159,27 @@ std::filesystem::path string_to_path_by_config(std::string_view path, const conf
     return file_path;
 }
 
+
+std::string make_automatic1111_comment(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+{
+    std::ostringstream oss;
+    oss
+        << prompt << std::endl
+        << "Negative prompt: " << negative_prompt << std::endl
+        << "Steps: " << parameters.steps << ", "
+        << "Sampler: " << parameters.sampler_name << ", "
+        << "CFG scale: " << parameters.cfg_scale << ", "
+        << "Seed: " << parameters.seed << ", "
+        << "Size: " << parameters.width << "x" << parameters.height << ", "
+        //<< "Model hash: "
+        << "Denoising strength: " << parameters.denoising_strength << ", "
+        << "Hires upscale: " << parameters.hr_scale << ", "
+        << "Hires steps: " << parameters.hr_second_pass_steps << ", "
+        << "Hires upscaler: " << parameters.hr_upscaler
+        << std::flush;
+    return oss.str();
+}
+
 void send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
@@ -1215,7 +1236,17 @@ void send_automatic1111_txt2img_request(
         add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
         add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
         add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
+
         add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
+        //if (config.sd_txt2img_params.comments.empty())
+        //{
+        //    add_pair_into_json(request_body_json, "comments", make_automatic1111_comment(config.sd_txt2img_params, prompt, negative_prompt));
+        //}
+        //else
+        //{
+        //    add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
+        //}
+        
         add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
         add_pair_into_json(request_body_json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
         add_pair_into_json(request_body_json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
