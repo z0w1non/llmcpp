@@ -21,6 +21,7 @@
 #include <boost/nowide/args.hpp>
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/iostream.hpp>
+#include <boost/nowide/cstdlib.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/stacktrace.hpp>
@@ -582,6 +583,8 @@ std::string datetime_predefiend_macro(const config& config, const std::vector<st
 
 std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&);
 
+std::string environ_predefiend_macro(const config& config, const std::vector<std::string>&);
+
 std::optional<std::string> expand_predefined_macro(
     const config& config,
     std::string_view name,
@@ -1020,6 +1023,23 @@ std::string stdin_predefiend_macro(const config& config, const std::vector<std::
     return *config.opt_stdin;
 }
 
+std::string env_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
+{
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    const char* env = boost::nowide::getenv(arguments[0].c_str());
+
+    if (!env)
+    {
+        return std::string{};
+    }
+
+    return std::string{ env };
+}
+
 std::optional<std::string> expand_predefined_macro(
     const config& cfg,
     std::string_view name,
@@ -1031,7 +1051,8 @@ std::optional<std::string> expand_predefined_macro(
         {"include", include_predefiend_macro},
         {"include_tail", include_predefiend_macro},
         {"datetime", datetime_predefiend_macro},
-        {"stdin", stdin_predefiend_macro}
+        {"stdin", stdin_predefiend_macro},
+        {"env", env_predefiend_macro},
     };
 
     auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&name](const auto& pair) { return boost::iequals(name, pair.first); });
