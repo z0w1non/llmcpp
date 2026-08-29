@@ -570,6 +570,8 @@ std::string read_file_to_string(const std::filesystem::path& file);
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
+std::string complement_extension(std::string_view filepath, std::string_view extension);
+
 std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
 
 std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
@@ -832,6 +834,16 @@ Integer random(Integer min, Integer max)
     return distribution(random_engine);
 }
 
+std::string complement_extension(std::string_view filepath, std::string_view extension)
+{
+    std::filesystem::path temp{ filepath };
+    if (!temp.has_extension())
+    {
+        temp += extension;
+    }
+    return temp.string();
+}
+
 std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
 {
     if (arguments.size() < 1)
@@ -839,7 +851,7 @@ std::string include_predefiend_macro(const config& config, const std::vector<std
         throw macro_exception{};
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
     return read_file_to_string(file_path);
 }
 
@@ -863,7 +875,7 @@ std::string include_tail_predefiend_macro(const config& config, const std::vecto
         throw macro_exception{};
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(arguments[0] + ".txt", config) };
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
     if (!std::filesystem::exists(file_path))
     {
         return result;
@@ -2803,7 +2815,7 @@ void llm_write_code_block(const config & config, std::string_view markdown)
             }
             else
             {
-                write_response(config, code, name + ".txt", 0);
+                write_response(config, code, complement_extension(name, ".txt"), 0);
             }
         }
     }
