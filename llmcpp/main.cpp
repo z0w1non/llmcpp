@@ -915,8 +915,8 @@ std::string include_tail_predefiend_macro(const config& config, const std::vecto
 
 std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&)
 {
-    boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
-    boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
+    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
+    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
     std::ostringstream oss;
     oss.imbue(std::locale(oss.getloc(), facet));
     oss << local_time;
