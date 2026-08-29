@@ -743,58 +743,61 @@ struct promote_integral_to_double
 template<typename T>
 using promote_integral_to_double_t = typename promote_integral_to_double<T>::type;
 
-template<typename Value>
-struct add_pair_into_json_impl
+namespace detail
 {
-    void operator ()(picojson::object& object, std::string_view key, const Value& value)
+    template<typename Value>
+    struct add_pair_into_json_impl
     {
-        object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ static_cast<promote_integral_to_double_t<Value>>(value) } });
-    }
-};
-
-template<>
-struct add_pair_into_json_impl<picojson::value>
-{
-    void operator ()(picojson::object& object, std::string_view key, const picojson::value& value)
-    {
-        object.insert(std::pair<std::string, picojson::value>{ key, value });
-    }
-};
-
-template<>
-struct add_pair_into_json_impl<std::string_view>
-{
-    void operator ()(picojson::object& object, std::string_view key, std::string_view value)
-    {
-        if (!value.empty())
+        void operator ()(picojson::object& object, std::string_view key, const Value& value)
         {
-            object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ std::string{ value } } });
+            object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ static_cast<promote_integral_to_double_t<Value>>(value) } });
         }
-    }
-};
+    };
 
-template<>
-struct add_pair_into_json_impl<char*>
-{
-    void operator ()(picojson::object& object, std::string_view key, const char* value)
+    template<>
+    struct add_pair_into_json_impl<picojson::value>
     {
-        add_pair_into_json_impl<std::string_view>{}(object, key, value);
-    }
-};
+        void operator ()(picojson::object& object, std::string_view key, const picojson::value& value)
+        {
+            object.insert(std::pair<std::string, picojson::value>{ key, value });
+        }
+    };
 
-template<>
-struct add_pair_into_json_impl<std::string>
-{
-    void operator ()(picojson::object& object, std::string_view key, const std::string& value)
+    template<>
+    struct add_pair_into_json_impl<std::string_view>
     {
-        add_pair_into_json_impl<std::string_view>{}(object, key, value);
-    }
-};
+        void operator ()(picojson::object& object, std::string_view key, std::string_view value)
+        {
+            if (!value.empty())
+            {
+                object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ std::string{ value } } });
+            }
+        }
+    };
+
+    template<>
+    struct add_pair_into_json_impl<char*>
+    {
+        void operator ()(picojson::object& object, std::string_view key, const char* value)
+        {
+            add_pair_into_json_impl<std::string_view>{}(object, key, value);
+        }
+    };
+
+    template<>
+    struct add_pair_into_json_impl<std::string>
+    {
+        void operator ()(picojson::object& object, std::string_view key, const std::string& value)
+        {
+            add_pair_into_json_impl<std::string_view>{}(object, key, value);
+        }
+    };
+}
 
 template<typename Value>
 void add_pair_into_json(picojson::object& object, std::string_view key, const Value& value)
 {
-    add_pair_into_json_impl<std::decay_t<Value>>{}(object, key, value);
+    detail::add_pair_into_json_impl<std::decay_t<Value>>{}(object, key, value);
 }
 
 template<typename Value>
