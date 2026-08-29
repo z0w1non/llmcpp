@@ -548,6 +548,7 @@ template<typename Value>
 const Value& throwable_find(const picojson::object& object, std::string_view key);
 
 std::string base64_decode(std::string_view encoded_string);
+
 std::string trim(std::string_view str);
 
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
@@ -726,6 +727,42 @@ std::string trim(std::string_view str)
     trimmed_string = std::regex_replace(trimmed_string, leading_spaces, {});
     trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
     return trimmed_string;
+}
+
+template<typename Value>
+struct add_pair_into_json_impl
+{
+    void operator ()(picojson::object& object, std::string_view key, const Value& value)
+    {
+        object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ value } });
+    }
+};
+
+template<>
+struct add_pair_into_json_impl<std::string_view>
+{
+    void operator ()(picojson::object& object, std::string_view key, std::string_view value)
+    {
+        if (!value.empty())
+        {
+            object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ std::string{ value } } });
+        }
+    }
+};
+
+template<>
+struct add_pair_into_json_impl<std::string>
+{
+    void operator ()(picojson::object& object, std::string_view key, const std::string& value)
+    {
+        add_pair_into_json_impl<std::string_view>{}(object, key, value);
+    }
+};
+
+template<typename Value>
+void add_pair_into_json(picojson::object& object, std::string_view key, const Value& value)
+{
+    add_pair_into_json_impl<Value>{}(object, key, value);
 }
 
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens)
@@ -1075,98 +1112,67 @@ void send_automatic1111_txt2img_request(
 
         picojson::object request_body_json;
 
-        request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
-        request_body_json.insert(std::make_pair("negative_prompt", picojson::value{ std::string{ negative_prompt } }));
+        add_pair_into_json(request_body_json, "prompt", prompt);
+        add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
 
-        //request_body_json.insert(std::make_pair("styles", picojson::value{ config.sd_txt2img_params.styles }));
-        request_body_json.insert(std::make_pair("seed", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) }));
-        request_body_json.insert(std::make_pair("subseed", picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) }));
-        request_body_json.insert(std::make_pair("subseed_strength", picojson::value{ config.sd_txt2img_params.subseed_strength }));
-        request_body_json.insert(std::make_pair("seed_resize_from_h", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_h) }));
-        request_body_json.insert(std::make_pair("seed_resize_from_w", picojson::value{ static_cast<double>(config.sd_txt2img_params.seed_resize_from_w) }));
+        //add_pair_into_json(request_body_json, "styles", config.sd_txt2img_params.styles);
+        add_pair_into_json(request_body_json, "seed", static_cast<double>(config.sd_txt2img_params.seed));
+        add_pair_into_json(request_body_json, "subseed", static_cast<double>(config.sd_txt2img_params.subseed));
+        add_pair_into_json(request_body_json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
+        add_pair_into_json(request_body_json, "seed_resize_from_h", static_cast<double>(config.sd_txt2img_params.seed_resize_from_h));
+        add_pair_into_json(request_body_json, "seed_resize_from_w", static_cast<double>(config.sd_txt2img_params.seed_resize_from_w));
 
         if (!config.sd_txt2img_params.sampler_name.empty())
         {
-            request_body_json.insert(std::make_pair("sampler_name", picojson::value{ config.sd_txt2img_params.sampler_name }));
+            add_pair_into_json(request_body_json, "sampler_name", config.sd_txt2img_params.sampler_name);
         }
 
         if (!config.sd_txt2img_params.scheduler.empty())
         {
-            request_body_json.insert(std::make_pair("scheduler", picojson::value{ config.sd_txt2img_params.scheduler }));
+            add_pair_into_json(request_body_json, "scheduler", config.sd_txt2img_params.scheduler);
         }
 
-        request_body_json.insert(std::make_pair("batch_size", picojson::value{ static_cast<double>(config.sd_txt2img_params.batch_size) }));
-        request_body_json.insert(std::make_pair("n_iter", picojson::value{ static_cast<double>(config.sd_txt2img_params.n_iter) }));
-        request_body_json.insert(std::make_pair("steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) }));
-        request_body_json.insert(std::make_pair("cfg_scale", picojson::value{ config.sd_txt2img_params.cfg_scale }));
-        request_body_json.insert(std::make_pair("width", picojson::value{ static_cast<double>(config.sd_txt2img_params.width) }));
-        request_body_json.insert(std::make_pair("height", picojson::value{ static_cast<double>(config.sd_txt2img_params.height) }));
-        request_body_json.insert(std::make_pair("restore_faces", picojson::value{ config.sd_txt2img_params.restore_faces }));
-        request_body_json.insert(std::make_pair("tiling", picojson::value{ config.sd_txt2img_params.tiling }));
-        request_body_json.insert(std::make_pair("do_not_save_samples", picojson::value{ config.sd_txt2img_params.do_not_save_samples }));
-        request_body_json.insert(std::make_pair("do_not_save_grid", picojson::value{ config.sd_txt2img_params.do_not_save_grid }));
-        request_body_json.insert(std::make_pair("eta", picojson::value{ static_cast<double>(config.sd_txt2img_params.eta) }));
-        request_body_json.insert(std::make_pair("denoising_strength", picojson::value{ config.sd_txt2img_params.denoising_strength }));
-        request_body_json.insert(std::make_pair("s_min_uncond", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_min_uncond) }));
-        request_body_json.insert(std::make_pair("s_churn", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_churn) }));
-        request_body_json.insert(std::make_pair("s_tmax", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmax) }));
-        request_body_json.insert(std::make_pair("s_tmin", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_tmin) }));
-        request_body_json.insert(std::make_pair("s_noise", picojson::value{ static_cast<double>(config.sd_txt2img_params.s_noise) }));
+        add_pair_into_json(request_body_json, "batch_size", static_cast<double>(config.sd_txt2img_params.batch_size));
+        add_pair_into_json(request_body_json, "n_iter", static_cast<double>(config.sd_txt2img_params.n_iter));
+        add_pair_into_json(request_body_json, "steps", static_cast<double>(config.sd_txt2img_params.steps));
+        add_pair_into_json(request_body_json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
+        add_pair_into_json(request_body_json, "width", static_cast<double>(config.sd_txt2img_params.width));
+        add_pair_into_json(request_body_json, "height", static_cast<double>(config.sd_txt2img_params.height));
+        add_pair_into_json(request_body_json, "restore_faces", config.sd_txt2img_params.restore_faces);
+        add_pair_into_json(request_body_json, "tiling", config.sd_txt2img_params.tiling);
+        add_pair_into_json(request_body_json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
+        add_pair_into_json(request_body_json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
+        add_pair_into_json(request_body_json, "eta", static_cast<double>(config.sd_txt2img_params.eta));
+        add_pair_into_json(request_body_json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
+        add_pair_into_json(request_body_json, "s_min_uncond", static_cast<double>(config.sd_txt2img_params.s_min_uncond));
+        add_pair_into_json(request_body_json, "s_churn", static_cast<double>(config.sd_txt2img_params.s_churn));
+        add_pair_into_json(request_body_json, "s_tmax", static_cast<double>(config.sd_txt2img_params.s_tmax));
+        add_pair_into_json(request_body_json, "s_tmin", static_cast<double>(config.sd_txt2img_params.s_tmin));
+        add_pair_into_json(request_body_json, "s_noise", static_cast<double>(config.sd_txt2img_params.s_noise));
 
-        if (!config.sd_txt2img_params.override_settings.empty())
-        {
-            request_body_json.insert(std::make_pair("override_settings", picojson::value{ config.sd_txt2img_params.override_settings }));
-        }
-
-        request_body_json.insert(std::make_pair("override_settings_restore_afterwards", picojson::value{ config.sd_txt2img_params.override_settings_restore_afterwards }));
-
-        if (!config.sd_txt2img_params.refiner_checkpoint.empty())
-        {
-            request_body_json.insert(std::make_pair("refiner_checkpoint", picojson::value{ config.sd_txt2img_params.refiner_checkpoint }));
-        }
-
-        request_body_json.insert(std::make_pair("refiner_switch_at", picojson::value{ config.sd_txt2img_params.refiner_switch_at }));
-        request_body_json.insert(std::make_pair("disable_extra_networks", picojson::value{ config.sd_txt2img_params.disable_extra_networks }));
-
-        if (!config.sd_txt2img_params.firstpass_image.empty())
-        {
-            request_body_json.insert(std::make_pair("firstpass_image", picojson::value{ config.sd_txt2img_params.firstpass_image }));
-        }
-
-        if (!config.sd_txt2img_params.comments.empty())
-        {
-            request_body_json.insert(std::make_pair("comments", picojson::value{ config.sd_txt2img_params.comments }));
-        }
-
-        request_body_json.insert(std::make_pair("enable_hr", picojson::value{ config.sd_txt2img_params.enable_hr }));
-        request_body_json.insert(std::make_pair("firstphase_width", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_width) }));
-        request_body_json.insert(std::make_pair("firstphase_height", picojson::value{ static_cast<double>(config.sd_txt2img_params.firstphase_height) }));
-        request_body_json.insert(std::make_pair("hr_scale", picojson::value{ config.sd_txt2img_params.hr_scale }));
-
-        if (!config.sd_txt2img_params.hr_upscaler.empty())
-        {
-            request_body_json.insert(std::make_pair("hr_upscaler", picojson::value{ config.sd_txt2img_params.hr_upscaler }));
-        }
-
-        request_body_json.insert(std::make_pair("hr_second_pass_steps", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps) }));
-        request_body_json.insert(std::make_pair("hr_resize_x", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_x) }));
-        request_body_json.insert(std::make_pair("hr_resize_y", picojson::value{ static_cast<double>(config.sd_txt2img_params.hr_resize_y) }));
-
-        if (!config.sd_txt2img_params.hr_checkpoint_name.empty())
-        {
-            request_body_json.insert(std::make_pair("hr_checkpoint_name", picojson::value{ config.sd_txt2img_params.hr_checkpoint_name }));
-        }
-
-        //request_body_json.insert(std::make_pair("hr_prompt", picojson::value{ prompt }));
-        //request_body_json.insert(std::make_pair("hr_negative_prompt", picojson::value{ negative_prompt }));
-        if (!config.sd_txt2img_params.force_task_id.empty())
-        {
-            request_body_json.insert(std::make_pair("force_task_id", picojson::value{ config.sd_txt2img_params.force_task_id }));
-        }
+        add_pair_into_json(request_body_json, "override_settings", config.sd_txt2img_params.override_settings);
+        add_pair_into_json(request_body_json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
+        add_pair_into_json(request_body_json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
+        add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
+        add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
+        add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
+        add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
+        add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
+        add_pair_into_json(request_body_json, "firstphase_width", static_cast<double>(config.sd_txt2img_params.firstphase_width));
+        add_pair_into_json(request_body_json, "firstphase_height", static_cast<double>(config.sd_txt2img_params.firstphase_height));
+        add_pair_into_json(request_body_json, "hr_scale", config.sd_txt2img_params.hr_scale);
+        add_pair_into_json(request_body_json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
+        add_pair_into_json(request_body_json, "hr_second_pass_steps", static_cast<double>(config.sd_txt2img_params.hr_second_pass_steps));
+        add_pair_into_json(request_body_json, "hr_resize_x", static_cast<double>(config.sd_txt2img_params.hr_resize_x));
+        add_pair_into_json(request_body_json, "hr_resize_y", static_cast<double>(config.sd_txt2img_params.hr_resize_y));
+        add_pair_into_json(request_body_json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
+        //add_pair_into_json(request_body_json, "hr_prompt", prompt);
+        //add_pair_into_json(request_body_json, "hr_negative_prompt", negative_prompt);
+        add_pair_into_json(request_body_json, "force_task_id", config.sd_txt2img_params.force_task_id);
 
         if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
         {
-            request_body_json.insert(std::make_pair("sampler_index", picojson::value{ config.sd_txt2img_params.sampler_index }));
+            add_pair_into_json(request_body_json, "sampler_index", config.sd_txt2img_params.sampler_index);
         }
 
         if (config.sd_txt2img_params.abg_remover_enable)
@@ -1181,8 +1187,8 @@ void send_automatic1111_txt2img_request(
             request_body_json.insert(std::make_pair("script_args", args_array));
         }
 
-        request_body_json.insert(std::make_pair("send_images", picojson::value{ config.sd_txt2img_params.send_images }));
-        request_body_json.insert(std::make_pair("save_images", picojson::value{ config.sd_txt2img_params.save_images }));
+        add_pair_into_json(request_body_json, "send_images", config.sd_txt2img_params.send_images);
+        add_pair_into_json(request_body_json, "save_images", config.sd_txt2img_params.save_images);
 
         picojson::object alwayson_scripts;
         if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
