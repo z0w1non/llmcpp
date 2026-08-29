@@ -1266,7 +1266,7 @@ void send_automatic1111_txt2img_request(
             throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
         }
 
-        std::string decoded_image{ base64_decode(base64_image_data) };
+        const std::string decoded_image{ base64_decode(base64_image_data) };
 
         {
             boost::nowide::ofstream ofs{ path, std::ios::binary };
