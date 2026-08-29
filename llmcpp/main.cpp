@@ -1219,8 +1219,8 @@ void send_automatic1111_txt2img_request(
         //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) });
         //    args_array.push_back(picojson::value{ config.sd_txt2img_params.sampler_name });
         //    args_array.push_back(picojson::value{ config.sd_txt2img_params.scheduler });
-        //    sampler.insert(std::make_pair("args", picojson::value{ args_array }));
-        //    alwayson_scripts.insert(std::make_pair("Sampler", picojson::value{ sampler }));
+        //    add_pair_into_json(sampler, "args", args_array);
+        //    add_pair_into_json(alwayson_scripts, "Sampler", sampler);
         //}
         //{
         //    picojson::object seed;
@@ -1231,8 +1231,8 @@ void send_automatic1111_txt2img_request(
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    seed.insert(std::make_pair("args", picojson::value{ args_array }));
-        //    alwayson_scripts.insert(std::make_pair("Seed", picojson::value{ seed }));
+        //    add_pair_into_json(seed, "args", args_array);
+        //    add_pair_into_json(alwayson_scripts, "Seed", seed);
         //}
         add_pair_into_json(request_body_json, "alwayson_scripts", alwayson_scripts);
 
@@ -1661,7 +1661,7 @@ std::string tg_completions_parameters::parse_response_for_text_completions(const
 std::string tg_completions_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
     picojson::object request_body_json;
-    request_body_json.insert(std::make_pair("text", picojson::value{ std::string{ prompt } }));
+    add_pair_into_json(request_body_json, "text", prompt);
     return picojson::value{ request_body_json }.serialize();
 }
 
@@ -1790,7 +1790,7 @@ std::string kc_generation_parameters::parse_response_for_text_completions(const 
 std::string kc_generation_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
     picojson::object request_body_json;
-    request_body_json.insert(std::make_pair("prompt", picojson::value{ std::string{ prompt } }));
+    add_pair_into_json(request_body_json, "prompt", prompt);
     return picojson::value{ request_body_json }.serialize();
 }
 
@@ -1906,12 +1906,12 @@ void write_cache(const config& config)
     for (const token_count_string& element : config.lru_cache.get<lru_tag>())
     {
         picojson::object node;
-        node.insert(std::make_pair("string", picojson::value{ element.str }));
-        node.insert(std::make_pair("tokens", picojson::value{ static_cast<double>(element.tokens) }));
+        add_pair_into_json(node, "string", element.str);
+        add_pair_into_json(node, "tokens", static_cast<double>(element.tokens));
         cache.push_back(picojson::value{ node });
     }
     picojson::object json;
-    json.insert(std::make_pair("cache", picojson::value{ cache }));
+    add_pair_into_json(json, "cache", cache);
     const std::string serialized = picojson::value{ json }.serialize();
 
     const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
