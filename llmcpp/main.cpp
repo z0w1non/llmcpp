@@ -587,7 +587,9 @@ std::optional<std::string> expand_predefined_macro(
 );
 
 std::string expand_macro(std::string_view str, const config& config, const macros& macros, int depth = 0);
+
 std::filesystem::path string_to_path_by_config(std::string_view path, const config& config);
+
 void send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
@@ -643,8 +645,6 @@ std::map<std::string, std::string> extract_code_block_from_markdown(std::string_
 bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
 
 void create_process_async(std::string_view excutable_file, const std::vector<std::string>& arguments);
-
-std::wstring to_lower(std::wstring_view str);
 
 std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path);
 
@@ -2373,13 +2373,6 @@ void create_process_async(std::string_view excutable_file, const std::vector<std
     proc.detach();
 }
 
-std::wstring to_lower(std::wstring_view str)
-{
-    std::wstring result{ str };
-    std::transform(result.begin(), result.end(), result.begin(), std::towlower);
-    return result;
-}
-
 std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path)
 {
     std::size_t terminated_count{};
@@ -2393,8 +2386,6 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
 
     PROCESSENTRY32W entry;
     entry.dwSize = sizeof(PROCESSENTRY32W);
-
-    const std::wstring executable_file_path_lower = to_lower(executable_file_path.wstring());
 
     if (Process32FirstW(snapshot, &entry))
     {
@@ -2412,9 +2403,8 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
                     const std::wstring current_target = executable_file_path.has_parent_path()
                         ? current_path.wstring()
                         : current_path.filename().wstring();
-                    const std::wstring current_target_lower = to_lower(current_target);
 
-                    if (current_target_lower == executable_file_path_lower)
+                    if (boost::algorithm::iequals(current_target, executable_file_path.wstring()))
                     {
                         if (TerminateProcess(process, 1))
                         {
