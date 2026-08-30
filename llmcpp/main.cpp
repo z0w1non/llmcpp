@@ -1550,6 +1550,7 @@ void send_automatic1111_txt2img_request(
                 throw file_open_exception{} << error_info::path{ path };
             }
             ofs.write(decoded_image.data(), decoded_image.size());
+            BOOST_LOG_TRIVIAL(info) << "Save image to " << path;
         }
 
         beast::error_code error_code;
@@ -3344,6 +3345,7 @@ void write_response(const config& config, std::string_view response, std::string
         throw file_open_exception{} << error_info::path{ file_path };
     }
     ofs << response;
+    BOOST_LOG_TRIVIAL(info) << "Write response to " << file_path;
 }
 
 void llm_write_code_block(const config& config, std::string_view markdown)
@@ -3375,11 +3377,14 @@ void llm_append_mode(const config& config, prompts& prompts)
         std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
         response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
         response += config.llm_prompt_params.generation_suffix;
+
         write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+
         if (!config.verbose)
         {
             boost::nowide::cout << response << std::flush;
         }
+
         llm_write_code_block(config, response);
 
     }
