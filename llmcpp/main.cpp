@@ -331,8 +331,8 @@ struct adetailer_parametesrs
         double ad_confidence{};
         std::string ad_mask_filter_method;
         int ad_mask_k{};
-        double ad_mask_min_ratio;
-        double ad_mask_max_ratio;
+        double ad_mask_min_ratio{};
+        double ad_mask_max_ratio{};
         int ad_dilate_erode{};
         int ad_x_offset{};
         int ad_y_offset{};
@@ -480,7 +480,6 @@ struct cu_generation_parameters
     std::string output_directory;
     std::vector<std::string> upload_images;
 };
-
 
 using macros = std::map<std::string, std::string>;
 
@@ -1929,7 +1928,7 @@ void send_comfy_ui_prompt(
         for (const generated_file_info& file_info : target_files)
         {
             std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
-            relative_file_path /= file_info.subfolder;
+            // relative_file_path /= file_info.subfolder;
             relative_file_path /= file_info.filename;
 
             const std::string view_target
