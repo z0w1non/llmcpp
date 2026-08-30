@@ -1,8 +1,4 @@
-﻿#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
-#endif
-
-#include <system_error>
+﻿#include <system_error>
 #include <string>
 #include <sstream>
 #include <chrono>
