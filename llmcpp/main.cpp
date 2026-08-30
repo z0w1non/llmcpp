@@ -94,6 +94,7 @@ class file_open_exception : public io_exception {};
 class socket_exception : public io_exception {};
 class text_generation_exception : public runtime_exception {};
 class image_generation_exception : public runtime_exception {};
+class comfy_ui_generation_exception : public runtime_exception {};
 class syntax_exception : public runtime_exception {};
 class json_parse_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
@@ -474,6 +475,16 @@ struct sb_generation_parameters
     std::string reference_audio_path{};
 };
 
+struct cu_generation_parameters
+{
+    std::string host;
+    std::string port;
+    std::string target;
+    std::string prompt_file;
+    std::string output_directory;
+    std::vector<std::string> upload_images;
+};
+
 
 using macros = std::map<std::string, std::string>;
 
@@ -536,6 +547,7 @@ struct config
     text_generation_parameters* llm_backend_params{};
     sd_txt2img_parameters sd_txt2img_params;
     sb_generation_parameters sb_generation_params;
+    cu_generation_parameters cu_generation_params;
     mutable lru_cache lru_cache;
     macros macros;
     mutable std::optional<std::string> opt_stdin;
@@ -574,9 +586,9 @@ void split_string_by_new_line(std::string_view str, Container& container);
 void create_parent_directories(const std::filesystem::path& path);
 
 template <typename Container>
-void read_file_to_container(const std::filesystem::path& file, Container& container);
+void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode = 0);
 
-std::string read_file_to_string(const std::filesystem::path& file);
+std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = 0);
 
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
@@ -603,6 +615,13 @@ std::string expand_macro(std::string_view str, const config& config, int depth =
 
 std::filesystem::path string_to_path_by_config(std::string_view path, const config& config);
 
+boost::beast::http::response<boost::beast::http::string_body> send_http_get(
+    std::string_view host,
+    std::string_view port,
+    std::string_view target);
+
+std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
+
 void send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
@@ -613,6 +632,19 @@ void send_automatic1111_txt2img_request(
 void send_style_bert_voice_request(
     const config& config,
     std::string_view text
+);
+
+std::string generate_boundary();
+
+std::string upload_image_to_comfy_ui(
+    const config& config,
+    const std::filesystem::path& image_path,
+    bool overwrite = true
+);
+
+void send_comfy_ui_prompt(
+    const config& config,
+    std::string_view workflow
 );
 
 std::vector<item> parse_item_list(std::string_view str);
@@ -913,12 +945,12 @@ void create_parent_directories(const std::filesystem::path& path)
 }
 
 template <typename Container>
-void read_file_to_container(const std::filesystem::path& file, Container& container)
+void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode)
 {
     container.clear();
     if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
     {
-        boost::nowide::ifstream ifs{ file };
+        boost::nowide::ifstream ifs{ file, openmode };
         if (!ifs.is_open())
         {
             throw file_open_exception{} << error_info::path{ file };
@@ -928,14 +960,14 @@ void read_file_to_container(const std::filesystem::path& file, Container& contai
     }
 }
 
-std::string read_file_to_string(const std::filesystem::path& file)
+std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode)
 {
     std::string result;
     if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
     {
         throw file_open_exception{} << error_info::path{ file };
     }
-    boost::nowide::ifstream ifs{ file };
+    boost::nowide::ifstream ifs{ file, openmode };
     if (!ifs.is_open())
     {
         throw file_open_exception{} << error_info::path{ file };
@@ -1261,6 +1293,39 @@ namespace tEXt
     }
 }
 
+boost::beast::http::response<boost::beast::http::string_body> send_http_get(
+    std::string_view host,
+    std::string_view port,
+    std::string_view target)
+{
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    auto const results = resolver.resolve(host, port);
+    tcp_stream.connect(results);
+
+    http::request<http::empty_body> req{ http::verb::get, target, 11 };
+    req.set(http::field::host, host);
+    req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+    http::write(tcp_stream, req);
+
+    beast::flat_buffer buffer;
+    http::response<http::string_body> res;
+    http::read(tcp_stream, buffer, res);
+
+    beast::error_code ec;
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+
+    return res;
+};
+
 // unused
 std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
 {
@@ -1442,10 +1507,8 @@ void send_automatic1111_txt2img_request(
         http::response<http::string_body> response;
         http::read(tcp_stream, buffer, response);
 
-        std::stringstream ss_response;
-        ss_response << response.body();
         picojson::value response_json;
-        picojson::parse(response_json, ss_response);
+        picojson::parse(response_json, response.body());
 
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         const picojson::array& images{ throwable_find<picojson::array>(object, "images") };
@@ -1564,9 +1627,6 @@ void send_style_bert_voice_request(
             throw socket_exception{} << error_info::http::response::result_int{ response.result_int() };
         }
 
-        std::stringstream ss_response;
-        ss_response << response.body();
-
         {
             const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
             const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
@@ -1575,7 +1635,7 @@ void send_style_bert_voice_request(
             {
                 throw file_open_exception{} << error_info::path{ output_file_path };
             }
-            ofs.write(ss_response.str().data(), ss_response.str().size());
+            ofs.write(response.body().data(), response.body().size());
         }
 
         beast::error_code error_code;
@@ -1583,6 +1643,302 @@ void send_style_bert_voice_request(
         if (error_code && error_code != beast::errc::not_connected)
         {
             throw image_generation_exception{} << error_info::beast::error_code{ error_code };
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        throw file_open_exception{} << error_info::description{ exception.what() };
+    }
+}
+
+std::string generate_boundary()
+{
+    std::ostringstream oss;
+    oss << "----UniqueBoundary_" << std::hex << std::setfill('0');
+    oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+        << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
+    return oss.str();
+}
+
+std::string upload_image_to_comfy_ui(
+    const config& config,
+    const std::filesystem::path& image_path,
+    bool overwrite
+)
+{
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
+
+    const std::string image_data{ read_file_to_string(image_path, std::ios::binary) };
+
+    const std::string boundary{ generate_boundary() };
+    const std::string filename{ image_path.filename().string() };
+
+    std::ostringstream body;
+    body 
+        << "--" << boundary << "\r\n"
+        << "Content-Disposition: form-data; name=\"image\"; filename=\"" << filename << "\"\r\n"
+        << "Content-Type: image/png\r\n\r\n"
+        << image_data + "\r\n";
+
+    if (overwrite)
+    {
+        body
+            << "--" << boundary << "\r\n"
+            << "Content-Disposition: form-data; name=\"overwrite\"\r\n\r\n"
+            << "true\r\n";
+    }
+    body << "--" << boundary << "--\r\n";
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+    tcp_stream.connect(results);
+
+    http::request<http::string_body> request{ http::verb::post, "/upload/image", 11 };
+    request.set(http::field::host, config.cu_generation_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "multipart/form-data; boundary=" + std::string{ boundary });
+    request.body() = body.str();
+    request.prepare_payload();
+
+    http::write(tcp_stream, request);
+
+    beast::flat_buffer buffer;
+    http::response<http::string_body> response;
+    http::read(tcp_stream, buffer, response);
+
+    beast::error_code ec;
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+
+    if (response.result() != http::status::ok)
+    {
+        throw comfy_ui_generation_exception{} << error_info::description{ "Failed to upload image: " + response.body() };
+    }
+
+    picojson::value response_json;
+    picojson::parse(response_json, response.body());
+    const picojson::object& response_object{ response_json.get<picojson::object>() };
+
+    return response_object.at("name").get<std::string>();
+}
+
+void upload_images_to_comfy_ui(
+    const config& config,
+    macros& macros
+)
+{
+    for (const std::string& key_value_pair : config.cu_generation_params.upload_images)
+    {
+        const std::size_t separator_position{ key_value_pair.find('=') };
+        if (separator_position != std::string::npos)
+        {
+            const std::string macro_name{ key_value_pair.substr(0, separator_position) };
+            const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
+            if (!macro_name.empty())
+            {
+                const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, config) };
+                const std::string server_path{ upload_image_to_comfy_ui(config, local_path) };
+                macros[macro_name] = server_path;
+                BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << macro_name << "=" << server_path << ")";
+            }
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected macro_name=local_path.";
+        }
+    }
+}
+
+void send_comfy_ui_prompt(
+    const config& config,
+    std::string_view prompt
+)
+{
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = net::ip::tcp;
+
+    try
+    {
+        net::io_context ioc;
+        tcp::resolver resolver{ ioc };
+        beast::tcp_stream tcp_stream{ ioc };
+
+        struct generated_file_info
+        {
+            std::string filename;
+            std::string subfolder;
+            std::string type;
+        };
+
+        auto const results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+        tcp_stream.connect(results);
+
+        picojson::object request_body_json;
+        picojson::value prompt_json;
+        picojson::parse(prompt_json, std::string{ prompt });
+        add_pair_into_json(request_body_json, "prompt", prompt_json);
+
+        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+        http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 }; // HTTP/1.1
+        request.set(http::field::host, config.cu_generation_params.host);
+        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        request.set(http::field::content_type, "application/json; charset=UTF-8");
+        request.body() = request_body;
+        request.prepare_payload();
+
+        http::write(tcp_stream, request);
+
+        beast::flat_buffer buffer;
+        http::response<http::string_body> response;
+        http::read(tcp_stream, buffer, response);
+
+        picojson::value response_json;
+        picojson::parse(response_json, response.body());
+
+        BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
+
+        const picojson::object& response_object{ throwable_get<picojson::object>(response_json) };
+        const std::string prompt_id{ throwable_find<std::string>(response_object, "prompt_id") };
+        BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
+
+        std::vector<generated_file_info> target_files;
+        bool is_finished{};
+
+        while (!is_finished)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+            http::response<http::string_body> history_response{
+                send_http_get(
+                    config.cu_generation_params.host,
+                    config.cu_generation_params.port,
+                    "/history/" + prompt_id
+                )
+            };
+
+            picojson::value history_json;
+            picojson::parse(history_json, history_response.body());
+
+            if (!history_json.is<picojson::object>())
+            {
+                continue;
+            }
+            const picojson::object& history_object = throwable_get<picojson::object>(history_json);
+
+            try
+            {
+                const picojson::object& prompt_response_obj{ throwable_find<picojson::object>(history_object, prompt_id) };
+
+                try
+                {
+                    const picojson::object& status_object{ throwable_find<picojson::object>(prompt_response_obj, "status") };
+                    const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
+                    if (status_str == "error")
+                    {
+                        throw comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." };
+                    }
+                }
+                catch (const json_parse_exception&) {
+                    ;
+                }
+
+                target_files.clear();
+
+                const picojson::object& outputs_object{ throwable_find<picojson::object>(prompt_response_obj, "outputs") };
+                for (const std::pair<const std::string, picojson::value>& node_pair : outputs_object)
+                {
+                    if (!node_pair.second.is<picojson::object>())
+                    {
+                        continue;
+                    }
+
+                    const picojson::object& node_object{ throwable_get<picojson::object>(node_pair.second) };
+
+                    for (const std::pair<const std::string, picojson::value>& prop_pair : node_object)
+                    {
+                        if (!prop_pair.second.is<picojson::array>())
+                        {
+                            continue;
+                        }
+
+                        const picojson::array& file_list{ throwable_get<picojson::array>(prop_pair.second) };
+                        for (std::size_t i = 0; i < file_list.size(); ++i)
+                        {
+                            try
+                            {
+                                const picojson::object& file_object{ throwable_at<picojson::object>(file_list, i) };
+
+                                target_files.emplace_back(
+                                    throwable_find<std::string>(file_object, "filename"),
+                                    throwable_find<std::string>(file_object, "subfolder"),
+                                    throwable_find<std::string>(file_object, "type")
+                                );
+                            }
+                            catch (const json_parse_exception&)
+                            {
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                if (!target_files.empty())
+                {
+                    is_finished = true;
+                }
+            }
+            catch (const json_parse_exception&)
+            {
+                continue;
+            }
+        }
+
+        BOOST_LOG_TRIVIAL(info) << "Generation complete.";
+
+        for (const generated_file_info& file_info : target_files)
+        {
+            std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
+            relative_file_path /= file_info.subfolder;
+            relative_file_path /= file_info.filename;
+
+            const std::string view_target
+                = "/view?filename=" + file_info.filename
+                + "&subfolder=" + file_info.subfolder
+                + "&type=" + file_info.type;
+
+            const http::response<http::string_body> view_response = send_http_get(
+                config.cu_generation_params.host,
+                config.cu_generation_params.port,
+                view_target
+            );
+
+            {
+                const std::filesystem::path output_file_path{ string_to_path_by_config(relative_file_path.string(), config) };
+                create_parent_directories(output_file_path);
+                boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
+                if (!ofs.is_open())
+                {
+                    throw file_open_exception{} << error_info::path{ output_file_path };
+                }
+                ofs.write(view_response.body().data(), view_response.body().size());
+                BOOST_LOG_TRIVIAL(info) << "Saved output to " << output_file_path;
+            }
+        }
+
+        beast::error_code error_code;
+        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
+        if (error_code && error_code != beast::errc::not_connected)
+        {
+            throw comfy_ui_generation_exception{} << error_info::beast::error_code{ error_code };
         }
     }
     catch (const std::exception& exception)
@@ -2191,9 +2547,12 @@ void parse_predefined_macros(const std::vector<std::string>& predefined_macros, 
         const std::size_t separator_position = key_value_pair.find('=');
         if (separator_position != std::string::npos)
         {
-            std::string key = key_value_pair.substr(0, separator_position);
-            std::string value = key_value_pair.substr(separator_position + 1);
-            macros[key] = value;
+            const std::string key{ key_value_pair.substr(0, separator_position) };
+            const std::string value{ key_value_pair.substr(separator_position + 1) };
+            if (!key.empty())
+            {
+                macros[key] = value;
+            }
         }
         else
         {
@@ -2474,6 +2833,8 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
         return 0;
     }
 
+    const DWORD current_pid{ GetCurrentProcessId() };
+
     PROCESSENTRY32W entry;
     entry.dwSize = sizeof(PROCESSENTRY32W);
 
@@ -2481,7 +2842,12 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
     {
         do
         {
-            HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+            if (entry.th32ProcessID == current_pid)
+            {
+                continue;
+            }
+
+            const HANDLE process{ OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID) };
             if (process != nullptr)
             {
                 wchar_t current_path_buffer[MAX_PATH]{};
@@ -2797,6 +3163,13 @@ int parse_command_line(
             ("sb-style", po::value<std::string>(&config.sb_generation_params.style)->default_value(""), "SB style")
             ("sb-style-weight", po::value<double>(&config.sb_generation_params.style_weight)->default_value(1), "SB style weight")
             ("sb-reference-audio-path", po::value<std::string>(&config.sb_generation_params.reference_audio_path)->default_value(""), "SB reference audio path")
+
+            ("cu-host", po::value<std::string>(&config.cu_generation_params.host)->default_value("localhost"), "Comfy UI host")
+            ("cu-port", po::value<std::string>(&config.cu_generation_params.port)->default_value("8188"), "Comfy UI port")
+            ("cu-target", po::value<std::string>(&config.cu_generation_params.target)->default_value("/prompt"), "Comfy UI prompt target")
+            ("cu-prompt-file", po::value<std::string>(&config.cu_generation_params.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
+            ("cu-output-directory", po::value<std::string>(&config.cu_generation_params.output_directory)->default_value("output"), "Comfy UI output directory")
+            ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu_generation_params.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
             ;
 
         po::options_description config_file_options;
@@ -2838,6 +3211,10 @@ int parse_command_line(
             ;
         }
         else if (config.mode == "sb")
+        {
+            ;
+        }
+        else if (config.mode == "cu")
         {
             ;
         }
@@ -3048,6 +3425,12 @@ void generate_and_output(const config& config, prompts& prompts)
         }
         send_style_bert_voice_request(config, text_string);
     }
+    else if (config.mode == "cu")
+    {
+        const std::filesystem::path workflow_file{ string_to_path_by_config(config.cu_generation_params.prompt_file, config) };
+        const std::string prompt = expand_macro(read_file_to_string(workflow_file), config);
+        send_comfy_ui_prompt(config, prompt);
+    }
 }
 
 void set_seed(config& config)
@@ -3135,6 +3518,11 @@ int exception_safe_main(int argc, char** argv)
         }
         else
         {
+            if (config.mode == "cu")
+            {
+                upload_images_to_comfy_ui(config, config.macros);
+            }
+
             iterate(config);
         }
     }
