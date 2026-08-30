@@ -479,6 +479,7 @@ struct cu_generation_parameters
     std::string prompt_file;
     std::string output_directory;
     std::vector<std::string> upload_images;
+    bool preserve_subdirectories{};
 };
 
 using macros = std::map<std::string, std::string>;
@@ -1928,7 +1929,10 @@ void send_comfy_ui_prompt(
         for (const generated_file_info& file_info : target_files)
         {
             std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
-            // relative_file_path /= file_info.subfolder;
+            if (config.cu_generation_params.preserve_subdirectories)
+            {
+                relative_file_path /= file_info.subfolder;
+            }
             relative_file_path /= file_info.filename;
 
             const std::string view_target
@@ -3192,6 +3196,7 @@ int parse_command_line(
             ("cu-prompt-file", po::value<std::string>(&config.cu_generation_params.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
             ("cu-output-directory", po::value<std::string>(&config.cu_generation_params.output_directory)->default_value("output"), "Comfy UI output directory")
             ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu_generation_params.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
+            ("cu-preserve-subdirectories", po::bool_switch(&config.cu_generation_params.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
             ;
 
         po::options_description config_file_options;
