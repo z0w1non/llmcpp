@@ -62,6 +62,8 @@
 
 #include "picojson.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -1211,7 +1213,9 @@ namespace tEXt
 
     std::vector<unsigned char> create_tEXt_chunk(std::string_view key, std::string_view text)
     {
+        const std::size_t total_size = 4 + 4 + key.size() + 1 + text.size() + 4;
         std::vector<unsigned char> chunk;
+        chunk.reserve(total_size);
 
         std::vector<unsigned char> data;
         data.insert(data.end(), key.begin(), key.end());
@@ -1260,18 +1264,24 @@ namespace tEXt
         }
     }
 
-    std::string insert_metadata(
-        const std::string& image,
-        int width,
-        int height,
-        int comp,
-        std::string_view key,
-        std::string_view metadata)
+    std::string insert_metadata(const std::string& image, std::string_view key, std::string_view metadata)
     {
         png_context ctx;
         ctx.metadata_chunk = create_tEXt_chunk(key, metadata);
 
-        if (!stbi_write_png_to_func(stbi_write_callback, &ctx, width, height, comp, image.data(), width * comp))
+        int width{}, height{}, comp{};
+        if (!stbi_info_from_memory(
+            reinterpret_cast<const stbi_uc*>(image.data()),
+            static_cast<int>(image.size()),
+            &width,
+            &height,
+            &comp
+        ))
+        {
+            throw png_exception{};
+        }
+
+        if (!stbi_write_png_to_func(stbi_write_callback, &ctx, width, height, comp, reinterpret_cast<const void*>(image.data()), width * comp))
         {
             throw png_exception{};
         }
@@ -1280,7 +1290,7 @@ namespace tEXt
     }
 }
 
-std::string make_automatic1111_comment(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
 {
     std::ostringstream oss;
     oss
@@ -1475,16 +1485,15 @@ void send_automatic1111_txt2img_request(
         }
 
         const std::string decoded_image{ base64_decode(base64_image_data) };
+        BOOST_LOG_TRIVIAL(info) << "decoded_image.size(): " << decoded_image.size();
         const std::string inserted_metadata_image{
             tEXt::insert_metadata(
                 decoded_image,
-                config.sd_txt2img_params.width,
-                config.sd_txt2img_params.height,
-                3,
                 "parameters",
-                make_automatic1111_comment(config.sd_txt2img_params, prompt, negative_prompt)
+                make_automatic1111_png_parameters(config.sd_txt2img_params, prompt, negative_prompt)
             )
         };
+        BOOST_LOG_TRIVIAL(info) << "inserted_metadata_image.size(): " << inserted_metadata_image.size();
 
         {
             boost::nowide::ofstream ofs{ path, std::ios::binary };
