@@ -1673,7 +1673,7 @@ std::string upload_image_to_comfy_ui(
     const std::string filename{ image_path.filename().string() };
 
     std::ostringstream body;
-    body 
+    body
         << "--" << boundary << "\r\n"
         << "Content-Disposition: form-data; name=\"image\"; filename=\"" << filename << "\"\r\n"
         << "Content-Type: image/png\r\n\r\n"
