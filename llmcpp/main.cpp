@@ -595,11 +595,15 @@ std::string include_predefiend_macro(const config& config, const std::vector<std
 
 std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
 
+std::string date_predefiend_macro(const config& config, const std::vector<std::string>&);
+
+std::string time_predefiend_macro(const config& config, const std::vector<std::string>&);
+
 std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&);
 
 std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&);
 
-std::string environ_predefiend_macro(const config& config, const std::vector<std::string>&);
+std::string env_predefiend_macro(const config& config, const std::vector<std::string>&);
 
 std::optional<std::string> expand_predefined_macro(
     const config& config,
@@ -1038,6 +1042,26 @@ std::string include_tail_predefiend_macro(const config& config, const std::vecto
     return result;
 }
 
+std::string date_predefiend_macro(const config& config, const std::vector<std::string>&)
+{
+    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
+    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d");
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
+std::string time_predefiend_macro(const config& config, const std::vector<std::string>&)
+{
+    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
+    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%H%M%S");
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
 std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&)
 {
     const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
@@ -1086,6 +1110,8 @@ std::optional<std::string> expand_predefined_macro(
     {
         {"include", include_predefiend_macro},
         {"include_tail", include_predefiend_macro},
+        {"date", date_predefiend_macro},
+        {"time", time_predefiend_macro},
         {"datetime", datetime_predefiend_macro},
         {"stdin", stdin_predefiend_macro},
         {"env", env_predefiend_macro},
@@ -3423,8 +3449,8 @@ void generate_and_output(const config& config, prompts& prompts)
     }
     else if (config.mode == "cu")
     {
-        const std::filesystem::path workflow_file{ string_to_path_by_config(config.cu_generation_params.prompt_file, config) };
-        const std::string prompt = expand_macro(read_file_to_string(workflow_file), config);
+        const std::filesystem::path prompt_file{ string_to_path_by_config(config.cu_generation_params.prompt_file, config) };
+        const std::string prompt{ expand_macro(read_file_to_string(prompt_file), config) };
         send_comfy_ui_prompt(config, prompt);
     }
 }
