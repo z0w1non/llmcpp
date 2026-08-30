@@ -991,7 +991,7 @@ std::string complement_extension(std::string_view filepath, std::string_view ext
     std::filesystem::path temp{ filepath };
     if (!temp.has_extension())
     {
-        temp += extension;
+        temp.replace_extension(extension);
     }
     return temp.string();
 }
@@ -2574,6 +2574,7 @@ void parse_predefined_macros(const std::vector<std::string>& predefined_macros, 
             if (!key.empty())
             {
                 macros[key] = value;
+                BOOST_LOG_TRIVIAL(info) << "macro set " << key << "=" << value;
             }
         }
         else
