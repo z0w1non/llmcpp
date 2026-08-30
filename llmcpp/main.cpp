@@ -2216,7 +2216,7 @@ int tg_completions_parameters::parse_response_for_token_count(const boost::beast
 {
     picojson::value response_json;
     std::stringstream ss_response_body(response.body());
-    BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
+    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
     picojson::parse(response_json, ss_response_body);
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     return static_cast<int>(throwable_find<double>(object, "length"));
@@ -2297,7 +2297,7 @@ int kc_generation_parameters::parse_response_for_token_count(const boost::beast:
 {
     picojson::value response_json;
     std::stringstream ss_response_body(response.body());
-    BOOST_LOG_TRIVIAL(info) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
+    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
     picojson::parse(response_json, ss_response_body);
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     return static_cast<int>(throwable_find<double>(object, "value"));
