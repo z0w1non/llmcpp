@@ -1,4 +1,27 @@
-﻿#include <boost/beast/core.hpp>
+﻿#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+#include <system_error>
+#include <string>
+#include <sstream>
+#include <chrono>
+#include <iomanip>
+#include <regex>
+#include <numeric>
+#include <filesystem>
+#include <random>
+#include <vector>
+#include <map>
+#include <deque>
+#include <memory>
+#include <stdexcept>
+#include <optional>
+#include <thread>
+#include <type_traits>
+#include <cstdint>
+
+#include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
 #include <boost/asio/connect.hpp>
@@ -36,24 +59,11 @@
 #include <boost/process/v2/environment.hpp>
 #include <boost/process/v2/execute.hpp>
 #include <boost/lexical_cast.hpp>
-#include <system_error>
-#include <string>
-#include <sstream>
-#include <chrono>
-#include <iomanip>
-#include <regex>
-#include <numeric>
-#include <filesystem>
-#include <random>
-#include <vector>
-#include <map>
-#include <deque>
-#include <memory>
-#include <stdexcept>
-#include <optional>
-#include <thread>
-#include <type_traits>
+
 #include "picojson.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 #if defined(_WIN32)
 #include <boost/process/v2/windows/creation_flags.hpp>
@@ -93,6 +103,7 @@ class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
 class array_index_out_of_bounds_exception : public runtime_exception {};
 class dns_resolution_exception : public runtime_exception {};
+class png_exception : public runtime_exception {};
 
 namespace error_info
 {
@@ -1159,6 +1170,115 @@ std::filesystem::path string_to_path_by_config(std::string_view path, const conf
     return file_path;
 }
 
+namespace tEXt
+{
+    using crc_table_type = std::array<uint32_t, 256>;
+
+    constexpr crc_table_type generate_crc_table()
+    {
+        crc_table_type result{};
+        for (std::uint32_t i = 0; i < 256; i++)
+        {
+            std::uint32_t value{ i };
+            for (std::size_t k = 0; k < 8; k++)
+            {
+                value = (value & 1) ? (0xEDB88320L ^ (value >> 1)) : (value >> 1);
+            }
+            result[i] = value;
+        }
+        return result;
+    }
+
+    constexpr const crc_table_type crc_table{ generate_crc_table() };
+
+    std::uint32_t calculate_crc32(const std::uint8_t* data, size_t length)
+    {
+        std::uint32_t c{ 0xFFFFFFFFL };
+        for (std::size_t i = 0; i < length; i++)
+        {
+            c = crc_table[(c ^ data[i]) & 0xFF] ^ (c >> 8);
+        }
+        return c ^ 0xFFFFFFFFL;
+    }
+
+    void append_uint32_be(std::uint32_t val, std::vector<unsigned char>& buffer)
+    {
+        buffer.push_back((val >> 24) & 0xFF);
+        buffer.push_back((val >> 16) & 0xFF);
+        buffer.push_back((val >> 8) & 0xFF);
+        buffer.push_back(val & 0xFF);
+    }
+
+    std::vector<unsigned char> create_tEXt_chunk(std::string_view key, std::string_view text)
+    {
+        std::vector<unsigned char> chunk;
+
+        std::vector<unsigned char> data;
+        data.insert(data.end(), key.begin(), key.end());
+        data.push_back(0);
+        data.insert(data.end(), text.begin(), text.end());
+
+        append_uint32_be(static_cast<std::uint32_t>(data.size()), chunk);
+
+        const std::size_t crc_start{ chunk.size() };
+        chunk.push_back('t');
+        chunk.push_back('E');
+        chunk.push_back('X');
+        chunk.push_back('t');
+        chunk.insert(chunk.end(), data.begin(), data.end());
+
+        const std::uint32_t crc{ calculate_crc32(&chunk[crc_start], chunk.size() - crc_start) };
+        append_uint32_be(crc, chunk);
+
+        return chunk;
+    }
+
+    struct png_context
+    {
+        std::vector<unsigned char> result_bytes;
+        std::vector<unsigned char> metadata_chunk;
+        bool metadata_inserted{};
+    };
+
+    void stbi_write_callback(void* context, void* data, int size)
+    {
+        png_context* ctx = static_cast<png_context*>(context);
+        const unsigned char* bytes = static_cast<const unsigned char*>(data);
+        constexpr std::size_t ihdr_end_offset = 8 + 25;
+
+        if (!ctx->metadata_inserted && (ctx->result_bytes.size() + size) >= ihdr_end_offset)
+        {
+            const std::size_t bytes_to_ihdr{ ihdr_end_offset - ctx->result_bytes.size() };
+            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes, bytes + bytes_to_ihdr);
+            ctx->result_bytes.insert(ctx->result_bytes.end(), ctx->metadata_chunk.begin(), ctx->metadata_chunk.end());
+            ctx->metadata_inserted = true;
+            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes + bytes_to_ihdr, bytes + size);
+        }
+        else
+        {
+            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes, bytes + size);
+        }
+    }
+
+    std::string insert_metadata(
+        const std::string& image,
+        int width,
+        int height,
+        int comp,
+        std::string_view key,
+        std::string_view metadata)
+    {
+        png_context ctx;
+        ctx.metadata_chunk = create_tEXt_chunk(key, metadata);
+
+        if (!stbi_write_png_to_func(stbi_write_callback, &ctx, width, height, comp, image.data(), width * comp))
+        {
+            throw png_exception{};
+        }
+
+        return std::string{ reinterpret_cast<const char*>(ctx.result_bytes.data()), ctx.result_bytes.size() };
+    }
+}
 
 std::string make_automatic1111_comment(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
 {
@@ -1236,17 +1356,7 @@ void send_automatic1111_txt2img_request(
         add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
         add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
         add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
-
         add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
-        //if (config.sd_txt2img_params.comments.empty())
-        //{
-        //    add_pair_into_json(request_body_json, "comments", make_automatic1111_comment(config.sd_txt2img_params, prompt, negative_prompt));
-        //}
-        //else
-        //{
-        //    add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
-        //}
-        
         add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
         add_pair_into_json(request_body_json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
         add_pair_into_json(request_body_json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
@@ -1365,6 +1475,16 @@ void send_automatic1111_txt2img_request(
         }
 
         const std::string decoded_image{ base64_decode(base64_image_data) };
+        const std::string inserted_metadata_image{
+            tEXt::insert_metadata(
+                decoded_image,
+                config.sd_txt2img_params.width,
+                config.sd_txt2img_params.height,
+                3,
+                "parameters",
+                make_automatic1111_comment(config.sd_txt2img_params, prompt, negative_prompt)
+            )
+        };
 
         {
             boost::nowide::ofstream ofs{ path, std::ios::binary };
@@ -1372,7 +1492,7 @@ void send_automatic1111_txt2img_request(
             {
                 throw file_open_exception{} << error_info::path{ path };
             }
-            ofs.write(decoded_image.data(), decoded_image.size());
+            ofs.write(inserted_metadata_image.data(), inserted_metadata_image.size());
         }
 
         beast::error_code error_code;

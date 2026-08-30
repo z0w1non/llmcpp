@@ -13,6 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="ヘッダー ファイル\third_party">
+      <UniqueIdentifier>{9520c501-e08d-4901-abc9-d814d6b59004}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\third_party\picojson">
+      <UniqueIdentifier>{a38ad4fa-3307-4580-b22f-163649ae0df6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\third_party\stb">
+      <UniqueIdentifier>{bc33d3ec-e674-4ded-bd8d-ee24bc885569}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -20,8 +29,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="picojson.h">
-      <Filter>ヘッダー ファイル</Filter>
+    <ClInclude Include="..\third_party\picojson\picojson.h">
+      <Filter>ヘッダー ファイル\third_party\picojson</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\stb\stb_image_write.h">
+      <Filter>ヘッダー ファイル\third_party\stb</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
