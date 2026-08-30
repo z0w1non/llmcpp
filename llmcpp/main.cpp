@@ -1303,7 +1303,7 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    auto const results = resolver.resolve(host, port);
+    const auto results = resolver.resolve(host, port);
     tcp_stream.connect(results);
 
     http::request<http::empty_body> req{ http::verb::get, target, 11 };
@@ -1361,7 +1361,7 @@ void send_automatic1111_txt2img_request(
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        auto const results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
+        const auto results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
         tcp_stream.connect(results);
 
         picojson::object request_body_json;
@@ -1555,7 +1555,7 @@ void send_style_bert_voice_request(
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        auto const results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
+        const auto results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
         tcp_stream.connect(results);
 
         boost::url target{ config.sb_generation_params.target };
@@ -1773,7 +1773,7 @@ void send_comfy_ui_prompt(
             std::string type;
         };
 
-        auto const results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+        const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
         tcp_stream.connect(results);
 
         picojson::object request_body_json;
@@ -2285,7 +2285,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        auto const results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
+        const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
         tcp_stream.connect(results);
 
         const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
