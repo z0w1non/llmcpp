@@ -1677,8 +1677,10 @@ std::string generate_boundary()
 {
     std::ostringstream oss;
     oss << "----UniqueBoundary_" << std::hex << std::setfill('0');
-    oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
-        << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
+    for (std::size_t i = 0; i < 4; ++i)
+    {
+        oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
+    }
     return oss.str();
 }
 
