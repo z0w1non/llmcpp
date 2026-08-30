@@ -62,11 +62,6 @@
 
 #include "picojson.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 #if defined(_WIN32)
 #include <boost/process/v2/windows/creation_flags.hpp>
 #ifndef WIN32_LEAN_AND_MEAN
@@ -1172,6 +1167,7 @@ std::filesystem::path string_to_path_by_config(std::string_view path, const conf
     return file_path;
 }
 
+// unused
 namespace tEXt
 {
     using crc_table_type = std::array<uint32_t, 256>;
@@ -1244,52 +1240,28 @@ namespace tEXt
         bool metadata_inserted{};
     };
 
-    void stbi_write_callback(void* context, void* data, int size)
+    std::string insert_metadata(std::string_view image, std::string_view key, std::string_view metadata)
     {
-        png_context* ctx = static_cast<png_context*>(context);
-        const unsigned char* bytes = static_cast<const unsigned char*>(data);
         constexpr std::size_t ihdr_end_offset = 8 + 25;
-
-        if (!ctx->metadata_inserted && (ctx->result_bytes.size() + size) >= ihdr_end_offset)
-        {
-            const std::size_t bytes_to_ihdr{ ihdr_end_offset - ctx->result_bytes.size() };
-            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes, bytes + bytes_to_ihdr);
-            ctx->result_bytes.insert(ctx->result_bytes.end(), ctx->metadata_chunk.begin(), ctx->metadata_chunk.end());
-            ctx->metadata_inserted = true;
-            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes + bytes_to_ihdr, bytes + size);
-        }
-        else
-        {
-            ctx->result_bytes.insert(ctx->result_bytes.end(), bytes, bytes + size);
-        }
-    }
-
-    std::string insert_metadata(const std::string& image, std::string_view key, std::string_view metadata)
-    {
-        png_context ctx;
-        ctx.metadata_chunk = create_tEXt_chunk(key, metadata);
-
-        int width{}, height{}, comp{};
-        if (!stbi_info_from_memory(
-            reinterpret_cast<const stbi_uc*>(image.data()),
-            static_cast<int>(image.size()),
-            &width,
-            &height,
-            &comp
-        ))
+        if (image.size() < ihdr_end_offset)
         {
             throw png_exception{};
         }
 
-        if (!stbi_write_png_to_func(stbi_write_callback, &ctx, width, height, comp, reinterpret_cast<const void*>(image.data()), width * comp))
-        {
-            throw png_exception{};
-        }
+        const std::vector<unsigned char> text_chunk = create_tEXt_chunk(key, metadata);
 
-        return std::string{ reinterpret_cast<const char*>(ctx.result_bytes.data()), ctx.result_bytes.size() };
+        std::string result;
+        result.reserve(image.size() + text_chunk.size());
+
+        result.append(image.substr(0, ihdr_end_offset));
+        result.append(reinterpret_cast<const char*>(text_chunk.data()), text_chunk.size());
+        result.append(image.substr(ihdr_end_offset));
+
+        return result;
     }
 }
 
+// unused
 std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
 {
     std::ostringstream oss;
@@ -1485,15 +1457,6 @@ void send_automatic1111_txt2img_request(
         }
 
         const std::string decoded_image{ base64_decode(base64_image_data) };
-        BOOST_LOG_TRIVIAL(info) << "decoded_image.size(): " << decoded_image.size();
-        const std::string inserted_metadata_image{
-            tEXt::insert_metadata(
-                decoded_image,
-                "parameters",
-                make_automatic1111_png_parameters(config.sd_txt2img_params, prompt, negative_prompt)
-            )
-        };
-        BOOST_LOG_TRIVIAL(info) << "inserted_metadata_image.size(): " << inserted_metadata_image.size();
 
         {
             boost::nowide::ofstream ofs{ path, std::ios::binary };
@@ -1501,7 +1464,7 @@ void send_automatic1111_txt2img_request(
             {
                 throw file_open_exception{} << error_info::path{ path };
             }
-            ofs.write(inserted_metadata_image.data(), inserted_metadata_image.size());
+            ofs.write(decoded_image.data(), decoded_image.size());
         }
 
         beast::error_code error_code;

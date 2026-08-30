@@ -161,7 +161,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\third_party\picojson\picojson.h" />
-    <ClInclude Include="..\third_party\stb\stb_image_write.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
