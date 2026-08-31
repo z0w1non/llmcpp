@@ -2767,9 +2767,9 @@ std::string unescape_string(std::string_view str)
 
 std::string json_escape_string(std::string_view str)
 {
-    constexpr std::size_t escape_overhead_ratio{ 8 };
+    constexpr std::size_t escape_overhead_denominator{ 8 };
     std::string result;
-    result.reserve(str.size() + str.size() / escape_overhead_ratio);
+    result.reserve(str.size() + str.size() / escape_overhead_denominator);
 
     for (const char c : str)
     {
