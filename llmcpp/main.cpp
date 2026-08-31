@@ -603,9 +603,9 @@ void split_string_by_new_line(std::string_view str, Container& container);
 void create_parent_directories(const std::filesystem::path& path);
 
 template <typename Container>
-void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode = 0);
+void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode = {});
 
-std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = 0);
+std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
@@ -3033,9 +3033,9 @@ void init_llm_mode(config& config)
 
 std::string sanitize_as_filename(std::string_view name)
 {
+    const std::regex illegal_chars(R"([:*?"<>|#])");
     std::string sanitized{ name.begin(), name.end() };
     std::replace(sanitized.begin(), sanitized.end(), ' ', '_');
-    const std::regex illegal_chars(R"([:*?"<>|#])");
     sanitized = std::regex_replace(sanitized, illegal_chars, "");
     boost::algorithm::trim(sanitized);
     return sanitized;
@@ -3133,7 +3133,7 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
             if (process != nullptr)
             {
                 wchar_t current_path_buffer[MAX_PATH]{};
-                DWORD size = MAX_PATH;
+                DWORD size{ MAX_PATH };
 
                 if (QueryFullProcessImageNameW(process, 0, current_path_buffer, &size))
                 {
@@ -3542,7 +3542,7 @@ std::string prompts::to_string(const config& config) const
 {
     std::string result;
 
-    int remaining_tokens = config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens;
+    int remaining_tokens{ config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens };
 
     const std::string expanded_system_prompts{ expand_macro(concatenate(system_prompts), config) };
     try_append(expanded_system_prompts, config, false, result, remaining_tokens);
@@ -3626,7 +3626,7 @@ void llm_write_code_block(const config& config, std::string_view markdown)
 
 void llm_append_mode(const config& config, prompts& prompts)
 {
-    std::string prompts_string = prompts.to_string(config);
+    std::string prompts_string{ prompts.to_string(config) };
     prompts_string = expand_macro(prompts_string, config);
 
     try
