@@ -3490,21 +3490,9 @@ int parse_command_line(
         {
             init_llm_mode(config);
         }
-        else if (config.mode == "sd")
-        {
-            ;
-        }
-        else if (config.mode == "sb")
-        {
-            ;
-        }
-        else if (config.mode == "cu")
-        {
-            ;
-        }
         else
         {
-            BOOST_LOG_TRIVIAL(error) << "mode options must be tg | kc | sd | sb.";
+            BOOST_LOG_TRIVIAL(error) << "mode options must be (tg | kc | sd | sb | cu).";
             return 1;
         }
 
