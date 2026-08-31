@@ -9,6 +9,7 @@
 #include <random>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <deque>
 #include <memory>
 #include <stdexcept>
@@ -16,6 +17,7 @@
 #include <thread>
 #include <type_traits>
 #include <cstdint>
+#include <variant>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -55,6 +57,8 @@
 #include <boost/process/v2/environment.hpp>
 #include <boost/process/v2/execute.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
 
 #include "picojson.h"
 
@@ -75,6 +79,13 @@
 #undef OUT
 #undef NEAR
 #undef FAR
+#endif
+
+// is_cin_from_pipe
+#if defined(_WIN32) || defined(_WIN64)
+#include <io.h>
+#else
+#include <unistd.h>
 #endif
 
 class runtime_exception
@@ -482,7 +493,12 @@ struct cu_generation_parameters
     bool preserve_subdirectories{};
 };
 
-using macros = std::map<std::string, std::string>;
+//using macros = std::map<std::string, std::string>;
+
+struct context
+{
+    std::unordered_map<std::string, std::string> variables;
+};
 
 struct token_count_string
 {
@@ -521,7 +537,7 @@ struct config
     std::string config_file;
     bool verbose{};
     int number_iterations{};
-    std::vector<std::string> predefined_macros;
+    std::vector<std::string> user_defined_variables;
     std::vector<std::string> phases;
 
     int seed{};
@@ -545,8 +561,7 @@ struct config
     sb_generation_parameters sb_generation_params;
     cu_generation_parameters cu_generation_params;
     mutable lru_cache lru_cache;
-    macros macros;
-    mutable std::optional<std::string> opt_stdin;
+    context context;
 };
 
 struct prompts
@@ -590,28 +605,6 @@ template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
 std::string complement_extension(std::string_view filepath, std::string_view extension);
-
-std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
-
-std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments);
-
-std::string date_predefiend_macro(const config& config, const std::vector<std::string>&);
-
-std::string time_predefiend_macro(const config& config, const std::vector<std::string>&);
-
-std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&);
-
-std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&);
-
-std::string env_predefiend_macro(const config& config, const std::vector<std::string>&);
-
-std::optional<std::string> expand_predefined_macro(
-    const config& config,
-    std::string_view name,
-    std::string_view arguments
-);
-
-std::string expand_macro(std::string_view str, const config& config, int depth = 0);
 
 std::filesystem::path string_to_path_by_config(std::string_view path, const config& config);
 
@@ -664,16 +657,21 @@ std::string generate_and_complete_text(
 
 std::string unescape_string(std::string_view str);
 
-void parse_predefined_macros(const std::vector<std::string>& predefined_macros, macros& macros);
+void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& context);
+
 void init_logging_with_nowide_cout();
 void init_logging_with_nowide_file_log(const std::filesystem::path& log);
 void init_logging(const config& config);
 void init_chat_mode(config& config);
 
-void set_phases_macro(
+void set_phase_variables(
     const std::vector<std::string>& phases,
     std::size_t phase_index,
-    std::map<std::string, std::string>& macros
+    std::unordered_map<std::string, std::string>& variables
+);
+
+void set_builtin_variables(
+    config& config
 );
 
 void set_paragraphs_to_phases(
@@ -771,6 +769,382 @@ std::string trim(std::string_view str)
     trimmed_string = std::regex_replace(trimmed_string, leading_spaces, {});
     trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
     return trimmed_string;
+}
+
+namespace parser
+{
+    struct macro_call;
+
+    struct variable
+    {
+        std::string name;
+    };
+
+    using argument = std::variant<int, std::string, variable, boost::recursive_wrapper<macro_call>>;
+
+    struct macro_call
+    {
+        std::string name;
+        std::vector<argument> arguments;
+    };
+
+    using expression = std::variant<variable, macro_call>;
+    using node = std::variant<std::string, expression>;
+
+    template<typename Iterator>
+    struct document_grammar
+        : public boost::spirit::qi::grammar<Iterator, std::vector<node>()>
+    {
+        document_grammar()
+            : document_grammar::base_type(document)
+        {
+            namespace qi = boost::spirit::qi;
+
+            using qi::int_;
+            using qi::lexeme;
+            using qi::char_;
+
+            document = *node;
+            node = placeholder | plain_text;
+            plain_text = lexeme[+(char_ - "{{")];
+            placeholder = "{{" >> qi::skip(qi::space)[expr] >> "}}";
+
+            expr = macro | variable;
+            name = lexeme[+(char_("a-zA-Z0-9_"))];
+            string_literal = lexeme['"' >> *(("\\" >> char_) | (char_ - '"')) >> '"'];
+            variable = name;
+            macro = name >> arg_list;
+            arg_list = '(' >> -(arg % ',') >> ')';
+            arg = macro | variable | int_ | string_literal;
+        }
+
+        boost::spirit::qi::rule<Iterator, std::vector<node>()> document;
+        boost::spirit::qi::rule<Iterator, node()> node;
+        boost::spirit::qi::rule<Iterator, std::string()> plain_text;
+        boost::spirit::qi::rule<Iterator, expression()> placeholder;
+
+        boost::spirit::qi::rule<Iterator, expression(), boost::spirit::qi::space_type> expr;
+        boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> name;
+        boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> string_literal;
+        boost::spirit::qi::rule<Iterator, variable(), boost::spirit::qi::space_type> variable;
+        boost::spirit::qi::rule<Iterator, macro_call(), boost::spirit::qi::space_type> macro;
+        boost::spirit::qi::rule<Iterator, std::vector<argument>(), boost::spirit::qi::space_type> arg_list;
+        boost::spirit::qi::rule<Iterator, argument(), boost::spirit::qi::space_type> arg;
+    };
+
+    using grammar = document_grammar<std::string_view::const_iterator>;
+
+    std::string evaluate_expression(const expression& expr, const config& config);
+    std::string evaluate_argument(const argument& arg, const config& config);
+    std::string evaluate_expression(const expression& expr, const config& config);
+    std::string evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar);
+    std::string evaluate_document(std::string_view document, const config& config, grammar& grammar);
+    std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth);
+}
+
+BOOST_FUSION_ADAPT_STRUCT(
+    parser::variable,
+    (std::string, name)
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    parser::macro_call,
+    (std::string, name)
+    (std::vector<parser::argument>, arguments)
+);
+
+namespace builtin
+{
+    std::string include(const std::vector<std::string>& arguments, const config& config);
+    std::string tail(const std::vector<std::string>& arguments, const config& config);
+    std::string env(const std::vector<std::string>& arguments, const config& config);
+
+    const static std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&)>> macros
+    {
+        {"include", include},
+        {"tail", tail},
+        {"env", env},
+    };
+
+    std::string date();
+    std::string time();
+    std::string datetime();
+    std::string stdin_(const config& config);
+}
+
+std::string expand_macro(std::string_view input, const config& config);
+
+std::string parser::evaluate_argument(const argument& arg, const config& config)
+{
+    auto visitor = [&](auto&& value) -> std::string
+        {
+            using decayed_type = std::decay_t<decltype(value)>;
+
+            if constexpr (std::is_same_v<decayed_type, int>)
+            {
+                return std::to_string(value);
+            }
+            else if constexpr (std::is_same_v<decayed_type, std::string>)
+            {
+                return value;
+            }
+            else if constexpr (std::is_same_v<decayed_type, variable>)
+            {
+                if (auto iter{ config.context.variables.find(value.name) }; iter != config.context.variables.end())
+                {
+                    return iter->second;
+                }
+                return "{{" + value.name + "}}";
+            }
+            else if constexpr (std::is_same_v<decayed_type, boost::recursive_wrapper<macro_call>>)
+            {
+                return evaluate_expression(value.get(), config);
+            }
+        };
+    return std::visit(visitor, arg);
+}
+
+std::string parser::evaluate_expression(const expression& expr, const config& config)
+{
+    auto visitor = [&](auto&& value) -> std::string
+        {
+            using decayed_type = std::decay_t<decltype(value)>;
+
+            if constexpr (std::is_same_v<decayed_type, variable>)
+            {
+                if (auto iter{ config.context.variables.find(value.name) }; iter != config.context.variables.end())
+                {
+                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << iter->second << ")";
+                    return iter->second;
+                }
+
+                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ")";
+
+                return std::string{};
+            }
+            else if constexpr (std::is_same_v<decayed_type, macro_call>)
+            {
+                std::vector<std::string> evaluated_args;
+                for (const argument& arg : value.arguments)
+                {
+                    evaluated_args.push_back(evaluate_argument(arg, config));
+                }
+
+                if (auto iter{ builtin::macros.find(value.name) }; iter != builtin::macros.end())
+                {
+                    try
+                    {
+                        const std::string evaluated{ iter->second(evaluated_args, config) };
+                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << evaluated << ")";
+                        return evaluated;
+                    }
+                    catch (const runtime_exception&)
+                    {
+                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ")";
+                    }
+
+                    return std::string{};
+                }
+
+                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ")";
+                return std::string{};
+            }
+        };
+    return std::visit(visitor, expr);
+}
+
+std::string parser::evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar)
+{
+    std::string result;
+
+    auto visitor = [&](auto&& value)
+        {
+            using decayed_type = std::decay_t<decltype(value)>;
+
+            if constexpr (std::is_same_v<decayed_type, std::string>)
+            {
+                result += value;
+            }
+            else if constexpr (std::is_same_v<decayed_type, expression>)
+            {
+                result += evaluate_expression(value, config);
+            }
+        };
+
+    for (const node& node : ast)
+    {
+        std::visit(visitor, node);
+    }
+
+    return result;
+}
+
+std::string parser::evaluate_document(std::string_view document, const config& config, grammar& grammar)
+{
+    namespace qi = boost::spirit::qi;
+
+    std::vector<node> ast;
+
+    grammar::iterator_type iter{ document.begin() };
+    grammar::iterator_type end{ document.end() };
+
+    if (qi::parse(iter, end, grammar, ast) && iter == end)
+    {
+        return evaluate_node(ast, config, grammar);
+    }
+    else
+    {
+        std::ostringstream description;
+        description << "Parse failed at: " << std::string{ iter, end };
+        throw macro_exception{} << error_info::description{ description.str() };
+    }
+}
+
+std::string parser::evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth)
+{
+    grammar grammar;
+
+    unsigned int depth{};
+
+    while (depth < max_depth)
+    {
+        if (input.find("{{") == std::string_view::npos)
+        {
+            return input;
+        }
+
+        std::string expanded = evaluate_document(input, config, grammar);
+
+        if (expanded == input)
+        {
+            break;
+        }
+
+        input = std::move(expanded);
+        depth += 1;
+    }
+
+    if (depth >= max_depth)
+    {
+        throw macro_exception{} << error_info::description{ "Maximum recursion depth reached." };
+    }
+
+    return input;
+}
+
+std::string builtin::include(const std::vector<std::string>& arguments, const config& config)
+{
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
+    return read_file_to_string(file_path);
+}
+
+std::string builtin::tail(const std::vector<std::string>& arguments, const config& config)
+{
+    if (arguments.size() < 2)
+    {
+        throw macro_exception{};
+    }
+
+    std::string result;
+
+    int max_tokens{};
+    try
+    {
+        max_tokens = boost::lexical_cast<unsigned int>(arguments[1]);
+
+    }
+    catch (const boost::bad_lexical_cast&)
+    {
+        throw macro_exception{};
+    }
+
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
+    if (!std::filesystem::exists(file_path))
+    {
+        return result;
+    }
+
+    const std::string file_content = read_file_to_string(file_path);
+    const std::string expaned_file_content{ expand_macro(file_content, config) };
+
+    int tokens{};
+    truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
+
+    return result;
+}
+
+std::string builtin::env(const std::vector<std::string>& arguments, const config& config)
+{
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    const char* env = boost::nowide::getenv(arguments[0].c_str());
+
+    if (!env)
+    {
+        return std::string{};
+    }
+
+    return std::string{ env };
+}
+
+std::string builtin::date()
+{
+    const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+    const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d") };
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
+std::string builtin::time()
+{
+    const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+    const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%H%M%S") };
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
+std::string builtin::datetime()
+{
+    const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+    const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d%H%M%S") };
+    std::ostringstream oss;
+    oss.imbue(std::locale(oss.getloc(), facet));
+    oss << local_time;
+    return oss.str();
+}
+
+std::string builtin::stdin_(const config& config)
+{
+#if defined(_WIN32) || defined(_WIN64)
+    bool is_terminal = (_isatty(0) != 0);
+#else
+    bool is_terminal = (isatty() != 0);
+#endif
+
+    if (is_terminal)
+    {
+        return std::string{};
+    }
+
+    return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
+}
+
+std::string expand_macro(std::string_view input, const config& config)
+{
+    constexpr unsigned int max_depth = 32;
+    return parser::evaluate_document_recursive(std::string{ input }, config, max_depth);
 }
 
 template<typename T>
@@ -994,219 +1368,6 @@ std::string complement_extension(std::string_view filepath, std::string_view ext
         temp.replace_extension(extension);
     }
     return temp.string();
-}
-
-std::string include_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
-{
-    if (arguments.size() < 1)
-    {
-        throw macro_exception{};
-    }
-
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
-    return read_file_to_string(file_path);
-}
-
-std::string include_tail_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
-{
-    if (arguments.size() < 2)
-    {
-        throw macro_exception{};
-    }
-
-    std::string result;
-
-    int max_tokens{};
-    try
-    {
-        max_tokens = boost::lexical_cast<unsigned int>(arguments[1]);
-
-    }
-    catch (const boost::bad_lexical_cast&)
-    {
-        throw macro_exception{};
-    }
-
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
-    if (!std::filesystem::exists(file_path))
-    {
-        return result;
-    }
-
-    const std::string file_content = read_file_to_string(file_path);
-    const std::string expaned_file_content{ expand_macro(file_content, config) };
-
-    int tokens{};
-    truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
-
-    return result;
-}
-
-std::string date_predefiend_macro(const config& config, const std::vector<std::string>&)
-{
-    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
-    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d");
-    std::ostringstream oss;
-    oss.imbue(std::locale(oss.getloc(), facet));
-    oss << local_time;
-    return oss.str();
-}
-
-std::string time_predefiend_macro(const config& config, const std::vector<std::string>&)
-{
-    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
-    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%H%M%S");
-    std::ostringstream oss;
-    oss.imbue(std::locale(oss.getloc(), facet));
-    oss << local_time;
-    return oss.str();
-}
-
-std::string datetime_predefiend_macro(const config& config, const std::vector<std::string>&)
-{
-    const boost::posix_time::ptime local_time = boost::posix_time::second_clock::local_time();
-    const boost::posix_time::time_facet* facet = new boost::posix_time::time_facet("%Y%m%d%H%M%S");
-    std::ostringstream oss;
-    oss.imbue(std::locale(oss.getloc(), facet));
-    oss << local_time;
-    return oss.str();
-}
-
-std::string stdin_predefiend_macro(const config& config, const std::vector<std::string>&)
-{
-    if (config.opt_stdin)
-    {
-        return *config.opt_stdin;
-    }
-
-    config.opt_stdin = std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
-    return *config.opt_stdin;
-}
-
-std::string env_predefiend_macro(const config& config, const std::vector<std::string>& arguments)
-{
-    if (arguments.size() < 1)
-    {
-        throw macro_exception{};
-    }
-
-    const char* env = boost::nowide::getenv(arguments[0].c_str());
-
-    if (!env)
-    {
-        return std::string{};
-    }
-
-    return std::string{ env };
-}
-
-std::optional<std::string> expand_predefined_macro(
-    const config& cfg,
-    std::string_view name,
-    std::string_view arguments
-)
-{
-    const static std::map<std::string, std::function<std::string(const config&, const std::vector<std::string>&)>> predefiend_macro_impls
-    {
-        {"include", include_predefiend_macro},
-        {"include_tail", include_predefiend_macro},
-        {"date", date_predefiend_macro},
-        {"time", time_predefiend_macro},
-        {"datetime", datetime_predefiend_macro},
-        {"stdin", stdin_predefiend_macro},
-        {"env", env_predefiend_macro},
-    };
-
-    auto found = std::find_if(predefiend_macro_impls.begin(), predefiend_macro_impls.end(), [&name](const auto& pair) { return boost::iequals(name, pair.first); });
-    if (found != predefiend_macro_impls.end())
-    {
-        BOOST_LOG_TRIVIAL(trace) << "found predefined macro. name: \"" << name << "\" arguments: \"" << arguments << "\"";
-
-        try
-        {
-            try
-            {
-                std::vector<std::string> args;
-                boost::split(args, arguments, boost::is_any_of(","));
-                return found->second(cfg, args);
-            }
-            catch (const runtime_exception& exception)
-            {
-                BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-                throw macro_exception{} << error_info::macro::name{ std::string{ name } } << error_info::macro::arguments{ std::string{ arguments } };
-            }
-        }
-        catch (const macro_exception& exception)
-        {
-            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-        }
-    }
-
-    return std::nullopt;
-}
-
-std::string expand_macro(std::string_view str, const config& config, int depth)
-{
-    constexpr int max_recursive_count = 32;
-    if (depth > max_recursive_count)
-    {
-        return {};
-    }
-
-    std::string result;
-    const std::regex macro{ R"(\{\{([^}]+)\}\})", std::regex_constants::ECMAScript };
-    std::string::size_type last_position = 0;
-
-    for (std::cregex_iterator iter{ str.data(), str.data() + str.size(), macro }, end; iter != end; ++iter)
-    {
-        const std::cmatch& match = *iter;
-        const std::string macro_string = match[1].str();
-        std::string expanded_string;
-
-        result += str.substr(last_position, match.position() - last_position);
-
-        std::string name;
-        std::string arguments;
-        auto colon_position = macro_string.find(':');
-        if (colon_position != std::string::npos)
-        {
-            name = macro_string.substr(0, colon_position);
-            arguments = macro_string.substr(colon_position + 1);
-        }
-        else
-        {
-            name = macro_string;
-        }
-
-        std::optional<std::string> predefined_macro_result{ expand_predefined_macro(config, name, arguments) };
-        if (predefined_macro_result)
-        {
-            expanded_string = *predefined_macro_result;
-            result += expanded_string;
-            BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
-        }
-        else
-        {
-            auto found = std::find_if(config.macros.begin(), config.macros.end(), [&macro_string](const auto& pair) { return boost::iequals(macro_string, pair.first); });
-
-            if (found != config.macros.end())
-            {
-                expanded_string = found->second;
-                if ("{{" + macro_string + "}}" != expanded_string)
-                {
-                    expanded_string = expand_macro(expanded_string, config, depth + 1);
-                }
-                result += expanded_string;
-                BOOST_LOG_TRIVIAL(trace) << "macro expanded: \"{{" << macro_string << "}}\" -> \"" << expanded_string << "\"";
-            }
-        }
-
-        last_position = match.position() + match.length();
-    }
-
-    result += str.substr(last_position);
-
-    return result;
 }
 
 std::filesystem::path string_to_path_by_config(std::string_view path, const config& config)
@@ -1678,10 +1839,8 @@ std::string generate_boundary()
 {
     std::ostringstream oss;
     oss << "----UniqueBoundary_" << std::hex << std::setfill('0');
-    for (std::size_t i = 0; i < 4; ++i)
-    {
-        oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
-    }
+    oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+        << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
     return oss.str();
 }
 
@@ -1754,7 +1913,7 @@ std::string upload_image_to_comfy_ui(
 
 void upload_images_to_comfy_ui(
     const config& config,
-    macros& macros
+    context& context
 )
 {
     for (const std::string& key_value_pair : config.cu_generation_params.upload_images)
@@ -1762,19 +1921,19 @@ void upload_images_to_comfy_ui(
         const std::size_t separator_position{ key_value_pair.find('=') };
         if (separator_position != std::string::npos)
         {
-            const std::string macro_name{ key_value_pair.substr(0, separator_position) };
+            const std::string variable_name{ key_value_pair.substr(0, separator_position) };
             const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
-            if (!macro_name.empty())
+            if (!variable_name.empty())
             {
                 const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, config) };
                 const std::string server_path{ upload_image_to_comfy_ui(config, local_path) };
-                macros[macro_name] = server_path;
-                BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << macro_name << "=" << server_path << ")";
+                context.variables[variable_name] = server_path;
+                BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
             }
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected macro_name=local_path.";
+            BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path.";
         }
     }
 }
@@ -2321,7 +2480,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
         tcp_stream.connect(results);
 
         const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
         request.set(http::field::host, config.llm_prompt_params.host);
@@ -2505,9 +2664,9 @@ std::string generate_and_complete_text(
         }
 
         int max_tokens = tokens_to_generate;
-        const std::string response = send_completions_request(
+        const std::string response{ send_completions_request(
             config, current_text, *config.llm_backend_params, max_tokens
-        );
+        ) };
 
         if (response.empty())
         {
@@ -2568,9 +2727,9 @@ std::string unescape_string(std::string_view str)
     return ss.str();
 }
 
-void parse_predefined_macros(const std::vector<std::string>& predefined_macros, macros& macros)
+void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& context)
 {
-    for (const std::string& key_value_pair : predefined_macros)
+    for (const std::string& key_value_pair : user_defined_variables)
     {
         const std::size_t separator_position = key_value_pair.find('=');
         if (separator_position != std::string::npos)
@@ -2579,8 +2738,8 @@ void parse_predefined_macros(const std::vector<std::string>& predefined_macros, 
             const std::string value{ key_value_pair.substr(separator_position + 1) };
             if (!key.empty())
             {
-                macros[key] = value;
-                BOOST_LOG_TRIVIAL(info) << "macro set " << key << "=" << value;
+                context.variables[key] = value;
+                BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
             }
         }
         else
@@ -2692,10 +2851,10 @@ void init_chat_mode(config& config)
     }
 }
 
-void set_phases_macro(
+void set_phase_variables(
     const std::vector<std::string>& phases,
     std::size_t phase_index,
-    std::map<std::string, std::string>& macros
+    std::unordered_map<std::string, std::string>& variables
 )
 {
     if (phase_index >= phases.size())
@@ -2705,23 +2864,33 @@ void set_phases_macro(
 
     if (phase_index > 0)
     {
-        macros["prev_phase"] = phases[phase_index - 1];
+        variables["prev_phase"] = phases[phase_index - 1];
     }
     else
     {
-        macros.erase("prev_phase");
+        variables.erase("prev_phase");
     }
 
-    macros["phase"] = phases[phase_index];
+    variables["phase"] = phases[phase_index];
 
     if (phase_index < phases.size() - 1)
     {
-        macros["next_phase"] = phases[phase_index + 1];
+        variables["next_phase"] = phases[phase_index + 1];
     }
     else
     {
-        macros.erase("next_phase");
+        variables.erase("next_phase");
     }
+}
+
+void set_builtin_variables(
+    config& config
+)
+{
+    config.context.variables["date"] = builtin::date();
+    config.context.variables["time"] = builtin::time();
+    config.context.variables["datetime"] = builtin::datetime();
+    config.context.variables["stdin"] = builtin::stdin_(config);
 }
 
 void set_paragraphs_to_phases(
@@ -2976,7 +3145,7 @@ int parse_command_line(
             ("config-file,c", po::value<std::string>(&config.config_file)->default_value("config.ini"), "config file path")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-            ("define,D", po::value<std::vector<std::string>>(&config.predefined_macros)->multitoken(), "define macro by key-value pair")
+            ("define,D", po::value<std::vector<std::string>>(&config.user_defined_variables)->multitoken(), "define variables (key=value)")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
             ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
 
@@ -3260,7 +3429,7 @@ int parse_command_line(
         }
 
         std::transform(config.tg_completions_params.stop.begin(), config.tg_completions_params.stop.end(), config.tg_completions_params.stop.begin(), unescape_string);
-        std::transform(config.predefined_macros.begin(), config.predefined_macros.end(), config.predefined_macros.begin(), unescape_string);
+        std::transform(config.user_defined_variables.begin(), config.user_defined_variables.end(), config.user_defined_variables.begin(), unescape_string);
         std::transform(config.kc_generation_params.stop_sequence.begin(), config.kc_generation_params.stop_sequence.end(), config.kc_generation_params.stop_sequence.begin(), unescape_string);
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
@@ -3272,7 +3441,7 @@ int parse_command_line(
         config.sd_txt2img_params.negative_prompt = unescape_string(config.sd_txt2img_params.negative_prompt);
         config.sb_generation_params.text = unescape_string(config.sb_generation_params.text);
 
-        parse_predefined_macros(config.predefined_macros, config.macros);
+        parse_user_defined_variables(config.user_defined_variables, config.context);
     }
     catch (const po::error& e)
     {
@@ -3521,11 +3690,11 @@ void iterate(config& config)
 
         set_seed(config);
 
-        config.macros["N"] = std::to_string(iteration_count + 1);
+        config.context.variables["N"] = std::to_string(iteration_count + 1);
 
         for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
         {
-            set_phases_macro(config.phases, phase_index, config.macros);
+            set_phase_variables(config.phases, phase_index, config.context.variables);
             generate_and_output(config, prompts);
         }
 
@@ -3552,9 +3721,11 @@ int exception_safe_main(int argc, char** argv)
         }
         else
         {
+            set_builtin_variables(config);
+
             if (config.mode == "cu")
             {
-                upload_images_to_comfy_ui(config, config.macros);
+                upload_images_to_comfy_ui(config, config.context);
             }
 
             iterate(config);

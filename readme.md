@@ -15,9 +15,9 @@
 それぞれのバックエンドが提供する GUI を手動で操作する手間から解放し、生成する対象に依存しない統一的なインターフェースを提供し、創作活動を支援する。
 
 ## 機能
-* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する。(`{{include_tail}}` マクロ)
+* プロンプトや生成されたテキストを任意の複数のファイルに分割して管理する。(`{{include("filename"}}` マクロや、マクロに対応したコマンドラインオプション)
+* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する。(`{{tail("filename", max_tokens)}}` マクロ)
 * テキストを生成する工程を自然言語による記述で構造化する。(`{{phase}}` マクロ)
-* プロンプトや生成されたテキストを任意の複数のファイルに分割して管理する。(`{{include:<filename>}}` マクロや、マクロに対応したコマンドラインオプション)
 * LLM のトークナイザーが通信により返したトークン数の情報をローカルにキャッシュし高速に再利用する。
 * スタックトレースを含むデバッグに有益な情報を、重要度に応じてフィルタリング可能な形態でログ出力する。
 * 主に Windows 環境のように UTF-8 をターミナルの標準のコードページとして採用していない OS 環境に対して、文字コードを UTF-8 に統一して扱う。
@@ -29,7 +29,7 @@
 * C++20+
 
 ```
-vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static boost-process:x64-windows-static
+vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static boost-process:x64-windows-static boost-spirit:x64-windows-static boost-fusion:x64-windows-static
 vcpkg integrate install
 ```
 
@@ -181,14 +181,35 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 * コマンドラインオプションで指定するファイルパス
 
 マクロは特定の文字列を `{{` と `}}` で囲むことにより記述する。
+マクロには、 `{{foo(arg1, arg2, arg3, ...)}}` 形式のマクロ関数と、 `{{foo}}` 形式のマクロ変数がある。
+マクロ関数の引数として文字列定数を指定する場合 `"arg"` というように `"` で囲む。
 マクロは実行時の反復毎、pahse の実行毎に展開される。
 ただし、`--log-file` で指定されたログファイルのパスは、プログラムの開始時に一度だけマクロを展開され、以降その時点のパスを使用し続ける。
 これはプログラムがログファイルのストリームを開いたまま保持し効率的にログ出力するための制限である。
 
-マクロは `--define` オプションにより事前に定義することができる。
+マクロ変数は `--define` オプションにより事前に定義することができる。
 `--define "user={{user}}" "char={{char}}"` というようにマクロの展開先にマクロを指定することができる。
 ただし上記のようにマクロの展開後の文字列が展開前の文字列と完全に一致した場合、再帰的なマクロの展開は中断される。
 このような冗長なマクロの定義は、マクロを含むプロンプトを LLM を使用して生成する際に、マクロの展開を抑止するために役立つ。
+
+### `{{include("filename")}}`
+`:` の右側で指定されたテキストファイルの内容に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。
+これによりプロンプトを複数のファイルに分割して管理することができる。
+
+### `{{tail("filename", 1024}}`
+`:` の右側で指定されたテキストファイルの内容のうち、末尾から指定されたトークン数分の文字列に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。例えば `{{include_tail:output,1024}}` のように記述して、直近の出力をプロンプトに含めることができる。
+
+### `{{env("var")}}`
+環境変数 `var` の値に展開される。
+
+### `{{datetime}}`
+`yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。主に生成したテキストを生成単位で出力する目的で使用する。
+
+### `{{N}}`
+1から開始する現在の反復回数に展開される。主に生成したテキストを反復単位で出力する目的で使用する。
+
+### `{{stdin}}`
+標準入力から渡された文字列に展開される。
 
 ### `{{phase}}`
 1回の処理は1個以上の phase から構成され、それらは順番に実行される。
@@ -232,25 +253,6 @@ phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意�
 ```
 
 これにより、LLM が物語として一貫し、秩序正しいテキストを生成するよう誘導することができる。
-
-### `{{include:<ファイル名>}}`
-`:` の右側で指定されたテキストファイルの内容に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。
-これによりプロンプトを複数のファイルに分割して管理することができる。
-
-### `{{include_tail:<ファイル名>,<トークン数>}}`
-`:` の右側で指定されたテキストファイルの内容のうち、末尾から指定されたトークン数分の文字列に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。例えば `{{include_tail:output,1024}}` のように記述して、直近の出力をプロンプトに含めることができる。
-
-### `{{datetime}}`
-`yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。主に生成したテキストを生成単位で出力する目的で使用する。
-
-### `{{N}}`
-1から開始する現在の反復回数に展開される。主に生成したテキストを反復単位で出力する目的で使用する。
-
-### `{{stdin}}`
-標準入力から渡された文字列に展開される。
-
-### `{{env:<環境変数名>}}`
-環境変数の値に展開される。
 
 ## コードブロック単位のファイル出力
 `--llm-code-block-extract` オプションを指定することにより、LLM の出力に含まれる markdown 形式のコードブロックをそれぞれファイルとして出力することができる。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。
