@@ -2670,7 +2670,7 @@ std::string generate_and_complete_text(
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
 
-    std::string current_text = initial_prompts;
+    std::string current_text{ initial_prompts };
     int current_tokens = initial_tokens;
     for (int completion_iterations{}; completion_iterations < config.max_completion_iterations; ++completion_iterations)
     {
@@ -2681,7 +2681,7 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int remaining_context = config.llm_backend_params->get_truncation_length() - current_tokens;
+        const int remaining_context{ config.llm_backend_params->get_truncation_length() - current_tokens };
         if (remaining_context <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
