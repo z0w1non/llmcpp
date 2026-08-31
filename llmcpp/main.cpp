@@ -2404,8 +2404,7 @@ std::string tg_completions_parameters::get_request_body_for_text_completions(std
 std::string tg_completions_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
 {
     picojson::value response_json;
-    std::stringstream ss_response_body(response.body());
-    picojson::parse(response_json, ss_response_body);
+    picojson::parse(response_json, response.body());
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
     const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
@@ -2422,9 +2421,8 @@ std::string tg_completions_parameters::get_request_body_for_token_count(std::str
 int tg_completions_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
 {
     picojson::value response_json;
-    std::stringstream ss_response_body(response.body());
-    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
-    picojson::parse(response_json, ss_response_body);
+    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << response.body() << "\n```";
+    picojson::parse(response_json, response.body());
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     return static_cast<int>(throwable_find<double>(object, "length"));
 }
@@ -2485,8 +2483,7 @@ std::string kc_generation_parameters::get_request_body_for_text_completions(std:
 std::string kc_generation_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
 {
     picojson::value response_json;
-    std::stringstream ss_response_body(response.body());
-    picojson::parse(response_json, ss_response_body);
+    picojson::parse(response_json, response.body());
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
     const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
@@ -2503,9 +2500,8 @@ std::string kc_generation_parameters::get_request_body_for_token_count(std::stri
 int kc_generation_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
 {
     picojson::value response_json;
-    std::stringstream ss_response_body(response.body());
-    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << ss_response_body.str() << "\n```";
-    picojson::parse(response_json, ss_response_body);
+    BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << response.body() << "\n```";
+    picojson::parse(response_json, response.body());
     const picojson::object& object{ throwable_get<picojson::object>(response_json) };
     return static_cast<int>(throwable_find<double>(object, "value"));
 }
@@ -3110,7 +3106,7 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
     std::size_t terminated_count{};
 
 #if defined(_WIN32)
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    HANDLE snapshot{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if (snapshot == INVALID_HANDLE_VALUE)
     {
         return 0;
