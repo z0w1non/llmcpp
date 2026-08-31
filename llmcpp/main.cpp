@@ -1750,7 +1750,7 @@ void send_automatic1111_txt2img_request(
     const std::string request_body{ picojson::value{ request_body_json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
+    http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 };
     request.set(http::field::host, config.sd_txt2img_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -1860,7 +1860,7 @@ void send_style_bert_voice_request(
 
     BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
-    http::request<http::string_body> request{ http::verb::get, target, 11 }; // HTTP/1.1
+    http::request<http::string_body> request{ http::verb::get, target, 11 };
     request.set(http::field::host, config.sb_generation_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -2045,7 +2045,7 @@ void send_comfy_ui_prompt(
     const std::string request_body{ picojson::value{ request_body_json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 }; // HTTP/1.1
+    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 };
     request.set(http::field::host, config.cu_generation_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -2297,7 +2297,7 @@ std::string send_completions_request(
     const std::string request_body{ params.get_request_body_for_text_completions(prompt, max_tokens) };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 }; // HTTP/1.1
+    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 };
     request.set(http::field::host, config.llm_prompt_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -2533,7 +2533,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
     const std::string request_body{ config.llm_backend_params->get_request_body_for_token_count(prompt) };
     BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
+    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 };
     request.set(http::field::host, config.llm_prompt_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
