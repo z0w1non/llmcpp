@@ -1056,14 +1056,14 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
             return input;
         }
 
-        std::string expanded{ evaluate_document(input, config, grammar) };
+        std::string evaluated{ evaluate_document(input, config, grammar) };
 
-        if (expanded == input)
+        if (evaluated == input)
         {
             break;
         }
 
-        input = std::move(expanded);
+        input = std::move(evaluated);
         depth += 1;
     }
 
@@ -2661,22 +2661,19 @@ std::string generate_and_complete_text(
     std::string_view prefix
 )
 {
-    std::string initial_prompts{ prompts };
-    std::size_t initial_prompts_size;
-    if (!config.llm_prompt_params.skip_generation_prefix)
-    {
-        initial_prompts_size = initial_prompts.size();
-    }
-    initial_prompts += expand_macro(prefix, config);
-    if (config.llm_prompt_params.skip_generation_prefix)
-    {
-        initial_prompts_size = initial_prompts.size();
-    }
-    const int initial_tokens{ send_token_count_request(config, initial_prompts) };
+    std::string expanded_prompt{ expand_macro(prompts, config) };
+    const std::string expanded_prefix{ expand_macro(prefix, config) };
+    const std::size_t initial_prompts_size{
+        config.llm_prompt_params.skip_generation_prefix
+        ? expanded_prompt.size() + expanded_prefix.size() : expanded_prompt.size()
+    };
+    expanded_prompt += expanded_prefix;
+    
+    const int initial_tokens{ send_token_count_request(config, expanded_prompt) };
 
-    BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
+    BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
-    std::string current_text{ initial_prompts };
+    std::string current_prompt{ expanded_prompt };
     int current_tokens = initial_tokens;
     for (int completion_iterations{}; completion_iterations < config.max_completion_iterations; ++completion_iterations)
     {
@@ -2703,7 +2700,7 @@ std::string generate_and_complete_text(
 
         const int max_tokens{ tokens_to_generate };
         const std::string response{ send_completions_request(
-            config, current_text, *config.llm_backend_params, max_tokens
+            config, current_prompt, *config.llm_backend_params, max_tokens
         ) };
 
         if (response.empty())
@@ -2711,11 +2708,11 @@ std::string generate_and_complete_text(
             break;
         }
 
-        current_text += response;
-        current_tokens = send_token_count_request(config, current_text);
+        current_prompt += response;
+        current_tokens = send_token_count_request(config, current_prompt);
     }
 
-    return current_text.substr(initial_prompts_size);
+    return current_prompt.substr(initial_prompts_size);
 }
 
 std::string unescape_string(std::string_view str)
@@ -3688,8 +3685,8 @@ void generate_and_output(const config& config, prompts& prompts)
     }
     else if (config.mode == "sb")
     {
-        const std::string text{ prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config)};
-     
+        const std::string text{ prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config) };
+
         send_style_bert_voice_request(config, text);
     }
     else if (config.mode == "cu")
