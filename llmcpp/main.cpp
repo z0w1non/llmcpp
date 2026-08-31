@@ -791,6 +791,25 @@ namespace parser
     using expression = std::variant<variable, macro_call>;
     using node = std::variant<std::string, expression>;
 
+    struct escaped_symbols
+        : boost::spirit::qi::symbols<char, char>
+    {
+        escaped_symbols()
+        {
+            add
+            ("\"", '\"')
+                ("\'", '\'')
+                ("\\", '\\')
+                ("a", '\a')
+                ("b", '\b')
+                ("f", '\f')
+                ("n", '\n')
+                ("r", '\r')
+                ("t", '\t')
+                ;
+        }
+    } escaped_char;
+
     template<typename Iterator>
     struct document_grammar
         : public boost::spirit::qi::grammar<Iterator, std::vector<node>()>
@@ -811,7 +830,7 @@ namespace parser
 
             expr = macro | variable;
             name = lexeme[+(char_("a-zA-Z0-9_"))];
-            string_literal = lexeme['"' >> *(("\\" >> char_) | (char_ - '"')) >> '"'];
+            string_literal = lexeme['"' >> *(("\\" >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
             variable = name;
             macro = name >> arg_list;
             arg_list = '(' >> -(arg % ',') >> ')';
