@@ -676,6 +676,10 @@ void set_builtin_variables(
     config& config
 );
 
+void set_builtin_variables_each_iteration(
+    config& config
+);
+
 void set_paragraphs_to_phases(
     const std::vector<item>& paragraphs,
     std::vector<std::string>& phases
@@ -2967,10 +2971,16 @@ void set_builtin_variables(
     config& config
 )
 {
+    config.context.variables["stdin"] = builtin::stdin_(config);
+}
+
+void set_builtin_variables_each_iteration(
+    config& config
+)
+{
     config.context.variables["date"] = builtin::date();
     config.context.variables["time"] = builtin::time();
     config.context.variables["datetime"] = builtin::datetime();
-    config.context.variables["stdin"] = builtin::stdin_(config);
 }
 
 void set_paragraphs_to_phases(
@@ -3770,6 +3780,7 @@ void iterate(config& config)
 
         set_seed(config);
 
+        set_builtin_variables_each_iteration();
         config.context.variables["N"] = std::to_string(iteration_count + 1);
 
         for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
