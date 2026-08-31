@@ -1436,7 +1436,7 @@ namespace tEXt
     constexpr crc_table_type generate_crc_table()
     {
         crc_table_type result{};
-        for (std::uint32_t i{}; i <= 0xFF; i++)
+        for (std::uint32_t i{}; i <= 0xFF; ++i)
         {
             std::uint32_t value{ i };
             for (std::size_t k{}; k < 8; k++)
@@ -1453,7 +1453,7 @@ namespace tEXt
     std::uint32_t calculate_crc32(const std::uint8_t* data, size_t length)
     {
         std::uint32_t c{ 0xFFFFFFFFL };
-        for (std::size_t i = 0; i < length; i++)
+        for (std::size_t i = 0; i < length; ++i)
         {
             c = crc_table[(c ^ data[i]) & 0xFF] ^ (c >> 8);
         }
