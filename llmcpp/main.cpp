@@ -2738,7 +2738,8 @@ std::string unescape_string(std::string_view str)
             case 'r':  result += '\r'; break;
             case 't':  result += '\t'; break;
             default:
-                result += '\\' << c;
+                result += '\\';
+                result += c;
                 break;
             }
             in_escape = false;
