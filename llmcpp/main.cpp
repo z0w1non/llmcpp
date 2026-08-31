@@ -299,7 +299,7 @@ struct kc_generation_parameters
     bool grammar_retain_state{};
     std::string memory;
     std::vector<std::string> images;
-    bool trim_stop;
+    bool trim_stop{};
     bool render_special{};
     bool bypass_eos{};
     std::vector<std::string> banned_tokens;
