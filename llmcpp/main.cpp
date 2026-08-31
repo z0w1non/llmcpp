@@ -190,7 +190,7 @@ struct text_generation_parameters
 };
 
 struct tg_completions_parameters
-    : public text_generation_parameters
+    : text_generation_parameters
 {
     std::string model;
     int best_of{};
@@ -270,7 +270,7 @@ struct tg_completions_parameters
 };
 
 struct kc_generation_parameters
-    : public text_generation_parameters
+    : text_generation_parameters
 {
     int max_context_length{};
     int max_length{};
@@ -618,7 +618,8 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     std::string_view host,
     std::string_view port,
     std::string_view target,
-    unsigned int expires_after);
+    unsigned int expires_after
+);
 
 std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
@@ -825,7 +826,7 @@ namespace parser
 
     template<typename Iterator>
     struct document_grammar
-        : public boost::spirit::qi::grammar<Iterator, std::vector<node>()>
+        : boost::spirit::qi::grammar<Iterator, std::vector<node>()>
     {
         document_grammar()
             : document_grammar::base_type(document)
