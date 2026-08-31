@@ -1105,7 +1105,7 @@ std::string builtin::tail(const std::vector<std::string>& arguments, const confi
         return result;
     }
 
-    const std::string file_content = read_file_to_string(file_path);
+    const std::string file_content{ read_file_to_string(file_path) };
     const std::string expaned_file_content{ expand_macro(file_content, config) };
 
     int tokens{};
@@ -1131,7 +1131,7 @@ std::string builtin::env(const std::vector<std::string>& arguments, const config
         throw macro_exception{};
     }
 
-    const char* env = boost::nowide::getenv(arguments[0].c_str());
+    const char* env{ boost::nowide::getenv(arguments[0].c_str()) };
 
     if (!env)
     {
@@ -1189,7 +1189,7 @@ std::string builtin::stdin_(const config& config)
 
 std::string expand_macro(std::string_view input, const config& config)
 {
-    constexpr unsigned int max_depth = 32;
+    constexpr unsigned int max_depth{ 32 };
     return parser::evaluate_document_recursive(std::string{ input }, config, max_depth);
 }
 
@@ -1290,7 +1290,7 @@ void truncate_by_tokens(std::string_view string, int max_tokens, const config& c
         {
             for (; first != last; ++first)
             {
-                const int next_tokens = get_tokens_from_cache(config, *first);
+                const int next_tokens{ get_tokens_from_cache(config, *first) };
                 if (tokens + next_tokens > max_tokens)
                 {
                     break;
@@ -1470,7 +1470,7 @@ namespace tEXt
 
     std::vector<unsigned char> create_tEXt_chunk(std::string_view key, std::string_view text)
     {
-        const std::size_t total_size = 4 + 4 + key.size() + 1 + text.size() + 4;
+        const std::size_t total_size{ 4 + 4 + key.size() + 1 + text.size() + 4 };
         std::vector<unsigned char> chunk;
         chunk.reserve(total_size);
 
@@ -1503,13 +1503,13 @@ namespace tEXt
 
     std::string insert_metadata(std::string_view image, std::string_view key, std::string_view metadata)
     {
-        constexpr std::size_t ihdr_end_offset = 8 + 25;
+        constexpr std::size_t ihdr_end_offset{ 8 + 25 };
         if (image.size() < ihdr_end_offset)
         {
             throw png_exception{};
         }
 
-        const std::vector<unsigned char> text_chunk = create_tEXt_chunk(key, metadata);
+        const std::vector<unsigned char> text_chunk{ create_tEXt_chunk(key, metadata) };
 
         std::string result;
         result.reserve(image.size() + text_chunk.size());
@@ -1800,7 +1800,7 @@ void send_style_bert_voice_request(
     beast::tcp_stream tcp_stream{ ioc };
 
     const auto results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
-    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
@@ -1938,7 +1938,7 @@ std::string upload_image_to_comfy_ui(
     beast::tcp_stream tcp_stream{ ioc };
 
     const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
-    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
@@ -2085,7 +2085,7 @@ void send_comfy_ui_prompt(
         {
             continue;
         }
-        const picojson::object& history_object = throwable_get<picojson::object>(history_json);
+        const picojson::object& history_object{ throwable_get<picojson::object>(history_json) };
 
         try
         {
@@ -2523,11 +2523,11 @@ int send_token_count_request(const config& config, std::string_view prompt)
     beast::tcp_stream tcp_stream{ ioc };
 
     const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
-    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
+    const std::string request_body{ config.llm_backend_params->get_request_body_for_token_count(prompt) };
     BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
     http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
@@ -2569,7 +2569,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
 
 int get_tokens_from_cache(const config& config, std::string_view str)
 {
-    constexpr std::size_t capacity = 1000;
+    constexpr std::size_t capacity{ 1000 };
     int tokens{};
 
     auto iter = config.lru_cache.get<key_tag>().find(std::string{ str });
@@ -2611,7 +2611,7 @@ void write_cache(const config& config)
     }
     picojson::object json;
     add_pair_into_json(json, "cache", cache);
-    const std::string serialized = picojson::value{ json }.serialize();
+    const std::string serialized{ picojson::value{ json }.serialize() };
 
     const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
     create_parent_directories(cache_path);
@@ -2674,7 +2674,7 @@ std::string generate_and_complete_text(
     {
         initial_prompts_size = initial_prompts.size();
     }
-    const int initial_tokens = send_token_count_request(config, initial_prompts);
+    const int initial_tokens{ send_token_count_request(config, initial_prompts) };
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << initial_prompts << "\n```";
 
@@ -2809,7 +2809,7 @@ void parse_user_defined_variables(const std::vector<std::string>& user_defined_v
 {
     for (const std::string& key_value_pair : user_defined_variables)
     {
-        const std::size_t separator_position = key_value_pair.find('=');
+        const std::size_t separator_position{ key_value_pair.find('=') };
         if (separator_position != std::string::npos)
         {
             const std::string key{ key_value_pair.substr(0, separator_position) };
@@ -3000,7 +3000,7 @@ void init_llm_mode(config& config)
     {
         config.phases.clear();
         const std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm_prompt_params.paragraphs_file, config) };
-        const std::string content = read_file_to_string(plot_file_path);
+        const std::string content{ read_file_to_string(plot_file_path) };
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
     }
@@ -3049,8 +3049,8 @@ std::map<std::string, std::string> extract_code_block_from_markdown(std::string_
     for (std::cregex_iterator iter = std::cregex_iterator(markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex); iter != std::cregex_iterator{}; ++iter)
     {
         const std::cmatch match{ *iter };
-        const std::string name = sanitize_as_filename(match[1].str());
-        const std::string code = match[2].str();
+        const std::string name{ sanitize_as_filename(match[1].str()) };
+        const std::string code{ match[2].str() };
         result[name] = code;
     }
 
@@ -3138,9 +3138,11 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
                 if (QueryFullProcessImageNameW(process, 0, current_path_buffer, &size))
                 {
                     const std::filesystem::path current_path{ current_path_buffer };
-                    const std::wstring current_target = executable_file_path.has_parent_path()
+                    const std::wstring current_target{
+                        executable_file_path.has_parent_path()
                         ? current_path.wstring()
-                        : current_path.filename().wstring();
+                        : current_path.filename().wstring()
+                    };
 
                     if (boost::algorithm::iequals(current_target, executable_file_path.wstring()))
                     {
@@ -3490,6 +3492,18 @@ int parse_command_line(
         {
             init_llm_mode(config);
         }
+        else if (config.mode == "sd")
+        {
+            ;
+        }
+        else if (config.mode == "sb")
+        {
+            ;
+        }
+        else if (config.mode == "cu")
+        {
+            ;
+        }
         else
         {
             BOOST_LOG_TRIVIAL(error) << "mode options must be (tg | kc | sd | sb | cu).";
@@ -3557,9 +3571,10 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     std::string::size_type first{};
     while ((first = result.find(prefix, first)) != std::string::npos)
     {
-        const std::string::size_type last = result.find(suffix, first + prefix.length());
-        if (last != std::string::npos) {
-            const std::string::size_type remove_length = (last + suffix.length()) - first;
+        const std::string::size_type last{ result.find(suffix, first + prefix.length()) };
+        if (last != std::string::npos)
+        {
+            const std::string::size_type remove_length{ (last + suffix.length()) - first };
             BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
             result.erase(first, remove_length);
         }
