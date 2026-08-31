@@ -90,15 +90,16 @@
 
 class runtime_exception
     : public boost::exception
+    , public std::exception
 {
 public:
-    explicit runtime_exception();
+    runtime_exception();
 };
 
 class runtime_exception;
 class io_exception : public runtime_exception {};
 class file_open_exception : public io_exception {};
-class socket_exception : public io_exception {};
+class socket_exception : public runtime_exception {};
 class text_generation_exception : public runtime_exception {};
 class image_generation_exception : public runtime_exception {};
 class comfy_ui_generation_exception : public runtime_exception {};
@@ -107,7 +108,11 @@ class json_parse_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
 class command_line_syntax_exception : public runtime_exception {};
 class array_index_out_of_bounds_exception : public runtime_exception {};
-class dns_resolution_exception : public runtime_exception {};
+class dns_resolve_exception : public runtime_exception {};
+class connect_exception : public runtime_exception {};
+class http_send_exception : public runtime_exception {};
+class http_receive_exception : public runtime_exception {};
+class http_status_exception : public runtime_exception {};
 class png_exception : public runtime_exception {};
 
 namespace error_info
@@ -127,9 +132,8 @@ namespace error_info
     {
         namespace response
         {
-            using result_int = boost::error_info<struct tag_result_int, unsigned int>;
+            using status = boost::error_info<struct tag_status_int, boost::beast::http::status>;
             using reason = boost::error_info<struct tag_result_int, std::string>;
-            using body = boost::error_info<struct tag_body, std::string>;
         }
     }
 
@@ -536,6 +540,7 @@ struct config
     std::string log_file;
     std::string config_file;
     bool verbose{};
+    unsigned int expires_after{};
     int number_iterations{};
     std::vector<std::string> user_defined_variables;
     std::vector<std::string> phases;
@@ -546,6 +551,7 @@ struct config
 
     bool create_process{};
     bool terminate_process{};
+
     std::string server_executable_file;
     std::string server_arguments;
     std::string server_host;
@@ -611,7 +617,8 @@ std::filesystem::path string_to_path_by_config(std::string_view path, const conf
 boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     std::string_view host,
     std::string_view port,
-    std::string_view target);
+    std::string_view target,
+    unsigned int expires_after);
 
 std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
@@ -1515,36 +1522,53 @@ namespace tEXt
     }
 }
 
+template<typename BoostException>
+void if_error_throw(const boost::beast::error_code& error_code)
+{
+    if (error_code)
+    {
+        throw BoostException{} << error_info::beast::error_code{ error_code };
+    }
+}
+
 boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     std::string_view host,
     std::string_view port,
-    std::string_view target)
+    std::string_view target,
+    unsigned int expires_after)
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
+    beast::error_code error_code;
+
     net::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(host, port);
-    tcp_stream.connect(results);
+    const auto results = resolver.resolve(host, port, error_code);
+    if_error_throw<dns_resolve_exception>(error_code);
+
+    tcp_stream.expires_after(std::chrono::seconds{ expires_after });
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
 
     http::request<http::empty_body> req{ http::verb::get, target, 11 };
     req.set(http::field::host, host);
     req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
 
-    http::write(tcp_stream, req);
+    http::write(tcp_stream, req, error_code);
+    if_error_throw<http_send_exception>(error_code);
 
     beast::flat_buffer buffer;
     http::response_parser<http::string_body> parser;
     parser.body_limit(boost::none);
-    http::read(tcp_stream, buffer, parser);
+    http::read(tcp_stream, buffer, parser, error_code);
+    if_error_throw<http_receive_exception>(error_code);
 
-    beast::error_code ec;
-    tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 
     return parser.release();
 };
@@ -1582,189 +1606,181 @@ void send_automatic1111_txt2img_request(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    try
+    beast::error_code error_code;
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    const auto results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
+
+    picojson::object request_body_json;
+
+    add_pair_into_json(request_body_json, "prompt", prompt);
+    add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
+    //add_pair_into_json(request_body_json, "styles", config.sd_txt2img_params.styles);
+    add_pair_into_json(request_body_json, "seed", config.sd_txt2img_params.seed);
+    add_pair_into_json(request_body_json, "subseed", config.sd_txt2img_params.subseed);
+    add_pair_into_json(request_body_json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
+    add_pair_into_json(request_body_json, "seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
+    add_pair_into_json(request_body_json, "seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
+    add_pair_into_json(request_body_json, "sampler_name", config.sd_txt2img_params.sampler_name);
+    add_pair_into_json(request_body_json, "scheduler", config.sd_txt2img_params.scheduler);
+    add_pair_into_json(request_body_json, "batch_size", config.sd_txt2img_params.batch_size);
+    add_pair_into_json(request_body_json, "n_iter", config.sd_txt2img_params.n_iter);
+    add_pair_into_json(request_body_json, "steps", config.sd_txt2img_params.steps);
+    add_pair_into_json(request_body_json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
+    add_pair_into_json(request_body_json, "width", config.sd_txt2img_params.width);
+    add_pair_into_json(request_body_json, "height", config.sd_txt2img_params.height);
+    add_pair_into_json(request_body_json, "restore_faces", config.sd_txt2img_params.restore_faces);
+    add_pair_into_json(request_body_json, "tiling", config.sd_txt2img_params.tiling);
+    add_pair_into_json(request_body_json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
+    add_pair_into_json(request_body_json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
+    add_pair_into_json(request_body_json, "eta", config.sd_txt2img_params.eta);
+    add_pair_into_json(request_body_json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
+    add_pair_into_json(request_body_json, "s_min_uncond", config.sd_txt2img_params.s_min_uncond);
+    add_pair_into_json(request_body_json, "s_churn", config.sd_txt2img_params.s_churn);
+    add_pair_into_json(request_body_json, "s_tmax", config.sd_txt2img_params.s_tmax);
+    add_pair_into_json(request_body_json, "s_tmin", config.sd_txt2img_params.s_tmin);
+    add_pair_into_json(request_body_json, "s_noise", config.sd_txt2img_params.s_noise);
+    add_pair_into_json(request_body_json, "override_settings", config.sd_txt2img_params.override_settings);
+    add_pair_into_json(request_body_json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
+    add_pair_into_json(request_body_json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
+    add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
+    add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
+    add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
+    add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
+    add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
+    add_pair_into_json(request_body_json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
+    add_pair_into_json(request_body_json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
+    add_pair_into_json(request_body_json, "hr_scale", config.sd_txt2img_params.hr_scale);
+    add_pair_into_json(request_body_json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
+    add_pair_into_json(request_body_json, "hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
+    add_pair_into_json(request_body_json, "hr_resize_x", config.sd_txt2img_params.hr_resize_x);
+    add_pair_into_json(request_body_json, "hr_resize_y", config.sd_txt2img_params.hr_resize_y);
+    add_pair_into_json(request_body_json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
+    //add_pair_into_json(request_body_json, "hr_prompt", prompt);
+    //add_pair_into_json(request_body_json, "hr_negative_prompt", negative_prompt);
+    add_pair_into_json(request_body_json, "force_task_id", config.sd_txt2img_params.force_task_id);
+
+    if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
     {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
-
-        const auto results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
-        tcp_stream.connect(results);
-
-        picojson::object request_body_json;
-
-        add_pair_into_json(request_body_json, "prompt", prompt);
-        add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
-        //add_pair_into_json(request_body_json, "styles", config.sd_txt2img_params.styles);
-        add_pair_into_json(request_body_json, "seed", config.sd_txt2img_params.seed);
-        add_pair_into_json(request_body_json, "subseed", config.sd_txt2img_params.subseed);
-        add_pair_into_json(request_body_json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
-        add_pair_into_json(request_body_json, "seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
-        add_pair_into_json(request_body_json, "seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
-        add_pair_into_json(request_body_json, "sampler_name", config.sd_txt2img_params.sampler_name);
-        add_pair_into_json(request_body_json, "scheduler", config.sd_txt2img_params.scheduler);
-        add_pair_into_json(request_body_json, "batch_size", config.sd_txt2img_params.batch_size);
-        add_pair_into_json(request_body_json, "n_iter", config.sd_txt2img_params.n_iter);
-        add_pair_into_json(request_body_json, "steps", config.sd_txt2img_params.steps);
-        add_pair_into_json(request_body_json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
-        add_pair_into_json(request_body_json, "width", config.sd_txt2img_params.width);
-        add_pair_into_json(request_body_json, "height", config.sd_txt2img_params.height);
-        add_pair_into_json(request_body_json, "restore_faces", config.sd_txt2img_params.restore_faces);
-        add_pair_into_json(request_body_json, "tiling", config.sd_txt2img_params.tiling);
-        add_pair_into_json(request_body_json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
-        add_pair_into_json(request_body_json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
-        add_pair_into_json(request_body_json, "eta", config.sd_txt2img_params.eta);
-        add_pair_into_json(request_body_json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
-        add_pair_into_json(request_body_json, "s_min_uncond", config.sd_txt2img_params.s_min_uncond);
-        add_pair_into_json(request_body_json, "s_churn", config.sd_txt2img_params.s_churn);
-        add_pair_into_json(request_body_json, "s_tmax", config.sd_txt2img_params.s_tmax);
-        add_pair_into_json(request_body_json, "s_tmin", config.sd_txt2img_params.s_tmin);
-        add_pair_into_json(request_body_json, "s_noise", config.sd_txt2img_params.s_noise);
-        add_pair_into_json(request_body_json, "override_settings", config.sd_txt2img_params.override_settings);
-        add_pair_into_json(request_body_json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
-        add_pair_into_json(request_body_json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
-        add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
-        add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
-        add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
-        add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
-        add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
-        add_pair_into_json(request_body_json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
-        add_pair_into_json(request_body_json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
-        add_pair_into_json(request_body_json, "hr_scale", config.sd_txt2img_params.hr_scale);
-        add_pair_into_json(request_body_json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
-        add_pair_into_json(request_body_json, "hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
-        add_pair_into_json(request_body_json, "hr_resize_x", config.sd_txt2img_params.hr_resize_x);
-        add_pair_into_json(request_body_json, "hr_resize_y", config.sd_txt2img_params.hr_resize_y);
-        add_pair_into_json(request_body_json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
-        //add_pair_into_json(request_body_json, "hr_prompt", prompt);
-        //add_pair_into_json(request_body_json, "hr_negative_prompt", negative_prompt);
-        add_pair_into_json(request_body_json, "force_task_id", config.sd_txt2img_params.force_task_id);
-
-        if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
-        {
-            add_pair_into_json(request_body_json, "sampler_index", config.sd_txt2img_params.sampler_index);
-        }
-
-        if (config.sd_txt2img_params.abg_remover_enable)
-        {
-            add_pair_into_json(request_body_json, "script_name", "abg remover");
-            picojson::array args_array
-            {
-                picojson::value{ false },
-                picojson::value{ false },
-                picojson::value{ false },
-                picojson::value{ "#000000" },
-                picojson::value{ false }
-            };
-            add_pair_into_json(request_body_json, "script_args", args_array);
-        }
-
-        add_pair_into_json(request_body_json, "send_images", config.sd_txt2img_params.send_images);
-        add_pair_into_json(request_body_json, "save_images", config.sd_txt2img_params.save_images);
-
-        picojson::object alwayson_scripts;
-        if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
-        {
-            picojson::object adetailer;
-            picojson::array args_array;
-            picojson::object args;
-            picojson::object object;
-            add_pair_into_json(object, "ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
-            if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
-            {
-                const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config) };
-                add_pair_into_json(object, "ad_prompt", ad_prompt);
-            }
-            if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
-            {
-                const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config) };
-                add_pair_into_json(object, "ad_negative_prompt", ad_negative_prompt);
-            }
-            args_array.push_back(picojson::value{ true });
-            args_array.push_back(picojson::value{ false });
-            args_array.push_back(picojson::value{ object });
-            add_pair_into_json(adetailer, "args", args_array);
-            add_pair_into_json(alwayson_scripts, "ADetailer", adetailer);
-        }
-        //{
-        //    picojson::object sampler;
-        //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) });
-        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.sampler_name });
-        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.scheduler });
-        //    add_pair_into_json(sampler, "args", args_array);
-        //    add_pair_into_json(alwayson_scripts, "Sampler", sampler);
-        //}
-        //{
-        //    picojson::object seed;
-        //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) });
-        //    args_array.push_back(picojson::value{ false });
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    add_pair_into_json(seed, "args", args_array);
-        //    add_pair_into_json(alwayson_scripts, "Seed", seed);
-        //}
-        add_pair_into_json(request_body_json, "alwayson_scripts", alwayson_scripts);
-
-        if (!config.sd_txt2img_params.infotext.empty())
-        {
-            add_pair_into_json(request_body_json, "infotext", config.sd_txt2img_params.infotext);
-        }
-
-        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.sd_txt2img_params.host);
-        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = request_body;
-        request.prepare_payload();
-
-        http::write(tcp_stream, request);
-
-        beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
-
-        picojson::value response_json;
-        picojson::parse(response_json, response.body());
-
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& images{ throwable_find<picojson::array>(object, "images") };
-        const std::string base64_image_data{ throwable_at<std::string>(images, 0) };
-
-        if (base64_image_data.empty())
-        {
-            throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
-        }
-
-        const std::string decoded_image{ base64_decode(base64_image_data) };
-
-        {
-            boost::nowide::ofstream ofs{ path, std::ios::binary };
-            if (!ofs.is_open())
-            {
-                throw file_open_exception{} << error_info::path{ path };
-            }
-            ofs.write(decoded_image.data(), decoded_image.size());
-            BOOST_LOG_TRIVIAL(info) << "Save image to " << path;
-        }
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
-        }
+        add_pair_into_json(request_body_json, "sampler_index", config.sd_txt2img_params.sampler_index);
     }
-    catch (const std::exception& exception)
+
+    if (config.sd_txt2img_params.abg_remover_enable)
     {
-        throw file_open_exception{} << error_info::description{ exception.what() };
+        add_pair_into_json(request_body_json, "script_name", "abg remover");
+        picojson::array args_array
+        {
+            picojson::value{ false },
+            picojson::value{ false },
+            picojson::value{ false },
+            picojson::value{ "#000000" },
+            picojson::value{ false }
+        };
+        add_pair_into_json(request_body_json, "script_args", args_array);
     }
+
+    add_pair_into_json(request_body_json, "send_images", config.sd_txt2img_params.send_images);
+    add_pair_into_json(request_body_json, "save_images", config.sd_txt2img_params.save_images);
+
+    picojson::object alwayson_scripts;
+    if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
+    {
+        picojson::object adetailer;
+        picojson::array args_array;
+        picojson::object args;
+        picojson::object object;
+        add_pair_into_json(object, "ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+        if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+        {
+            const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config) };
+            add_pair_into_json(object, "ad_prompt", ad_prompt);
+        }
+        if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+        {
+            const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config) };
+            add_pair_into_json(object, "ad_negative_prompt", ad_negative_prompt);
+        }
+        args_array.push_back(picojson::value{ true });
+        args_array.push_back(picojson::value{ false });
+        args_array.push_back(picojson::value{ object });
+        add_pair_into_json(adetailer, "args", args_array);
+        add_pair_into_json(alwayson_scripts, "ADetailer", adetailer);
+    }
+    //{
+    //    picojson::object sampler;
+    //    picojson::array args_array;
+    //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) });
+    //    args_array.push_back(picojson::value{ config.sd_txt2img_params.sampler_name });
+    //    args_array.push_back(picojson::value{ config.sd_txt2img_params.scheduler });
+    //    add_pair_into_json(sampler, "args", args_array);
+    //    add_pair_into_json(alwayson_scripts, "Sampler", sampler);
+    //}
+    //{
+    //    picojson::object seed;
+    //    picojson::array args_array;
+    //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) });
+    //    args_array.push_back(picojson::value{ false });
+    //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) });
+    //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+    //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+    //    args_array.push_back(picojson::value{ static_cast<double>(0) });
+    //    add_pair_into_json(seed, "args", args_array);
+    //    add_pair_into_json(alwayson_scripts, "Seed", seed);
+    //}
+    add_pair_into_json(request_body_json, "alwayson_scripts", alwayson_scripts);
+
+    if (!config.sd_txt2img_params.infotext.empty())
+    {
+        add_pair_into_json(request_body_json, "infotext", config.sd_txt2img_params.infotext);
+    }
+
+    const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+    BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+    http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 }; // HTTP/1.1
+    request.set(http::field::host, config.sd_txt2img_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "application/json; charset=UTF-8");
+    request.body() = request_body;
+    request.prepare_payload();
+
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    beast::flat_buffer buffer;
+    http::response<http::string_body> response;
+    http::read(tcp_stream, buffer, response, error_code);
+    if_error_throw<http_receive_exception>(error_code);
+
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
+
+    picojson::value response_json;
+    picojson::parse(response_json, response.body());
+
+    const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+    const picojson::array& images{ throwable_find<picojson::array>(object, "images") };
+    const std::string base64_image_data{ throwable_at<std::string>(images, 0) };
+
+    if (base64_image_data.empty())
+    {
+        throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
+    }
+
+    const std::string decoded_image{ base64_decode(base64_image_data) };
+
+    boost::nowide::ofstream ofs{ path, std::ios::binary };
+    if (!ofs.is_open())
+    {
+        throw file_open_exception{} << error_info::path{ path };
+    }
+    ofs.write(decoded_image.data(), decoded_image.size());
+    BOOST_LOG_TRIVIAL(info) << "Save image to " << path;
 }
 
 void send_style_bert_voice_request(
@@ -1777,105 +1793,102 @@ void send_style_bert_voice_request(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    try
+    beast::error_code error_code;
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    const auto results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
+
+    boost::url target{ config.sb_generation_params.target };
+    target.params().set("text", text);
+    //target.params().set("encoding", "utf-8");
+
+    if (!config.sb_generation_params.model_name.empty())
     {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
-
-        const auto results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
-        tcp_stream.connect(results);
-
-        boost::url target{ config.sb_generation_params.target };
-        target.params().set("text", text);
-        //target.params().set("encoding", "utf-8");
-
-        if (!config.sb_generation_params.model_name.empty())
-        {
-            target.params().set("model_name", config.sb_generation_params.model_name);
-        }
-        else
-        {
-            target.params().set("model_id", std::to_string(config.sb_generation_params.model_id));
-        }
-
-        if (!config.sb_generation_params.speaker_name.empty())
-        {
-            target.params().set("speaker_name", config.sb_generation_params.speaker_name);
-        }
-        else
-        {
-            target.params().set("speaker_id", std::to_string(config.sb_generation_params.speaker_id));
-        }
-
-        target.params().set("sdp_ratio", std::to_string(config.sb_generation_params.sdp_ratio));
-        target.params().set("noise", std::to_string(config.sb_generation_params.noise));
-        target.params().set("noisew", std::to_string(config.sb_generation_params.noisew));
-        target.params().set("length", std::to_string(config.sb_generation_params.length));
-        target.params().set("language", config.sb_generation_params.language);
-        target.params().set("auto_split", config.sb_generation_params.auto_split ? "true" : "false");
-        target.params().set("split_interval", std::to_string(config.sb_generation_params.split_interval));
-
-        if (!config.sb_generation_params.assist_text.empty())
-        {
-            target.params().set("assist_text", config.sb_generation_params.assist_text);
-            target.params().set("assist_text_weight", std::to_string(config.sb_generation_params.assist_text_weight));
-        }
-
-        if (!config.sb_generation_params.style.empty())
-        {
-            target.params().set("style", config.sb_generation_params.style);
-            target.params().set("style_weight", std::to_string(config.sb_generation_params.style_weight));
-        }
-
-        if (!config.sb_generation_params.reference_audio_path.empty())
-        {
-            target.params().set("reference_audio_path", config.sb_generation_params.reference_audio_path);
-        }
-
-        BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
-
-        http::request<http::string_body> request{ http::verb::get, target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.sb_generation_params.host);
-        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.prepare_payload();
-
-        http::write(tcp_stream, request);
-
-        beast::flat_buffer buffer;
-        http::response_parser<http::string_body> parser;
-        parser.body_limit(boost::none);
-        http::read(tcp_stream, buffer, parser);
-        http::response<http::string_body> response{ parser.release() };
-
-        if (response.result_int() != 200)
-        {
-            throw socket_exception{} << error_info::http::response::result_int{ response.result_int() };
-        }
-
-        {
-            const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
-            const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
-            boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
-            if (!ofs.is_open())
-            {
-                throw file_open_exception{} << error_info::path{ output_file_path };
-            }
-            ofs.write(response.body().data(), response.body().size());
-        }
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw image_generation_exception{} << error_info::beast::error_code{ error_code };
-        }
+        target.params().set("model_name", config.sb_generation_params.model_name);
     }
-    catch (const std::exception& exception)
+    else
     {
-        throw file_open_exception{} << error_info::description{ exception.what() };
+        target.params().set("model_id", std::to_string(config.sb_generation_params.model_id));
     }
+
+    if (!config.sb_generation_params.speaker_name.empty())
+    {
+        target.params().set("speaker_name", config.sb_generation_params.speaker_name);
+    }
+    else
+    {
+        target.params().set("speaker_id", std::to_string(config.sb_generation_params.speaker_id));
+    }
+
+    target.params().set("sdp_ratio", std::to_string(config.sb_generation_params.sdp_ratio));
+    target.params().set("noise", std::to_string(config.sb_generation_params.noise));
+    target.params().set("noisew", std::to_string(config.sb_generation_params.noisew));
+    target.params().set("length", std::to_string(config.sb_generation_params.length));
+    target.params().set("language", config.sb_generation_params.language);
+    target.params().set("auto_split", config.sb_generation_params.auto_split ? "true" : "false");
+    target.params().set("split_interval", std::to_string(config.sb_generation_params.split_interval));
+
+    if (!config.sb_generation_params.assist_text.empty())
+    {
+        target.params().set("assist_text", config.sb_generation_params.assist_text);
+        target.params().set("assist_text_weight", std::to_string(config.sb_generation_params.assist_text_weight));
+    }
+
+    if (!config.sb_generation_params.style.empty())
+    {
+        target.params().set("style", config.sb_generation_params.style);
+        target.params().set("style_weight", std::to_string(config.sb_generation_params.style_weight));
+    }
+
+    if (!config.sb_generation_params.reference_audio_path.empty())
+    {
+        target.params().set("reference_audio_path", config.sb_generation_params.reference_audio_path);
+    }
+
+    BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
+
+    http::request<http::string_body> request{ http::verb::get, target, 11 }; // HTTP/1.1
+    request.set(http::field::host, config.sb_generation_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "application/json; charset=UTF-8");
+    request.prepare_payload();
+
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    beast::flat_buffer buffer;
+    http::response_parser<http::string_body> parser;
+    parser.body_limit(boost::none);
+
+    http::read(tcp_stream, buffer, parser, error_code);
+    if_error_throw<http_receive_exception>(error_code);
+
+    http::response<http::string_body> response{ parser.release() };
+
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
+
+    if (response.result() != http::status::ok)
+    {
+        throw http_status_exception{}
+            << error_info::http::response::status{ response.result() }
+            << error_info::http::response::reason{ std::to_string(response.result_int()) }
+        ;
+    }
+
+    const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
+    const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
+    boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
+    if (!ofs.is_open())
+    {
+        throw file_open_exception{} << error_info::path{ output_file_path };
+    }
+    ofs.write(response.body().data(), response.body().size());
 }
 
 std::string generate_boundary()
@@ -1898,8 +1911,9 @@ std::string upload_image_to_comfy_ui(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    const std::string image_data{ read_file_to_string(image_path, std::ios::binary) };
+    beast::error_code error_code;
 
+    const std::string image_data{ read_file_to_string(image_path, std::ios::binary) };
     const std::string boundary{ generate_boundary() };
     const std::string filename{ image_path.filename().string() };
 
@@ -1924,7 +1938,9 @@ std::string upload_image_to_comfy_ui(
     beast::tcp_stream tcp_stream{ ioc };
 
     const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
-    tcp_stream.connect(results);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
 
     http::request<http::string_body> request{ http::verb::post, "/upload/image", 11 };
     request.set(http::field::host, config.cu_generation_params.host);
@@ -1933,16 +1949,19 @@ std::string upload_image_to_comfy_ui(
     request.body() = body.str();
     request.prepare_payload();
 
-    http::write(tcp_stream, request);
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
 
     beast::flat_buffer buffer;
     http::response_parser<http::string_body> parser;
     parser.body_limit(boost::none);
-    http::read(tcp_stream, buffer, parser);
+
+    http::read(tcp_stream, buffer, parser, error_code);
+    if_error_throw<http_receive_exception>(error_code);
+
     http::response<http::string_body> response{ parser.release() };
 
-    beast::error_code ec;
-    tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 
     if (response.result() != http::status::ok)
     {
@@ -1993,190 +2012,186 @@ void send_comfy_ui_prompt(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    try
-    {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
+    beast::error_code error_code;
 
-        struct generated_file_info
-        {
-            std::string filename;
-            std::string subfolder;
-            std::string type;
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    struct generated_file_info
+    {
+        std::string filename;
+        std::string subfolder;
+        std::string type;
+    };
+
+    const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
+
+    picojson::object request_body_json;
+    picojson::value prompt_json;
+    picojson::parse(prompt_json, std::string{ prompt });
+    add_pair_into_json(request_body_json, "prompt", prompt_json);
+
+    const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+    BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 }; // HTTP/1.1
+    request.set(http::field::host, config.cu_generation_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "application/json; charset=UTF-8");
+    request.body() = request_body;
+    request.prepare_payload();
+
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    beast::flat_buffer buffer;
+    http::response<http::string_body> response;
+    http::read(tcp_stream, buffer, response, error_code);
+    if_error_throw<http_receive_exception>(error_code);
+
+    picojson::value response_json;
+    picojson::parse(response_json, response.body());
+
+    BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
+
+    const picojson::object& response_object{ throwable_get<picojson::object>(response_json) };
+    const std::string prompt_id{ throwable_find<std::string>(response_object, "prompt_id") };
+    BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
+
+    std::vector<generated_file_info> target_files;
+    bool is_finished{};
+
+    while (!is_finished)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        http::response<http::string_body> history_response{
+            send_http_get(
+                config.cu_generation_params.host,
+                config.cu_generation_params.port,
+                "/history/" + prompt_id,
+                config.expires_after
+            )
         };
 
-        const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
-        tcp_stream.connect(results);
+        picojson::value history_json;
+        picojson::parse(history_json, history_response.body());
 
-        picojson::object request_body_json;
-        picojson::value prompt_json;
-        picojson::parse(prompt_json, std::string{ prompt });
-        add_pair_into_json(request_body_json, "prompt", prompt_json);
-
-        const std::string request_body{ picojson::value{ request_body_json }.serialize() };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.cu_generation_params.host);
-        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = request_body;
-        request.prepare_payload();
-
-        http::write(tcp_stream, request);
-
-        beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
-
-        picojson::value response_json;
-        picojson::parse(response_json, response.body());
-
-        BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
-
-        const picojson::object& response_object{ throwable_get<picojson::object>(response_json) };
-        const std::string prompt_id{ throwable_find<std::string>(response_object, "prompt_id") };
-        BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
-
-        std::vector<generated_file_info> target_files;
-        bool is_finished{};
-
-        while (!is_finished)
+        if (!history_json.is<picojson::object>())
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            continue;
+        }
+        const picojson::object& history_object = throwable_get<picojson::object>(history_json);
 
-            http::response<http::string_body> history_response{
-                send_http_get(
-                    config.cu_generation_params.host,
-                    config.cu_generation_params.port,
-                    "/history/" + prompt_id
-                )
-            };
-
-            picojson::value history_json;
-            picojson::parse(history_json, history_response.body());
-
-            if (!history_json.is<picojson::object>())
-            {
-                continue;
-            }
-            const picojson::object& history_object = throwable_get<picojson::object>(history_json);
+        try
+        {
+            const picojson::object& prompt_response_obj{ throwable_find<picojson::object>(history_object, prompt_id) };
 
             try
             {
-                const picojson::object& prompt_response_obj{ throwable_find<picojson::object>(history_object, prompt_id) };
-
-                try
+                const picojson::object& status_object{ throwable_find<picojson::object>(prompt_response_obj, "status") };
+                const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
+                if (status_str == "error")
                 {
-                    const picojson::object& status_object{ throwable_find<picojson::object>(prompt_response_obj, "status") };
-                    const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
-                    if (status_str == "error")
-                    {
-                        throw comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." };
-                    }
+                    throw comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." };
                 }
-                catch (const json_parse_exception&) {
-                    ;
-                }
+            }
+            catch (const json_parse_exception&) {
+                ;
+            }
 
-                target_files.clear();
+            target_files.clear();
 
-                const picojson::object& outputs_object{ throwable_find<picojson::object>(prompt_response_obj, "outputs") };
-                for (const std::pair<const std::string, picojson::value>& node_pair : outputs_object)
+            const picojson::object& outputs_object{ throwable_find<picojson::object>(prompt_response_obj, "outputs") };
+            for (const std::pair<const std::string, picojson::value>& node_pair : outputs_object)
+            {
+                if (!node_pair.second.is<picojson::object>())
                 {
-                    if (!node_pair.second.is<picojson::object>())
+                    continue;
+                }
+
+                const picojson::object& node_object{ throwable_get<picojson::object>(node_pair.second) };
+
+                for (const std::pair<const std::string, picojson::value>& prop_pair : node_object)
+                {
+                    if (!prop_pair.second.is<picojson::array>())
                     {
                         continue;
                     }
 
-                    const picojson::object& node_object{ throwable_get<picojson::object>(node_pair.second) };
-
-                    for (const std::pair<const std::string, picojson::value>& prop_pair : node_object)
+                    const picojson::array& file_list{ throwable_get<picojson::array>(prop_pair.second) };
+                    for (std::size_t i = 0; i < file_list.size(); ++i)
                     {
-                        if (!prop_pair.second.is<picojson::array>())
+                        try
+                        {
+                            const picojson::object& file_object{ throwable_at<picojson::object>(file_list, i) };
+
+                            target_files.emplace_back(
+                                throwable_find<std::string>(file_object, "filename"),
+                                throwable_find<std::string>(file_object, "subfolder"),
+                                throwable_find<std::string>(file_object, "type")
+                            );
+                        }
+                        catch (const json_parse_exception&)
                         {
                             continue;
                         }
-
-                        const picojson::array& file_list{ throwable_get<picojson::array>(prop_pair.second) };
-                        for (std::size_t i = 0; i < file_list.size(); ++i)
-                        {
-                            try
-                            {
-                                const picojson::object& file_object{ throwable_at<picojson::object>(file_list, i) };
-
-                                target_files.emplace_back(
-                                    throwable_find<std::string>(file_object, "filename"),
-                                    throwable_find<std::string>(file_object, "subfolder"),
-                                    throwable_find<std::string>(file_object, "type")
-                                );
-                            }
-                            catch (const json_parse_exception&)
-                            {
-                                continue;
-                            }
-                        }
                     }
                 }
-
-                if (!target_files.empty())
-                {
-                    is_finished = true;
-                }
             }
-            catch (const json_parse_exception&)
+
+            if (!target_files.empty())
             {
-                continue;
+                is_finished = true;
             }
         }
-
-        BOOST_LOG_TRIVIAL(info) << "Generation complete.";
-
-        for (const generated_file_info& file_info : target_files)
+        catch (const json_parse_exception&)
         {
-            std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
-            if (config.cu_generation_params.preserve_subdirectories)
-            {
-                relative_file_path /= file_info.subfolder;
-            }
-            relative_file_path /= file_info.filename;
-
-            const std::string view_target
-                = "/view?filename=" + file_info.filename
-                + "&subfolder=" + file_info.subfolder
-                + "&type=" + file_info.type;
-
-            const http::response<http::string_body> view_response = send_http_get(
-                config.cu_generation_params.host,
-                config.cu_generation_params.port,
-                view_target
-            );
-
-            {
-                const std::filesystem::path output_file_path{ string_to_path_by_config(relative_file_path.string(), config) };
-                create_parent_directories(output_file_path);
-                boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
-                if (!ofs.is_open())
-                {
-                    throw file_open_exception{} << error_info::path{ output_file_path };
-                }
-                ofs.write(view_response.body().data(), view_response.body().size());
-                BOOST_LOG_TRIVIAL(info) << "Saved output to " << output_file_path;
-            }
-        }
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw comfy_ui_generation_exception{} << error_info::beast::error_code{ error_code };
+            continue;
         }
     }
-    catch (const std::exception& exception)
+
+    BOOST_LOG_TRIVIAL(info) << "Generation complete.";
+
+    for (const generated_file_info& file_info : target_files)
     {
-        throw comfy_ui_generation_exception{} << error_info::description{ exception.what() };
+        std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
+        if (config.cu_generation_params.preserve_subdirectories)
+        {
+            relative_file_path /= file_info.subfolder;
+        }
+        relative_file_path /= file_info.filename;
+
+        const std::string view_target
+            = "/view?filename=" + file_info.filename
+            + "&subfolder=" + file_info.subfolder
+            + "&type=" + file_info.type;
+
+        const http::response<http::string_body> view_response{ send_http_get(
+            config.cu_generation_params.host,
+            config.cu_generation_params.port,
+            view_target,
+            config.expires_after
+        ) };
+
+        {
+            const std::filesystem::path output_file_path{ string_to_path_by_config(relative_file_path.string(), config) };
+            create_parent_directories(output_file_path);
+            boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
+            if (!ofs.is_open())
+            {
+                throw file_open_exception{} << error_info::path{ output_file_path };
+            }
+            ofs.write(view_response.body().data(), view_response.body().size());
+            BOOST_LOG_TRIVIAL(info) << "Saved output to " << output_file_path;
+        }
     }
+
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 }
 
 std::vector<item> parse_item_list(std::string_view str)
@@ -2261,65 +2276,52 @@ std::string send_completions_request(
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    try
+    beast::error_code error_code;
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    auto const results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
+
+    const std::string request_body{ params.get_request_body_for_text_completions(prompt, max_tokens) };
+    BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 }; // HTTP/1.1
+    request.set(http::field::host, config.llm_prompt_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "application/json; charset=UTF-8");
+    request.body() = request_body;
+    request.prepare_payload();
+
+    if (!config.llm_prompt_params.api_key.empty())
     {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
-
-        const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
-        tcp_stream.connect(results);
-
-        const std::string request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.llm_prompt_params.host);
-        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = request_body;
-        request.prepare_payload();
-
-        if (!config.llm_prompt_params.api_key.empty())
-        {
-            request.set(http::field::authorization, ("Bearer ") + config.llm_prompt_params.api_key);
-        }
-
-        http::write(tcp_stream, request);
-
-        beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw text_generation_exception{} << error_info::beast::error_code{ error_code };
-        }
-
-        if (response.result() == http::status::ok)
-        {
-            return params.parse_response_for_text_completions(response);
-        }
-        else
-        {
-            throw socket_exception{}
-                << error_info::description{ "HTTP error" }
-                << error_info::http::response::result_int{ response.result_int() }
-                << error_info::http::response::reason{ response.reason() }
-                << error_info::http::response::body{ response.body() }
-            ;
-        }
-
+        request.set(http::field::authorization, ("Bearer ") + config.llm_prompt_params.api_key);
     }
-    catch (const beast::system_error& exception)
+
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    beast::flat_buffer buffer;
+    http::response<http::string_body> response;
+    http::read(tcp_stream, buffer, response, error_code);
+    if_error_throw<http_receive_exception>(error_code);
+
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
+
+    if (response.result() == http::status::ok)
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + exception.code().message() } };
+        return params.parse_response_for_text_completions(response);
     }
-    catch (const std::exception& exception)
+    else
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + exception.what() };
+        throw http_status_exception{}
+            << error_info::http::response::status{ response.result() }
+            << error_info::http::response::reason{ std::to_string(response.result_int()) }
+        ;
     }
 
     return {};
@@ -2514,62 +2516,54 @@ int send_token_count_request(const config& config, std::string_view prompt)
     namespace net = boost::asio;
     using tcp = net::ip::tcp;
 
-    try
+    beast::error_code error_code;
+
+    net::io_context ioc;
+    tcp::resolver resolver{ ioc };
+    beast::tcp_stream tcp_stream{ ioc };
+
+    const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
+    tcp_stream.expires_after(std::chrono::seconds{ config.expires_after }); 
+    tcp_stream.connect(results, error_code);
+    if_error_throw<connect_exception>(error_code);
+
+    const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
+    BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
+
+    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
+    request.set(http::field::host, config.llm_prompt_params.host);
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::content_type, "application/json; charset=UTF-8");
+    request.body() = request_body;
+    request.prepare_payload();
+
+    http::write(tcp_stream, request, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    beast::flat_buffer buffer;
+    http::response_parser<http::string_body> parser;
+    parser.body_limit(boost::none);
+
+    http::read(tcp_stream, buffer, parser, error_code);
+    if_error_throw<http_send_exception>(error_code);
+
+    http::response<http::string_body> response{ parser.release() };
+
+    tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
+
+    if (response.result() == http::status::ok)
     {
-        net::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
+        return config.llm_backend_params->parse_response_for_token_count(response);
 
-        const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
-        tcp_stream.connect(results);
-
-        const std::string request_body = config.llm_backend_params->get_request_body_for_token_count(prompt);
-        BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
-
-        http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 }; // HTTP/1.1
-        request.set(http::field::host, config.llm_prompt_params.host);
-        request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(http::field::content_type, "application/json; charset=UTF-8");
-        request.body() = request_body;
-        request.prepare_payload();
-
-        http::write(tcp_stream, request);
-
-        beast::flat_buffer buffer;
-        http::response_parser<http::string_body> parser;
-        parser.body_limit(boost::none);
-        http::read(tcp_stream, buffer, parser);
-        http::response<http::string_body> response{ parser.release() };
-
-        beast::error_code error_code;
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
-        if (error_code && error_code != beast::errc::not_connected)
-        {
-            throw text_generation_exception{} << error_info::beast::error_code{ error_code };
-        }
-
-        if (response.result() == http::status::ok)
-        {
-            return config.llm_backend_params->parse_response_for_token_count(response);
-
-        }
-        else
-        {
-            throw socket_exception{}
-                << error_info::description{ "HTTP Error getting token count" }
-                << error_info::http::response::result_int{ response.result_int() }
-                << error_info::http::response::reason{ response.reason() }
-            << error_info::http::response::body{ response.body() };
-            return -1;
-        }
     }
-    catch (const beast::system_error& exception)
+    else
     {
-        throw socket_exception{} << error_info::description{ std::string{ "Network communication error: " + exception.code().message() } };
-    }
-    catch (const std::exception& exception)
-    {
-        throw socket_exception{} << error_info::description{ std::string{ "Unexcepted error: " } + exception.what() };
+        throw http_status_exception{}
+            << error_info::http::response::status{ response.result() }
+            << error_info::http::response::reason{ std::to_string(response.result_int()) }
+        ;
+
+        return -1;
     }
 }
 
@@ -2784,8 +2778,8 @@ std::string json_escape_string(std::string_view str)
     {
         switch (c)
         {
-        case '"': result +=  "\\\""; break;
-        // case '\'': ss << "\\\'"; break; // Not defined!
+        case '"': result += "\\\""; break;
+            // case '\'': ss << "\\\'"; break; // Not defined!
         case '\\': result += "\\\\"; break;
         case '\a':  result += "\\a"; break;
         case '\b':  result += "\\b"; break;
@@ -3072,7 +3066,7 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
     auto results = resolver.resolve(host, port, error_code);
     if (error_code || results.empty())
     {
-        throw dns_resolution_exception{} << error_info::asio::error_code{ error_code };
+        throw dns_resolve_exception{} << error_info::asio::error_code{ error_code };
     }
 
     boost::asio::ip::tcp::endpoint endpoint = *results.begin();;
@@ -3234,6 +3228,7 @@ int parse_command_line(
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
             ("config-file,c", po::value<std::string>(&config.config_file)->default_value("config.ini"), "config file path")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
+            ("expires-after", po::value<unsigned int>(&config.expires_after)->default_value(30), "connection timeout")
             ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
             ("define,D", po::value<std::vector<std::string>>(&config.user_defined_variables)->multitoken(), "define variables (key=value)")
             ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
