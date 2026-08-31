@@ -2701,7 +2701,7 @@ std::string generate_and_complete_text(
             break;
         }
 
-        int max_tokens = tokens_to_generate;
+        const int max_tokens{ tokens_to_generate };
         const std::string response{ send_completions_request(
             config, current_text, *config.llm_backend_params, max_tokens
         ) };
