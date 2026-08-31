@@ -1339,8 +1339,8 @@ std::string concatenate(const Container& strings)
 template <typename Container>
 void split_string_by_new_line(std::string_view str, Container& container)
 {
-    size_t start_position = 0;
-    size_t end_position = 0;
+    size_t start_position{};
+    size_t end_position{};
 
     while ((end_position = str.find('\n', start_position)) != std::string::npos)
     {
@@ -1436,10 +1436,10 @@ namespace tEXt
     constexpr crc_table_type generate_crc_table()
     {
         crc_table_type result{};
-        for (std::uint32_t i = 0; i < 256; i++)
+        for (std::uint32_t i{}; i <= 0xFF; i++)
         {
             std::uint32_t value{ i };
-            for (std::size_t k = 0; k < 8; k++)
+            for (std::size_t k{}; k < 8; k++)
             {
                 value = (value & 1) ? (0xEDB88320L ^ (value >> 1)) : (value >> 1);
             }
@@ -2124,7 +2124,7 @@ void send_comfy_ui_prompt(
                     }
 
                     const picojson::array& file_list{ throwable_get<picojson::array>(prop_pair.second) };
-                    for (std::size_t i = 0; i < file_list.size(); ++i)
+                    for (std::size_t i{}; i < file_list.size(); ++i)
                     {
                         try
                         {
@@ -2680,7 +2680,7 @@ std::string generate_and_complete_text(
 
     std::string current_text = initial_prompts;
     int current_tokens = initial_tokens;
-    for (int completion_iterations = 0; completion_iterations < config.max_completion_iterations; ++completion_iterations)
+    for (int completion_iterations{}; completion_iterations < config.max_completion_iterations; ++completion_iterations)
     {
         BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
 
@@ -3069,8 +3069,8 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
         throw dns_resolve_exception{} << error_info::asio::error_code{ error_code };
     }
 
-    boost::asio::ip::tcp::endpoint endpoint = *results.begin();;
-    for (unsigned int retries = 0; retries < max_retries; ++retries)
+    boost::asio::ip::tcp::endpoint endpoint{ *results.begin() };
+    for (unsigned int retries{}; retries < max_retries; ++retries)
     {
         boost::asio::ip::tcp::socket socket{ ctx };
         socket.connect(endpoint, error_code);
@@ -3554,7 +3554,7 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
         return result;
     }
 
-    std::string::size_type first = 0;
+    std::string::size_type first{};
     while ((first = result.find(prefix, first)) != std::string::npos)
     {
         const std::string::size_type last = result.find(suffix, first + prefix.length());
@@ -3755,7 +3755,7 @@ void iterate(config& config)
 {
     read_cache(config);
 
-    int iteration_count = 0;
+    int iteration_count{};
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
         prompts prompts;
@@ -3766,7 +3766,7 @@ void iterate(config& config)
         set_builtin_variables_each_iteration(config);
         config.context.variables["N"] = std::to_string(iteration_count + 1);
 
-        for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
+        for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
         {
             set_phase_variables(config.phases, phase_index, config.context.variables);
             generate_and_output(config, prompts);
