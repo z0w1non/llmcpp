@@ -2668,7 +2668,7 @@ std::string generate_and_complete_text(
         ? expanded_prompt.size() + expanded_prefix.size() : expanded_prompt.size()
     };
     expanded_prompt += expanded_prefix;
-    
+
     const int initial_tokens{ send_token_count_request(config, expanded_prompt) };
 
     BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
@@ -2767,32 +2767,31 @@ std::string unescape_string(std::string_view str)
 
 std::string json_escape_string(std::string_view str)
 {
+    constexpr std::size_t escape_overhead_ratio{ 8 };
     std::string result;
-    result.reserve(str.size() + str.size() / 8);
+    result.reserve(str.size() + str.size() / escape_overhead_ratio);
 
     for (const char c : str)
     {
         switch (c)
         {
-        case '"': result += "\\\""; break;
-            // case '\'': ss << "\\\'"; break; // Not defined!
-        case '\\': result += "\\\\"; break;
-        case '\a':  result += "\\a"; break;
-        case '\b':  result += "\\b"; break;
-        case '\f':  result += "\\f"; break;
-        case '\n':  result += "\\n"; break;
-        case '\r':  result += "\\r"; break;
-        case '\t':  result += "\\t"; break;
+        case '"':   result.append("\\\""); break;
+        case '\\':  result.append("\\\\"); break;
+        case '\b':  result.append("\\b"); break;
+        case '\f':  result.append("\\f"); break;
+        case '\n':  result.append("\\n"); break;
+        case '\r':  result.append("\\r"); break;
+        case '\t':  result.append("\\t"); break;
         default:
             if (static_cast<unsigned char>(c) < 0x20)
             {
                 char buf[7];
                 std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                result += buf;
+                result.append(buf, std::size(buf) - 1);
             }
             else
             {
-                result += c;
+                result.push_back(c);
             }
             break;
         }
