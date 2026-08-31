@@ -723,6 +723,12 @@ void llm_write_code_block(const config& config, std::string_view markdown);
 
 void llm_append_mode(const config& config, prompts& prompts);
 
+std::string prompt_from_string_or_file_path(
+    std::string_view string,
+    std::string_view file_path,
+    const config& config
+);
+
 void generate_and_output(const config& config, prompts& prompts);
 
 void set_seed(config& config);
@@ -1454,7 +1460,7 @@ namespace tEXt
     std::uint32_t calculate_crc32(const std::uint8_t* data, size_t length)
     {
         std::uint32_t c{ 0xFFFFFFFFL };
-        for (std::size_t i = 0; i < length; ++i)
+        for (std::size_t i{}; i < length; ++i)
         {
             c = crc_table[(c ^ data[i]) & 0xFF] ^ (c >> 8);
         }
@@ -3656,6 +3662,15 @@ void llm_append_mode(const config& config, prompts& prompts)
     }
 }
 
+std::string prompt_from_string_or_file_path(
+    std::string_view string,
+    std::string_view file_path,
+    const config& config
+)
+{
+    return expand_macro(string.empty() ? read_file_to_string(string_to_path_by_config(file_path, config)) : std::string{ string }, config);
+}
+
 void generate_and_output(const config& config, prompts& prompts)
 {
     if (config.mode == "tg" || config.mode == "kc")
@@ -3667,51 +3682,22 @@ void generate_and_output(const config& config, prompts& prompts)
         const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
         create_parent_directories(output_file_path);
 
-        std::string prompt_string;
-        if (!config.sd_txt2img_params.prompt.empty())
-        {
-            prompt_string = expand_macro(config.sd_txt2img_params.prompt, config);
-        }
-        else
-        {
-            const std::filesystem::path prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.prompt_file, config) };
-            prompt_string = read_file_to_string(prompt_file_path);
-            prompt_string = expand_macro(prompt_string, config);
-        }
-
-        std::string negative_prompt_string;
-        if (!config.sd_txt2img_params.prompt.empty())
-        {
-            negative_prompt_string = expand_macro(config.sd_txt2img_params.negative_prompt, config);
-        }
-        else
-        {
-            const std::filesystem::path negative_prompt_file_path{ string_to_path_by_config(config.sd_txt2img_params.negative_prompt_file, config) };
-            negative_prompt_string = read_file_to_string(negative_prompt_file_path);
-            negative_prompt_string = expand_macro(negative_prompt_string, config);
-        }
+        const std::string prompt_string{ prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config) };
+        const std::string negative_prompt_string{ prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config) };
 
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
     }
     else if (config.mode == "sb")
     {
-        std::string text_string;
-        if (!config.sb_generation_params.text.empty())
-        {
-            text_string = expand_macro(config.sb_generation_params.text, config);
-        }
-        else
-        {
-            const std::filesystem::path text_file_path{ string_to_path_by_config(config.sb_generation_params.text_file, config) };
-            text_string = read_file_to_string(text_file_path);
-            text_string = expand_macro(text_string, config);
-        }
-        send_style_bert_voice_request(config, text_string);
+        const std::string text{ prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config)};
+     
+        send_style_bert_voice_request(config, text);
     }
     else if (config.mode == "cu")
     {
         const std::filesystem::path prompt_file{ string_to_path_by_config(config.cu_generation_params.prompt_file, config) };
         const std::string prompt{ expand_macro(read_file_to_string(prompt_file), config) };
+
         send_comfy_ui_prompt(config, prompt);
     }
 }
