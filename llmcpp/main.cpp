@@ -1056,7 +1056,7 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
             return input;
         }
 
-        std::string expanded = evaluate_document(input, config, grammar);
+        std::string expanded{ evaluate_document(input, config, grammar) };
 
         if (expanded == input)
         {
