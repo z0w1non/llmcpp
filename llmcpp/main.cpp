@@ -3780,7 +3780,7 @@ void iterate(config& config)
 
         set_seed(config);
 
-        set_builtin_variables_each_iteration();
+        set_builtin_variables_each_iteration(config);
         config.context.variables["N"] = std::to_string(iteration_count + 1);
 
         for (std::size_t phase_index = 0; phase_index < config.phases.size(); ++phase_index)
