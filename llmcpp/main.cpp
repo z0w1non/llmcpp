@@ -750,7 +750,7 @@ const Value& throwable_at(const picojson::array& array, std::size_t index)
     {
         throw json_parse_exception{};
     }
-    const picojson::value& element = array[index];
+    const picojson::value& element{ array[index] };
     if (!element.is<Value>())
     {
         throw json_parse_exception{};
@@ -761,7 +761,7 @@ const Value& throwable_at(const picojson::array& array, std::size_t index)
 template<typename Value>
 const Value& throwable_find(const picojson::object& object, std::string_view key)
 {
-    auto iter = object.find(std::string{ key });
+    picojson::object::const_iterator iter{ object.find(std::string{ key }) };
     if (iter == object.end() || !iter->second.is<Value>())
     {
         throw json_parse_exception{};
