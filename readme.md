@@ -204,7 +204,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ### `{{include_json_literal("filename")}}`
 `include` とほぼ同様であるが、生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。`{ "key": "{{include_json_literal("filename")}}" }` などと使用する。
 
-### `{{tail_json_literal("filename")}}`
+### `{{tail_json_literal("filename", 1024)}}`
 `tail` とほぼ同様であるが、生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。`{ "key": "{{tail_json_literal("filename", 1024)}}" }` などと使用する。
 
 ### `{{env("var")}}`
