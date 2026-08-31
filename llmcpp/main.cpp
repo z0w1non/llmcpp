@@ -2717,7 +2717,7 @@ std::string unescape_string(std::string_view str)
     std::string result;
     result.reserve(str.size());
 
-    bool in_escape = false;
+    bool in_escape{};
 
     for (const char c : str)
     {
