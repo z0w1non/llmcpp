@@ -3624,8 +3624,7 @@ void llm_write_code_block(const config& config, std::string_view markdown)
 
 void llm_append_mode(const config& config, prompts& prompts)
 {
-    std::string prompts_string{ prompts.to_string(config) };
-    prompts_string = expand_macro(prompts_string, config);
+    const std::string prompts_string{ expand_macro(prompts.to_string(config), config) };
 
     try
     {
