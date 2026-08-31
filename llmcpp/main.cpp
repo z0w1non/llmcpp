@@ -2548,20 +2548,15 @@ int send_token_count_request(const config& config, std::string_view prompt)
 
     tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 
-    if (response.result() == http::status::ok)
-    {
-        return config.llm_backend_params->parse_response_for_token_count(response);
-
-    }
-    else
+    if (response.result() != http::status::ok)
     {
         throw http_status_exception{}
             << error_info::http::response::status{ response.result() }
             << error_info::http::response::reason{ std::to_string(response.result_int()) }
         ;
-
-        return -1;
     }
+
+    return config.llm_backend_params->parse_response_for_token_count(response);
 }
 
 int get_tokens_from_cache(const config& config, std::string_view str)
