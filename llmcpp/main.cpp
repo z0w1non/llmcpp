@@ -657,6 +657,8 @@ std::string generate_and_complete_text(
 
 std::string unescape_string(std::string_view str);
 
+std::string json_escape_string(std::string_view str);
+
 void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& context);
 
 void init_logging_with_nowide_cout();
@@ -876,12 +878,16 @@ namespace builtin
 {
     std::string include(const std::vector<std::string>& arguments, const config& config);
     std::string tail(const std::vector<std::string>& arguments, const config& config);
+    std::string include_json_literal(const std::vector<std::string>& arguments, const config& config);
+    std::string tail_json_literal(const std::vector<std::string>& arguments, const config& config);
     std::string env(const std::vector<std::string>& arguments, const config& config);
 
     const static std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&)>> macros
     {
         {"include", include},
         {"tail", tail},
+        {"include_json_literal", include_json_literal},
+        {"tail_json_literal", tail_json_literal},
         {"env", env},
     };
 
@@ -1095,6 +1101,16 @@ std::string builtin::tail(const std::vector<std::string>& arguments, const confi
     truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
 
     return result;
+}
+
+std::string builtin::include_json_literal(const std::vector<std::string>& arguments, const config& config)
+{
+    return json_escape_string(include(arguments, config));
+}
+
+std::string builtin::tail_json_literal(const std::vector<std::string>& arguments, const config& config)
+{
+    return json_escape_string(tail(arguments, config));
 }
 
 std::string builtin::env(const std::vector<std::string>& arguments, const config& config)
@@ -1519,13 +1535,14 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     http::write(tcp_stream, req);
 
     beast::flat_buffer buffer;
-    http::response<http::string_body> res;
-    http::read(tcp_stream, buffer, res);
+    http::response_parser<http::string_body> parser;
+    parser.body_limit(boost::none);
+    http::read(tcp_stream, buffer, parser);
 
     beast::error_code ec;
     tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
 
-    return res;
+    return parser.release();
 };
 
 // unused
@@ -1823,8 +1840,11 @@ void send_style_bert_voice_request(
         http::write(tcp_stream, request);
 
         beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
+        http::response_parser<http::string_body> parser;
+        parser.body_limit(boost::none);
+        http::read(tcp_stream, buffer, parser);
+        http::response<http::string_body> response{ parser.release() };
+
         if (response.result_int() != 200)
         {
             throw socket_exception{} << error_info::http::response::result_int{ response.result_int() };
@@ -1912,8 +1932,10 @@ std::string upload_image_to_comfy_ui(
     http::write(tcp_stream, request);
 
     beast::flat_buffer buffer;
-    http::response<http::string_body> response;
-    http::read(tcp_stream, buffer, response);
+    http::response_parser<http::string_body> parser;
+    parser.body_limit(boost::none);
+    http::read(tcp_stream, buffer, parser);
+    http::response<http::string_body> response{ parser.release() };
 
     beast::error_code ec;
     tcp_stream.socket().shutdown(tcp::socket::shutdown_both, ec);
@@ -2149,7 +2171,7 @@ void send_comfy_ui_prompt(
     }
     catch (const std::exception& exception)
     {
-        throw file_open_exception{} << error_info::description{ exception.what() };
+        throw comfy_ui_generation_exception{} << error_info::description{ exception.what() };
     }
 }
 
@@ -2278,7 +2300,6 @@ std::string send_completions_request(
         }
         else
         {
-            // Error: HTTP request failed.
             throw socket_exception{}
                 << error_info::description{ "HTTP error" }
                 << error_info::http::response::result_int{ response.result_int() }
@@ -2511,8 +2532,10 @@ int send_token_count_request(const config& config, std::string_view prompt)
         http::write(tcp_stream, request);
 
         beast::flat_buffer buffer;
-        http::response<http::string_body> response;
-        http::read(tcp_stream, buffer, response);
+        http::response_parser<http::string_body> parser;
+        parser.body_limit(boost::none);
+        http::read(tcp_stream, buffer, parser);
+        http::response<http::string_body> response{ parser.release() };
 
         beast::error_code error_code;
         tcp_stream.socket().shutdown(tcp::socket::shutdown_both, error_code);
@@ -2701,7 +2724,9 @@ std::string generate_and_complete_text(
 
 std::string unescape_string(std::string_view str)
 {
-    std::stringstream ss;
+    std::string result;
+    result.reserve(str.size());
+
     bool in_escape = false;
 
     for (const char c : str)
@@ -2710,17 +2735,17 @@ std::string unescape_string(std::string_view str)
         {
             switch (c)
             {
-            case '\"': ss << '\"'; break;
-            case '\'': ss << '\''; break;
-            case '\\': ss << '\\'; break;
-            case 'a':  ss << '\a'; break;
-            case 'b':  ss << '\b'; break;
-            case 'f':  ss << '\f'; break;
-            case 'n':  ss << '\n'; break;
-            case 'r':  ss << '\r'; break;
-            case 't':  ss << '\t'; break;
+            case '\"': result += '\"'; break;
+            case '\'': result += '\''; break;
+            case '\\': result += '\\'; break;
+            case 'a':  result += '\a'; break;
+            case 'b':  result += '\b'; break;
+            case 'f':  result += '\f'; break;
+            case 'n':  result += '\n'; break;
+            case 'r':  result += '\r'; break;
+            case 't':  result += '\t'; break;
             default:
-                ss << '\\' << c;
+                result += '\\' << c;
                 break;
             }
             in_escape = false;
@@ -2733,17 +2758,53 @@ std::string unescape_string(std::string_view str)
             }
             else
             {
-                ss << c;
+                result += c;
             }
         }
     }
 
     if (in_escape)
     {
-        ss << '\\';
+        result += '\\';
     }
 
-    return ss.str();
+    return result;
+}
+
+std::string json_escape_string(std::string_view str)
+{
+    std::string result;
+    result.reserve(str.size() + str.size() / 8);
+
+    for (const char c : str)
+    {
+        switch (c)
+        {
+        case '"': result +=  "\\\""; break;
+        // case '\'': ss << "\\\'"; break; // Not defined!
+        case '\\': result += "\\\\"; break;
+        case '\a':  result += "\\a"; break;
+        case '\b':  result += "\\b"; break;
+        case '\f':  result += "\\f"; break;
+        case '\n':  result += "\\n"; break;
+        case '\r':  result += "\\r"; break;
+        case '\t':  result += "\\t"; break;
+        default:
+            if (static_cast<unsigned char>(c) < 0x20)
+            {
+                char buf[7];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                result += buf;
+            }
+            else
+            {
+                result += c;
+            }
+            break;
+        }
+    }
+
+    return result;
 }
 
 void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& context)
