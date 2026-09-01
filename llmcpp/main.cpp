@@ -838,13 +838,13 @@ std::string base64_decode(std::string_view input)
     using namespace boost::archive::iterators;
     using iterator = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
 
-    std::size_t padding_count{};
+    const std::size_t padding_count{};
     while (padding_count < input.size() && input[input.size() - 1 - padding_count] == '=')
     {
         ++padding_count;
     }
 
-    std::string_view trimed_input{ input.substr(0, input.size() - padding_count)};
+    const std::string_view trimed_input{ input.substr(0, input.size() - padding_count)};
     std::string decoded{ iterator{ input.begin() }, iterator{ input.end() } };
 
     std::size_t expected_size{ input.size() / 4 * 3 - padding_count};
