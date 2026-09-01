@@ -3041,9 +3041,9 @@ std::string sanitize_as_filename(std::string_view name)
 std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content)
 {
     std::map<std::string, std::string> result;
-    const std::regex code_block_regex(R"(```(\S+)\s*\n([\s\S]*?)```)");
+    const std::regex code_block_regex{ R"(```(\S+)\s*\n([\s\S]*?)```)" };
 
-    for (std::cregex_iterator iter = std::cregex_iterator(markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex); iter != std::cregex_iterator{}; ++iter)
+    for (std::cregex_iterator iter{ markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex }; iter != std::cregex_iterator{}; ++iter)
     {
         const std::cmatch match{ *iter };
         const std::string name{ sanitize_as_filename(match[1].str()) };
