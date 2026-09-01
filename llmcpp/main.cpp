@@ -2321,11 +2321,7 @@ std::string send_completions_request(
 
     tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 
-    if (response.result() == http::status::ok)
-    {
-        return params.parse_response_for_text_completions(response);
-    }
-    else
+    if (response.result() != http::status::ok)
     {
         throw http_status_exception{}
             << error_info::http::response::status{ response.result() }
@@ -2333,7 +2329,7 @@ std::string send_completions_request(
         ;
     }
 
-    return {};
+    return params.parse_response_for_text_completions(response);
 }
 
 std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
