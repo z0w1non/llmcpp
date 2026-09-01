@@ -177,6 +177,8 @@ struct llm_prompt_parameters
     std::string reasoning_suffix;
 
     bool code_block_extract{};
+
+    text_generation_parameters* backend{};
 };
 
 struct config;
@@ -573,13 +575,13 @@ struct config
     int server_max_retries;
     int server_wait_ms;
 
-    llm_prompt_parameters llm_prompt_params;
-    tg_completions_parameters tg_completions_params;
-    kc_generation_parameters kc_generation_params;
-    text_generation_parameters* llm_backend_params{};
-    sd_txt2img_parameters sd_txt2img_params;
-    sb_generation_parameters sb_generation_params;
-    cu_generation_parameters cu_generation_params;
+    llm_prompt_parameters llm;
+    tg_completions_parameters tg;
+    kc_generation_parameters kc;
+    sd_txt2img_parameters sd;
+    sb_generation_parameters sb;
+    cu_generation_parameters cu;
+
     mutable lru_cache lru_cache;
     context context;
 };
@@ -626,8 +628,7 @@ std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& param
 std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt,
-    const std::filesystem::path& path
+    std::string_view negative_prompt
 );
 
 std::string send_style_bert_voice_request(
@@ -1718,7 +1719,7 @@ std::string send_automatic1111_txt2img_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.sd.host, config.sd.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -1728,56 +1729,56 @@ std::string send_automatic1111_txt2img_request(
     add_pair_into_json(json, "prompt", prompt);
     add_pair_into_json(json, "negative_prompt", negative_prompt);
     //add_pair_into_json(json, "styles", config.sd_txt2img_params.styles);
-    add_pair_into_json(json, "seed", config.sd_txt2img_params.seed);
-    add_pair_into_json(json, "subseed", config.sd_txt2img_params.subseed);
-    add_pair_into_json(json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
-    add_pair_into_json(json, "seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
-    add_pair_into_json(json, "seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
-    add_pair_into_json(json, "sampler_name", config.sd_txt2img_params.sampler_name);
-    add_pair_into_json(json, "scheduler", config.sd_txt2img_params.scheduler);
-    add_pair_into_json(json, "batch_size", config.sd_txt2img_params.batch_size);
-    add_pair_into_json(json, "n_iter", config.sd_txt2img_params.n_iter);
-    add_pair_into_json(json, "steps", config.sd_txt2img_params.steps);
-    add_pair_into_json(json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
-    add_pair_into_json(json, "width", config.sd_txt2img_params.width);
-    add_pair_into_json(json, "height", config.sd_txt2img_params.height);
-    add_pair_into_json(json, "restore_faces", config.sd_txt2img_params.restore_faces);
-    add_pair_into_json(json, "tiling", config.sd_txt2img_params.tiling);
-    add_pair_into_json(json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
-    add_pair_into_json(json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
-    add_pair_into_json(json, "eta", config.sd_txt2img_params.eta);
-    add_pair_into_json(json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
-    add_pair_into_json(json, "s_min_uncond", config.sd_txt2img_params.s_min_uncond);
-    add_pair_into_json(json, "s_churn", config.sd_txt2img_params.s_churn);
-    add_pair_into_json(json, "s_tmax", config.sd_txt2img_params.s_tmax);
-    add_pair_into_json(json, "s_tmin", config.sd_txt2img_params.s_tmin);
-    add_pair_into_json(json, "s_noise", config.sd_txt2img_params.s_noise);
-    add_pair_into_json(json, "override_settings", config.sd_txt2img_params.override_settings);
-    add_pair_into_json(json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
-    add_pair_into_json(json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
-    add_pair_into_json(json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
-    add_pair_into_json(json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
-    add_pair_into_json(json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
-    add_pair_into_json(json, "comments", config.sd_txt2img_params.comments);
-    add_pair_into_json(json, "enable_hr", config.sd_txt2img_params.enable_hr);
-    add_pair_into_json(json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
-    add_pair_into_json(json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
-    add_pair_into_json(json, "hr_scale", config.sd_txt2img_params.hr_scale);
-    add_pair_into_json(json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
-    add_pair_into_json(json, "hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
-    add_pair_into_json(json, "hr_resize_x", config.sd_txt2img_params.hr_resize_x);
-    add_pair_into_json(json, "hr_resize_y", config.sd_txt2img_params.hr_resize_y);
-    add_pair_into_json(json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
+    add_pair_into_json(json, "seed", config.sd.seed);
+    add_pair_into_json(json, "subseed", config.sd.subseed);
+    add_pair_into_json(json, "subseed_strength", config.sd.subseed_strength);
+    add_pair_into_json(json, "seed_resize_from_h", config.sd.seed_resize_from_h);
+    add_pair_into_json(json, "seed_resize_from_w", config.sd.seed_resize_from_w);
+    add_pair_into_json(json, "sampler_name", config.sd.sampler_name);
+    add_pair_into_json(json, "scheduler", config.sd.scheduler);
+    add_pair_into_json(json, "batch_size", config.sd.batch_size);
+    add_pair_into_json(json, "n_iter", config.sd.n_iter);
+    add_pair_into_json(json, "steps", config.sd.steps);
+    add_pair_into_json(json, "cfg_scale", config.sd.cfg_scale);
+    add_pair_into_json(json, "width", config.sd.width);
+    add_pair_into_json(json, "height", config.sd.height);
+    add_pair_into_json(json, "restore_faces", config.sd.restore_faces);
+    add_pair_into_json(json, "tiling", config.sd.tiling);
+    add_pair_into_json(json, "do_not_save_samples", config.sd.do_not_save_samples);
+    add_pair_into_json(json, "do_not_save_grid", config.sd.do_not_save_grid);
+    add_pair_into_json(json, "eta", config.sd.eta);
+    add_pair_into_json(json, "denoising_strength", config.sd.denoising_strength);
+    add_pair_into_json(json, "s_min_uncond", config.sd.s_min_uncond);
+    add_pair_into_json(json, "s_churn", config.sd.s_churn);
+    add_pair_into_json(json, "s_tmax", config.sd.s_tmax);
+    add_pair_into_json(json, "s_tmin", config.sd.s_tmin);
+    add_pair_into_json(json, "s_noise", config.sd.s_noise);
+    add_pair_into_json(json, "override_settings", config.sd.override_settings);
+    add_pair_into_json(json, "override_settings_restore_afterwards", config.sd.override_settings_restore_afterwards);
+    add_pair_into_json(json, "refiner_checkpoint", config.sd.refiner_checkpoint);
+    add_pair_into_json(json, "refiner_switch_at", config.sd.refiner_switch_at);
+    add_pair_into_json(json, "disable_extra_networks", config.sd.disable_extra_networks);
+    add_pair_into_json(json, "firstpass_image", config.sd.firstpass_image);
+    add_pair_into_json(json, "comments", config.sd.comments);
+    add_pair_into_json(json, "enable_hr", config.sd.enable_hr);
+    add_pair_into_json(json, "firstphase_width", config.sd.firstphase_width);
+    add_pair_into_json(json, "firstphase_height", config.sd.firstphase_height);
+    add_pair_into_json(json, "hr_scale", config.sd.hr_scale);
+    add_pair_into_json(json, "hr_upscaler", config.sd.hr_upscaler);
+    add_pair_into_json(json, "hr_second_pass_steps", config.sd.hr_second_pass_steps);
+    add_pair_into_json(json, "hr_resize_x", config.sd.hr_resize_x);
+    add_pair_into_json(json, "hr_resize_y", config.sd.hr_resize_y);
+    add_pair_into_json(json, "hr_checkpoint_name", config.sd.hr_checkpoint_name);
     //add_pair_into_json(json, "hr_prompt", prompt);
     //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
-    add_pair_into_json(json, "force_task_id", config.sd_txt2img_params.force_task_id);
+    add_pair_into_json(json, "force_task_id", config.sd.force_task_id);
 
-    if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
+    if (!config.sd.sampler_index.empty() && config.sd.sampler_name.empty())
     {
-        add_pair_into_json(json, "sampler_index", config.sd_txt2img_params.sampler_index);
+        add_pair_into_json(json, "sampler_index", config.sd.sampler_index);
     }
 
-    if (config.sd_txt2img_params.abg_remover_enable)
+    if (config.sd.abg_remover_enable)
     {
         add_pair_into_json(json, "script_name", "abg remover");
         picojson::array args_array
@@ -1791,24 +1792,24 @@ std::string send_automatic1111_txt2img_request(
         add_pair_into_json(json, "script_args", args_array);
     }
 
-    add_pair_into_json(json, "send_images", config.sd_txt2img_params.send_images);
-    add_pair_into_json(json, "save_images", config.sd_txt2img_params.save_images);
+    add_pair_into_json(json, "send_images", config.sd.send_images);
+    add_pair_into_json(json, "save_images", config.sd.save_images);
 
     picojson::object alwayson_scripts;
-    if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
+    if (config.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
     {
         picojson::object adetailer;
         picojson::array args_array;
         picojson::object args;
         picojson::object object;
-        add_pair_into_json(object, "ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
-        if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+        add_pair_into_json(object, "ad_model", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+        if (!config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
         {
-            add_pair_into_json(object, "ad_prompt", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
+            add_pair_into_json(object, "ad_prompt", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
         }
-        if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+        if (!config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
         {
-            add_pair_into_json(object, "ad_negative_prompt", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
+            add_pair_into_json(object, "ad_negative_prompt", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
         }
         args_array.push_back(picojson::value{ true });
         args_array.push_back(picojson::value{ false });
@@ -1839,16 +1840,16 @@ std::string send_automatic1111_txt2img_request(
     //}
     add_pair_into_json(json, "alwayson_scripts", alwayson_scripts);
 
-    if (!config.sd_txt2img_params.infotext.empty())
+    if (!config.sd.infotext.empty())
     {
-        add_pair_into_json(json, "infotext", config.sd_txt2img_params.infotext);
+        add_pair_into_json(json, "infotext", config.sd.infotext);
     }
 
     const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 };
-    request.set(http::field::host, config.sd_txt2img_params.host);
+    http::request<http::string_body> request{ http::verb::post, config.sd.target, 11 };
+    request.set(http::field::host, config.sd.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
     request.body() = request_body;
@@ -1897,62 +1898,62 @@ std::string send_style_bert_voice_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.sb.host, config.sb.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    boost::url target{ config.sb_generation_params.target };
+    boost::url target{ config.sb.target };
     target.params().set("text", text);
     //target.params().set("encoding", "utf-8");
 
-    if (!config.sb_generation_params.model_name.empty())
+    if (!config.sb.model_name.empty())
     {
-        target.params().set("model_name", config.sb_generation_params.model_name);
+        target.params().set("model_name", config.sb.model_name);
     }
     else
     {
-        target.params().set("model_id", std::to_string(config.sb_generation_params.model_id));
+        target.params().set("model_id", std::to_string(config.sb.model_id));
     }
 
-    if (!config.sb_generation_params.speaker_name.empty())
+    if (!config.sb.speaker_name.empty())
     {
-        target.params().set("speaker_name", config.sb_generation_params.speaker_name);
+        target.params().set("speaker_name", config.sb.speaker_name);
     }
     else
     {
-        target.params().set("speaker_id", std::to_string(config.sb_generation_params.speaker_id));
+        target.params().set("speaker_id", std::to_string(config.sb.speaker_id));
     }
 
-    target.params().set("sdp_ratio", std::to_string(config.sb_generation_params.sdp_ratio));
-    target.params().set("noise", std::to_string(config.sb_generation_params.noise));
-    target.params().set("noisew", std::to_string(config.sb_generation_params.noisew));
-    target.params().set("length", std::to_string(config.sb_generation_params.length));
-    target.params().set("language", config.sb_generation_params.language);
-    target.params().set("auto_split", config.sb_generation_params.auto_split ? "true" : "false");
-    target.params().set("split_interval", std::to_string(config.sb_generation_params.split_interval));
+    target.params().set("sdp_ratio", std::to_string(config.sb.sdp_ratio));
+    target.params().set("noise", std::to_string(config.sb.noise));
+    target.params().set("noisew", std::to_string(config.sb.noisew));
+    target.params().set("length", std::to_string(config.sb.length));
+    target.params().set("language", config.sb.language);
+    target.params().set("auto_split", config.sb.auto_split ? "true" : "false");
+    target.params().set("split_interval", std::to_string(config.sb.split_interval));
 
-    if (!config.sb_generation_params.assist_text.empty())
+    if (!config.sb.assist_text.empty())
     {
-        target.params().set("assist_text", config.sb_generation_params.assist_text);
-        target.params().set("assist_text_weight", std::to_string(config.sb_generation_params.assist_text_weight));
+        target.params().set("assist_text", config.sb.assist_text);
+        target.params().set("assist_text_weight", std::to_string(config.sb.assist_text_weight));
     }
 
-    if (!config.sb_generation_params.style.empty())
+    if (!config.sb.style.empty())
     {
-        target.params().set("style", config.sb_generation_params.style);
-        target.params().set("style_weight", std::to_string(config.sb_generation_params.style_weight));
+        target.params().set("style", config.sb.style);
+        target.params().set("style_weight", std::to_string(config.sb.style_weight));
     }
 
-    if (!config.sb_generation_params.reference_audio_path.empty())
+    if (!config.sb.reference_audio_path.empty())
     {
-        target.params().set("reference_audio_path", config.sb_generation_params.reference_audio_path);
+        target.params().set("reference_audio_path", config.sb.reference_audio_path);
     }
 
     BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
     http::request<http::string_body> request{ http::verb::get, target, 11 };
-    request.set(http::field::host, config.sb_generation_params.host);
+    request.set(http::field::host, config.sb.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
     request.prepare_payload();
@@ -2028,13 +2029,13 @@ std::string upload_image_to_comfy_ui(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.cu.host, config.cu.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.upload_image_target, 11 };
-    request.set(http::field::host, config.cu_generation_params.host);
+    http::request<http::string_body> request{ http::verb::post, config.cu.upload_image_target, 11 };
+    request.set(http::field::host, config.cu.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "multipart/form-data; boundary=" + std::string{ boundary });
     request.body() = body.str();
@@ -2071,7 +2072,7 @@ void upload_images_to_comfy_ui(
     context& context
 )
 {
-    for (const std::string& key_value_pair : config.cu_generation_params.upload_images)
+    for (const std::string& key_value_pair : config.cu.upload_images)
     {
         const std::size_t separator_position{ key_value_pair.find('=') };
         if (separator_position != std::string::npos)
@@ -2116,7 +2117,7 @@ void send_comfy_ui_prompt(
         std::string type;
     };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.cu.host, config.cu.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2129,8 +2130,8 @@ void send_comfy_ui_prompt(
     const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.prompt_target, 11 };
-    request.set(http::field::host, config.cu_generation_params.host);
+    http::request<http::string_body> request{ http::verb::post, config.cu.prompt_target, 11 };
+    request.set(http::field::host, config.cu.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
     request.body() = request_body;
@@ -2162,8 +2163,8 @@ void send_comfy_ui_prompt(
 
         http::response<http::string_body> history_response{
             send_http_get(
-                config.cu_generation_params.host,
-                config.cu_generation_params.port,
+                config.cu.host,
+                config.cu.port,
                 "/history/" + prompt_id,
                 config.expires_after
             )
@@ -2250,8 +2251,8 @@ void send_comfy_ui_prompt(
 
     for (const generated_file_info& file_info : target_files)
     {
-        std::filesystem::path relative_file_path{ config.cu_generation_params.output_directory };
-        if (config.cu_generation_params.preserve_subdirectories)
+        std::filesystem::path relative_file_path{ config.cu.output_directory };
+        if (config.cu.preserve_subdirectories)
         {
             relative_file_path /= file_info.subfolder;
         }
@@ -2263,8 +2264,8 @@ void send_comfy_ui_prompt(
             + "&type=" + file_info.type;
 
         const http::response<http::string_body> view_response{ send_http_get(
-            config.cu_generation_params.host,
-            config.cu_generation_params.port,
+            config.cu.host,
+            config.cu.port,
             view_target,
             config.expires_after
         ) };
@@ -2350,7 +2351,7 @@ std::string send_completions_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.llm.host, config.llm.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2358,16 +2359,16 @@ std::string send_completions_request(
     const std::string request_body{ params.get_request_body_for_text_completions(prompt, max_tokens) };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.completions_target, 11 };
-    request.set(http::field::host, config.llm_prompt_params.host);
+    http::request<http::string_body> request{ http::verb::post, config.llm.completions_target, 11 };
+    request.set(http::field::host, config.llm.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
     request.body() = request_body;
     request.prepare_payload();
 
-    if (!config.llm_prompt_params.api_key.empty())
+    if (!config.llm.api_key.empty())
     {
-        request.set(http::field::authorization, ("Bearer ") + config.llm_prompt_params.api_key);
+        request.set(http::field::authorization, ("Bearer ") + config.llm.api_key);
     }
 
     http::write(tcp_stream, request, error_code);
@@ -2582,16 +2583,16 @@ int send_token_count_request(const config& config, std::string_view prompt)
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const tcp::resolver::results_type results{ resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port) };
+    const tcp::resolver::results_type results{ resolver.resolve(config.llm.host, config.llm.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    const std::string request_body{ config.llm_backend_params->get_request_body_for_token_count(prompt) };
+    const std::string request_body{ config.llm.backend->get_request_body_for_token_count(prompt) };
     BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.llm_prompt_params.token_count_target, 11 };
-    request.set(http::field::host, config.llm_prompt_params.host);
+    http::request<http::string_body> request{ http::verb::post, config.llm.token_count_target, 11 };
+    request.set(http::field::host, config.llm.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
     request.body() = request_body;
@@ -2619,7 +2620,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
         ;
     }
 
-    return config.llm_backend_params->parse_response_for_token_count(response);
+    return config.llm.backend->parse_response_for_token_count(response);
 }
 
 int get_tokens_from_cache(const config& config, std::string_view str)
@@ -2730,23 +2731,23 @@ std::string generate_text(
 
     std::string current_prompt{ expanded_prompt };
     int current_tokens = initial_tokens;
-    for (int completion_iterations{}; completion_iterations < config.llm_prompt_params.max_completion_iterations; ++completion_iterations)
+    for (int completion_iterations{}; completion_iterations < config.llm.max_completion_iterations; ++completion_iterations)
     {
         BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
 
-        if (current_tokens - initial_tokens >= config.llm_prompt_params.min_completion_tokens)
+        if (current_tokens - initial_tokens >= config.llm.min_completion_tokens)
         {
             break;
         }
 
-        const int remaining_context{ config.llm_backend_params->get_truncation_length() - current_tokens };
+        const int remaining_context{ config.llm.backend->get_truncation_length() - current_tokens };
         if (remaining_context <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
             break;
         }
 
-        int tokens_to_generate = std::min(config.llm_backend_params->get_max_tokens(), remaining_context);
+        int tokens_to_generate = std::min(config.llm.backend->get_max_tokens(), remaining_context);
         if (tokens_to_generate <= 0)
         {
             BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting.";
@@ -2755,7 +2756,7 @@ std::string generate_text(
 
         const int max_tokens{ tokens_to_generate };
         const std::string response{ send_completions_request(
-            config, current_prompt, *config.llm_backend_params, max_tokens
+            config, current_prompt, *config.llm.backend, max_tokens
         ) };
 
         if (response.empty())
@@ -2973,9 +2974,9 @@ void init_chat_mode(config& config)
     {
         config.phases = { "{{user}}", "{{char}}" };
     }
-    if (config.llm_prompt_params.generation_prefix.empty())
+    if (config.llm.generation_prefix.empty())
     {
-        config.llm_prompt_params.generation_prefix = "\\n{{phase}}: ";
+        config.llm.generation_prefix = "\\n{{phase}}: ";
     }
 }
 
@@ -3038,10 +3039,10 @@ void set_paragraphs_to_phases(
 
 void init_llm_mode(config& config)
 {
-    if (!config.llm_prompt_params.paragraphs_file.empty())
+    if (!config.llm.paragraphs_file.empty())
     {
         config.phases.clear();
-        const std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm_prompt_params.paragraphs_file, config) };
+        const std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm.paragraphs_file, config) };
         const std::string content{ read_file_to_string(plot_file_path) };
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
@@ -3049,26 +3050,26 @@ void init_llm_mode(config& config)
 
     if (config.mode == "tg")
     {
-        config.llm_backend_params = &config.tg_completions_params;
-        if (config.llm_prompt_params.completions_target.empty())
+        config.llm.backend = &config.tg;
+        if (config.llm.completions_target.empty())
         {
-            config.llm_prompt_params.completions_target = "/v1/completions";
+            config.llm.completions_target = "/v1/completions";
         }
-        if (config.llm_prompt_params.token_count_target.empty())
+        if (config.llm.token_count_target.empty())
         {
-            config.llm_prompt_params.token_count_target = "/v1/internal/token-count";
+            config.llm.token_count_target = "/v1/internal/token-count";
         }
     }
     else if (config.mode == "kc")
     {
-        config.llm_backend_params = &config.kc_generation_params;
-        if (config.llm_prompt_params.completions_target.empty())
+        config.llm.backend = &config.kc;
+        if (config.llm.completions_target.empty())
         {
-            config.llm_prompt_params.completions_target = "/api/v1/generate";
+            config.llm.completions_target = "/api/v1/generate";
         }
-        if (config.llm_prompt_params.token_count_target.empty())
+        if (config.llm.token_count_target.empty())
         {
-            config.llm_prompt_params.token_count_target = "/api/extra/tokencount";
+            config.llm.token_count_target = "/api/extra/tokencount";
         }
     }
 }
@@ -3237,8 +3238,8 @@ int parse_command_line(
 
     try
     {
-        config.tg_completions_params.stop = { "\\n\\n", ":", "***" };
-        config.tg_completions_params.sampler_priority =
+        config.tg.stop = { "\\n\\n", ":", "***" };
+        config.tg.sampler_priority =
         {
             "repetition_penalty",
             "presence_penalty",
@@ -3261,7 +3262,7 @@ int parse_command_line(
             "encoder_repetition_penalty",
             "no_repeat_ngram"
         };
-        config.tg_completions_params.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+        config.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
         po::options_description allowed_options("Allowed options");
         allowed_options.add_options()
@@ -3287,218 +3288,218 @@ int parse_command_line(
             ("server-max-retries", po::value<int>(&config.server_max_retries)->default_value(60), "server max retries")
             ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
 
-            ("llm-prompt", po::value<std::string>(&config.llm_prompt_params.prompt)->default_value(""), "LLM prompt")
-            ("llm-prompt-file", po::value<std::string>(&config.llm_prompt_params.prompt_file)->default_value("prompt.txt"), "LLM prompt file path")
-            ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("output.txt"), "LLM output file path")
-            ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
-            ("llm-generation-suffix", po::value<std::string>(&config.llm_prompt_params.generation_suffix)->default_value(""), "LLM generation suffix")
-            ("llm-paragraphs-file", po::value<std::string>(&config.llm_prompt_params.paragraphs_file)->default_value(""), "LLM paragraphs file")
-            ("llm-host", po::value<std::string>(&config.llm_prompt_params.host)->default_value("localhost"), "LLM host")
-            ("llm-port", po::value<std::string>(&config.llm_prompt_params.port)->default_value("5000"), "LLM port")
-            ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
-            ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
-            ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
-            ("llm-min-completion-tokens", po::value<int>(&config.llm_prompt_params.min_completion_tokens)->default_value(256), "LLM min completion tokens")
-            ("llm-max-completion-iterations", po::value<int>(&config.llm_prompt_params.max_completion_iterations)->default_value(5), "LLM max completion iterations")
-            ("llm-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-            ("llm-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-            ("llm-code-block-extract", po::bool_switch(&config.llm_prompt_params.code_block_extract)->default_value(false), "code block extract switch")
+            ("llm-prompt", po::value<std::string>(&config.llm.prompt)->default_value(""), "LLM prompt")
+            ("llm-prompt-file", po::value<std::string>(&config.llm.prompt_file)->default_value("prompt.txt"), "LLM prompt file path")
+            ("llm-output-file", po::value<std::string>(&config.llm.output_file)->default_value("output.txt"), "LLM output file path")
+            ("llm-generation-prefix", po::value<std::string>(&config.llm.generation_prefix)->default_value(""), "LLM generation prefix")
+            ("llm-generation-suffix", po::value<std::string>(&config.llm.generation_suffix)->default_value(""), "LLM generation suffix")
+            ("llm-paragraphs-file", po::value<std::string>(&config.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
+            ("llm-host", po::value<std::string>(&config.llm.host)->default_value("localhost"), "LLM host")
+            ("llm-port", po::value<std::string>(&config.llm.port)->default_value("5000"), "LLM port")
+            ("llm-api-key", po::value<std::string>(&config.llm.api_key)->default_value(""), "LLM API key")
+            ("llm-completions-target", po::value<std::string>(&config.llm.completions_target)->default_value(""), "LLM completions target")
+            ("llm-token-count-target", po::value<std::string>(&config.llm.token_count_target)->default_value(""), "LLM token count target")
+            ("llm-min-completion-tokens", po::value<int>(&config.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
+            ("llm-max-completion-iterations", po::value<int>(&config.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
+            ("llm-reasoning-prefix", po::value<std::string>(&config.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
+            ("llm-reasoning-suffix", po::value<std::string>(&config.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+            ("llm-code-block-extract", po::bool_switch(&config.llm.code_block_extract)->default_value(false), "code block extract switch")
 
-            ("tg-model", po::value<std::string>(&config.tg_completions_params.model)->default_value("", "TG model"))
-            ("tg-num-best-of", po::value<int>(&config.tg_completions_params.best_of)->default_value(1), "TG best of")
-            ("tg-echo", po::bool_switch(&config.tg_completions_params.echo)->default_value(false), "TG echo")
-            ("tg-frequency-penalty", po::value<double>(&config.tg_completions_params.frequency_penalty)->default_value(0.0), "TG frequency penalty")
+            ("tg-model", po::value<std::string>(&config.tg.model)->default_value("", "TG model"))
+            ("tg-num-best-of", po::value<int>(&config.tg.best_of)->default_value(1), "TG best of")
+            ("tg-echo", po::bool_switch(&config.tg.echo)->default_value(false), "TG echo")
+            ("tg-frequency-penalty", po::value<double>(&config.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
             //std::map<int, double> logit_bias;
-            ("tg-logprobs", po::value<double>(&config.tg_completions_params.logprobs)->default_value(0.0), "TG presence penalty")
-            ("tg-max-tokens", po::value<int>(&config.tg_completions_params.max_tokens)->default_value(512), "TG max tokens")
-            ("tg-n", po::value<int>(&config.tg_completions_params.n)->default_value(1), "TG number of responses generated for the same prompt")
-            ("tg-presence-penalty", po::value<double>(&config.tg_completions_params.presence_penalty)->default_value(0.0), "TG presence penalty")
-            ("tg-stop", po::value<std::vector<std::string>>(&config.tg_completions_params.stop)->multitoken(), "TG stop sequences")
-            ("tg-stream", po::bool_switch(&config.tg_completions_params.stream)->default_value(false), "TG stream")
-            ("tg-suffix", po::value<std::string>(&config.tg_completions_params.suffix)->default_value(""), "TG suffix")
-            ("tg-temperature", po::value<double>(&config.tg_completions_params.temperature)->default_value(1.0), "TG temperature")
-            ("tg-top-p", po::value<double>(&config.tg_completions_params.top_p)->default_value(1.0), "TG top p")
-            ("tg-dynatemp-low", po::value<double>(&config.tg_completions_params.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
-            ("tg-dynatemp-high", po::value<double>(&config.tg_completions_params.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
-            ("tg-dynatemp-exponent", po::value<double>(&config.tg_completions_params.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
-            ("tg-smoothing-factor", po::value<double>(&config.tg_completions_params.smoothing_factor)->default_value(0.0), "TG smoothing factor")
-            ("tg-smoothing-curve", po::value<double>(&config.tg_completions_params.smoothing_curve)->default_value(1.0), "TG smoothing curve")
-            ("tg-min-p", po::value<double>(&config.tg_completions_params.min_p)->default_value(0.1, "0.1"), "TG min p")
-            ("tg-top-k", po::value<int>(&config.tg_completions_params.top_k)->default_value(0), "TG top k")
-            ("tg-typical-p", po::value<double>(&config.tg_completions_params.typical_p)->default_value(1.0), "TG typical p")
-            ("tg-xtc-threshold", po::value<double>(&config.tg_completions_params.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
-            ("tg-xtc-probability", po::value<double>(&config.tg_completions_params.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
-            ("tg-epsilon-cutoff", po::value<double>(&config.tg_completions_params.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
-            ("tg-eta-cutoff", po::value<double>(&config.tg_completions_params.eta_cutoff)->default_value(0), "TG eta cutoff")
-            ("tg-tfs", po::value<double>(&config.tg_completions_params.tfs)->default_value(1.0), "TG tfs")
-            ("tg-top-a", po::value<double>(&config.tg_completions_params.top_a)->default_value(0.0), "TG top a")
-            ("tg-top-n-sigma", po::value<double>(&config.tg_completions_params.top_n_sigma)->default_value(1.0), "TG top n sigma")
-            ("tg-dry-multiplier", po::value<double>(&config.tg_completions_params.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
-            ("tg-dry-allowed-length", po::value<int>(&config.tg_completions_params.dry_allowed_length)->default_value(2), "TG DRY allowed length")
-            ("tg-dry-base", po::value<double>(&config.tg_completions_params.dry_base)->default_value(1.75), "TG DRY base")
-            ("tg-repetition-penalty", po::value<double>(&config.tg_completions_params.repetition_penalty)->default_value(1.2), "TG repetition penalty")
-            ("tg-encoder-repetition-penalty", po::value<double>(&config.tg_completions_params.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
-            ("tg-no-repeat-ngram-size", po::value<int>(&config.tg_completions_params.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
-            ("tg-repetition-penalty-range", po::value<int>(&config.tg_completions_params.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
-            ("tg-penalty-alpha", po::value<double>(&config.tg_completions_params.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
-            ("tg-guidance-scale", po::value<double>(&config.tg_completions_params.guidance_scale)->default_value(1.0), "TG guidance scale")
-            ("tg-mirostat-mode", po::value<int>(&config.tg_completions_params.mirostat_mode)->default_value(0), "TG mirostat mode")
-            ("tg-mirostat-tau", po::value<double>(&config.tg_completions_params.mirostat_tau)->default_value(5), "TG mirostat tau")
-            ("tg-mirostat-eta", po::value<double>(&config.tg_completions_params.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
-            ("tg-prompt-lookup-num-tokens", po::value<int>(&config.tg_completions_params.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
-            ("tg-max-tokens-second", po::value<int>(&config.tg_completions_params.max_tokens_second)->default_value(0), "TG max tokens second")
-            ("tg-do-sample", po::bool_switch(&config.tg_completions_params.do_sample)->default_value(true), "TG do sample")
-            ("tg-dynamic-temperature", po::bool_switch(&config.tg_completions_params.dynamic_temperature)->default_value(false), "TG dynamic temperature")
-            ("tg-temperature-last", po::bool_switch(&config.tg_completions_params.temperature_last)->default_value(false), "TG temperature last")
-            ("tg-auto-max-new-tokens", po::bool_switch(&config.tg_completions_params.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
-            ("tg-ban-eos-token", po::bool_switch(&config.tg_completions_params.ban_eos_token)->default_value(false), "TG ban eos token")
-            ("tg-add-bos-token", po::bool_switch(&config.tg_completions_params.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
-            ("tg-skip-special-tokens", po::bool_switch(&config.tg_completions_params.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-            ("tg-static-cache", po::bool_switch(&config.tg_completions_params.static_cache)->default_value(false), "TG static cache")
-            ("tg-truncation-length", po::value<int>(&config.tg_completions_params.truncation_length)->default_value(4096), "TG truncation length")
-            ("tg-sampler-priority", po::value<std::vector<std::string>>(&config.tg_completions_params.sampler_priority)->multitoken(), "TG sampler priority")
-            ("tg-custom-token-bans", po::value<std::string>(&config.tg_completions_params.custom_token_bans)->default_value(""), "TG custom token bans")
-            ("tg-negative-prompt", po::value<std::string>(&config.tg_completions_params.negative_prompt)->default_value(""), "TG negative prompt")
-            ("tg-dry-sequence-breakers", po::value<std::string>(&config.tg_completions_params.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
-            ("tg-grammar-string", po::value<std::string>(&config.tg_completions_params.grammar_string)->default_value(""), "TG grammar-string")
+            ("tg-logprobs", po::value<double>(&config.tg.logprobs)->default_value(0.0), "TG presence penalty")
+            ("tg-max-tokens", po::value<int>(&config.tg.max_tokens)->default_value(512), "TG max tokens")
+            ("tg-n", po::value<int>(&config.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
+            ("tg-presence-penalty", po::value<double>(&config.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
+            ("tg-stop", po::value<std::vector<std::string>>(&config.tg.stop)->multitoken(), "TG stop sequences")
+            ("tg-stream", po::bool_switch(&config.tg.stream)->default_value(false), "TG stream")
+            ("tg-suffix", po::value<std::string>(&config.tg.suffix)->default_value(""), "TG suffix")
+            ("tg-temperature", po::value<double>(&config.tg.temperature)->default_value(1.0), "TG temperature")
+            ("tg-top-p", po::value<double>(&config.tg.top_p)->default_value(1.0), "TG top p")
+            ("tg-dynatemp-low", po::value<double>(&config.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
+            ("tg-dynatemp-high", po::value<double>(&config.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
+            ("tg-dynatemp-exponent", po::value<double>(&config.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
+            ("tg-smoothing-factor", po::value<double>(&config.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
+            ("tg-smoothing-curve", po::value<double>(&config.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
+            ("tg-min-p", po::value<double>(&config.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
+            ("tg-top-k", po::value<int>(&config.tg.top_k)->default_value(0), "TG top k")
+            ("tg-typical-p", po::value<double>(&config.tg.typical_p)->default_value(1.0), "TG typical p")
+            ("tg-xtc-threshold", po::value<double>(&config.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
+            ("tg-xtc-probability", po::value<double>(&config.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
+            ("tg-epsilon-cutoff", po::value<double>(&config.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
+            ("tg-eta-cutoff", po::value<double>(&config.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
+            ("tg-tfs", po::value<double>(&config.tg.tfs)->default_value(1.0), "TG tfs")
+            ("tg-top-a", po::value<double>(&config.tg.top_a)->default_value(0.0), "TG top a")
+            ("tg-top-n-sigma", po::value<double>(&config.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
+            ("tg-dry-multiplier", po::value<double>(&config.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
+            ("tg-dry-allowed-length", po::value<int>(&config.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
+            ("tg-dry-base", po::value<double>(&config.tg.dry_base)->default_value(1.75), "TG DRY base")
+            ("tg-repetition-penalty", po::value<double>(&config.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
+            ("tg-encoder-repetition-penalty", po::value<double>(&config.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
+            ("tg-no-repeat-ngram-size", po::value<int>(&config.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
+            ("tg-repetition-penalty-range", po::value<int>(&config.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
+            ("tg-penalty-alpha", po::value<double>(&config.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
+            ("tg-guidance-scale", po::value<double>(&config.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
+            ("tg-mirostat-mode", po::value<int>(&config.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
+            ("tg-mirostat-tau", po::value<double>(&config.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
+            ("tg-mirostat-eta", po::value<double>(&config.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
+            ("tg-prompt-lookup-num-tokens", po::value<int>(&config.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
+            ("tg-max-tokens-second", po::value<int>(&config.tg.max_tokens_second)->default_value(0), "TG max tokens second")
+            ("tg-do-sample", po::bool_switch(&config.tg.do_sample)->default_value(true), "TG do sample")
+            ("tg-dynamic-temperature", po::bool_switch(&config.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
+            ("tg-temperature-last", po::bool_switch(&config.tg.temperature_last)->default_value(false), "TG temperature last")
+            ("tg-auto-max-new-tokens", po::bool_switch(&config.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
+            ("tg-ban-eos-token", po::bool_switch(&config.tg.ban_eos_token)->default_value(false), "TG ban eos token")
+            ("tg-add-bos-token", po::bool_switch(&config.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
+            ("tg-skip-special-tokens", po::bool_switch(&config.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+            ("tg-static-cache", po::bool_switch(&config.tg.static_cache)->default_value(false), "TG static cache")
+            ("tg-truncation-length", po::value<int>(&config.tg.truncation_length)->default_value(4096), "TG truncation length")
+            ("tg-sampler-priority", po::value<std::vector<std::string>>(&config.tg.sampler_priority)->multitoken(), "TG sampler priority")
+            ("tg-custom-token-bans", po::value<std::string>(&config.tg.custom_token_bans)->default_value(""), "TG custom token bans")
+            ("tg-negative-prompt", po::value<std::string>(&config.tg.negative_prompt)->default_value(""), "TG negative prompt")
+            ("tg-dry-sequence-breakers", po::value<std::string>(&config.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
+            ("tg-grammar-string", po::value<std::string>(&config.tg.grammar_string)->default_value(""), "TG grammar-string")
 
-            ("kc-max-context-length", po::value<int>(&config.kc_generation_params.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
-            ("kc-max-length", po::value<int>(&config.kc_generation_params.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
-            ("kc-rep-pen", po::value<double>(&config.kc_generation_params.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
-            ("kc-rep-pen-range", po::value<int>(&config.kc_generation_params.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-            ("kc-sampler-order", po::value<std::vector<int>>(&config.kc_generation_params.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
-            ("kc-sampler-seed", po::value<int>(&config.kc_generation_params.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-            ("kc-stop-sequence", po::value<std::vector<std::string>>(&config.kc_generation_params.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
-            ("kc-temperature", po::value<double>(&config.kc_generation_params.temperature)->default_value(1.0), "Temperature value.")
-            ("kc-tfs", po::value<double>(&config.kc_generation_params.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
-            ("kc-top-a", po::value<double>(&config.kc_generation_params.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
-            ("kc-top-k", po::value<double>(&config.kc_generation_params.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
-            ("kc-top-p", po::value<double>(&config.kc_generation_params.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
-            ("kc-min-p", po::value<double>(&config.kc_generation_params.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
-            ("kc-typical", po::value<double>(&config.kc_generation_params.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
-            ("kc-use-default-badwordsids", po::bool_switch(&config.kc_generation_params.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
-            ("kc-dynatemp_range", po::value<double>(&config.kc_generation_params.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
-            ("kc-smoothing-factor", po::value<double>(&config.kc_generation_params.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
-            ("kc-dynatemp-exponent", po::value<double>(&config.kc_generation_params.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
-            ("kc-mirostat", po::value<int>(&config.kc_generation_params.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
-            ("kc-mirostat-tau", po::value<double>(&config.kc_generation_params.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
-            ("kc-mirostat-eta", po::value<double>(&config.kc_generation_params.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
-            ("kc-genkey", po::value<std::string>(&config.kc_generation_params.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
-            ("kc-grammar", po::value<std::string>(&config.kc_generation_params.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
-            ("kc-grammar-retain-state", po::bool_switch(&config.kc_generation_params.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
-            ("kc-memory", po::value<std::string>(&config.kc_generation_params.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
-            ("kc-images", po::value<std::vector<std::string>>(&config.kc_generation_params.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
-            ("kc-trim-stop", po::bool_switch(&config.kc_generation_params.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
-            ("kc-render-special", po::bool_switch(&config.kc_generation_params.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
-            ("kc-bypass-eos", po::bool_switch(&config.kc_generation_params.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-            ("kc-banned-tokens", po::value<std::vector<std::string>>(&config.kc_generation_params.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
-            ("kc-dry-multiplier", po::value<double>(&config.kc_generation_params.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
-            ("kc-dry-base", po::value<double>(&config.kc_generation_params.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
-            ("kc-dry-allowed-length", po::value<int>(&config.kc_generation_params.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
-            ("kc-dry-penalty-last-n", po::value<int>(&config.kc_generation_params.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-            ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&config.kc_generation_params.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
-            ("kc-xtc-threshold", po::value<double>(&config.kc_generation_params.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
-            ("kc-xtc-probability", po::value<double>(&config.kc_generation_params.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
-            ("kc-nsigma", po::value<double>(&config.kc_generation_params.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
-            ("kc-logprobs", po::bool_switch(&config.kc_generation_params.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
-            ("kc-replace-instruct-placeholders", po::bool_switch(&config.kc_generation_params.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
+            ("kc-max-context-length", po::value<int>(&config.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+            ("kc-max-length", po::value<int>(&config.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+            ("kc-rep-pen", po::value<double>(&config.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+            ("kc-rep-pen-range", po::value<int>(&config.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+            ("kc-sampler-order", po::value<std::vector<int>>(&config.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+            ("kc-sampler-seed", po::value<int>(&config.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+            ("kc-stop-sequence", po::value<std::vector<std::string>>(&config.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+            ("kc-temperature", po::value<double>(&config.kc.temperature)->default_value(1.0), "Temperature value.")
+            ("kc-tfs", po::value<double>(&config.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-top-a", po::value<double>(&config.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+            ("kc-top-k", po::value<double>(&config.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+            ("kc-top-p", po::value<double>(&config.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-min-p", po::value<double>(&config.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-typical", po::value<double>(&config.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+            ("kc-use-default-badwordsids", po::bool_switch(&config.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+            ("kc-dynatemp_range", po::value<double>(&config.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+            ("kc-smoothing-factor", po::value<double>(&config.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+            ("kc-dynatemp-exponent", po::value<double>(&config.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+            ("kc-mirostat", po::value<int>(&config.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+            ("kc-mirostat-tau", po::value<double>(&config.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+            ("kc-mirostat-eta", po::value<double>(&config.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+            ("kc-genkey", po::value<std::string>(&config.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+            ("kc-grammar", po::value<std::string>(&config.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+            ("kc-grammar-retain-state", po::bool_switch(&config.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+            ("kc-memory", po::value<std::string>(&config.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+            ("kc-images", po::value<std::vector<std::string>>(&config.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+            ("kc-trim-stop", po::bool_switch(&config.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+            ("kc-render-special", po::bool_switch(&config.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+            ("kc-bypass-eos", po::bool_switch(&config.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+            ("kc-banned-tokens", po::value<std::vector<std::string>>(&config.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+            ("kc-dry-multiplier", po::value<double>(&config.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+            ("kc-dry-base", po::value<double>(&config.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+            ("kc-dry-allowed-length", po::value<int>(&config.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+            ("kc-dry-penalty-last-n", po::value<int>(&config.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+            ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&config.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+            ("kc-xtc-threshold", po::value<double>(&config.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+            ("kc-xtc-probability", po::value<double>(&config.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+            ("kc-nsigma", po::value<double>(&config.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+            ("kc-logprobs", po::bool_switch(&config.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+            ("kc-replace-instruct-placeholders", po::bool_switch(&config.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
 
-            ("sd-host", po::value<std::string>(&config.sd_txt2img_params.host)->default_value("localhost"), "SD host")
-            ("sd-port", po::value<std::string>(&config.sd_txt2img_params.port)->default_value("7860"), "SD port")
-            ("sd-target", po::value<std::string>(&config.sd_txt2img_params.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
-            ("sd-prompt-file", po::value<std::string>(&config.sd_txt2img_params.prompt_file)->default_value("prompt.txt"), "SD prompt file")
-            ("sd-negative-prompt-file", po::value<std::string>(&config.sd_txt2img_params.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
-            ("sd-output-file", po::value<std::string>(&config.sd_txt2img_params.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-            ("sd-prompt", po::value<std::string>(&config.sd_txt2img_params.prompt)->default_value(""), "SD prompt")
-            ("sd-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.negative_prompt)->default_value(""), "SD negative prompt")
-            ("sd-styles", po::value<std::vector<std::string>>(&config.sd_txt2img_params.styles), "SD styles")
-            ("sd-seed", po::value<int>(&config.sd_txt2img_params.seed)->default_value(-1), "SD seed")
-            ("sd-subseed", po::value<int>(&config.sd_txt2img_params.subseed)->default_value(-1), "SD subseed")
-            ("sd-subseed-strength", po::value<double>(&config.sd_txt2img_params.subseed_strength)->default_value(0), "SD subseed strength")
-            ("sd-seed-resize-from-h", po::value<int>(&config.sd_txt2img_params.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
-            ("sd-seed-resize-from-w", po::value<int>(&config.sd_txt2img_params.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-            ("sd-sampler-name", po::value<std::string>(&config.sd_txt2img_params.sampler_name)->default_value("Euler a"), "SD sampler name")
-            ("sd-scheduler", po::value<std::string>(&config.sd_txt2img_params.scheduler)->default_value("Automatic"), "SD scheduler")
-            ("sd-batch_size", po::value<int>(&config.sd_txt2img_params.batch_size)->default_value(1), "SD batch size")
-            ("sd-n-iter", po::value<int>(&config.sd_txt2img_params.n_iter)->default_value(1), "SD n iter")
-            ("sd-steps", po::value<int>(&config.sd_txt2img_params.steps)->default_value(30), "SD steps")
-            ("sd-cfg-scale", po::value<double>(&config.sd_txt2img_params.cfg_scale)->default_value(7), "SD cfg scale")
-            ("sd-width", po::value<int>(&config.sd_txt2img_params.width)->default_value(1024), "SD image width")
-            ("sd-height", po::value<int>(&config.sd_txt2img_params.height)->default_value(1024), "SD image height")
-            ("sd-restore-faces", po::bool_switch(&config.sd_txt2img_params.restore_faces)->default_value(false), "SD restore faces")
-            ("sd-tiling", po::bool_switch(&config.sd_txt2img_params.tiling)->default_value(false), "SD tiling")
-            ("sd-do-not-save-samples", po::bool_switch(&config.sd_txt2img_params.do_not_save_samples)->default_value(false), "SD do not save samples")
-            ("sd-do-not-save-grid", po::bool_switch(&config.sd_txt2img_params.do_not_save_grid)->default_value(false), "SD do not save grid")
-            ("sd-eta", po::value<int>(&config.sd_txt2img_params.eta)->default_value(0), "SD eta")
-            ("sd-denoising-strength", po::value<double>(&config.sd_txt2img_params.denoising_strength)->default_value(0.7, "0.7"), "SD denoising strength")
-            ("sd-s-min-uncond", po::value<int>(&config.sd_txt2img_params.s_min_uncond)->default_value(0), "SD s min uncond")
-            ("sd-s-churn", po::value<int>(&config.sd_txt2img_params.s_churn)->default_value(0), "SD s churn")
-            ("sd-s-tmax", po::value<int>(&config.sd_txt2img_params.s_tmax)->default_value(0), "SD s tmax")
-            ("sd-s-tmin", po::value<int>(&config.sd_txt2img_params.s_tmin)->default_value(0), "SD s tmin")
-            ("sd-s-noise", po::value<int>(&config.sd_txt2img_params.s_noise)->default_value(1), "SD s noise")
-            ("sd-override-settings", po::value<std::string>(&config.sd_txt2img_params.override_settings)->default_value(""), "SD override settings")
-            ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd_txt2img_params.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
-            ("sd-refiner-checkpoint", po::value<std::string>(&config.sd_txt2img_params.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-            ("sd-refiner-switch-at", po::value<double>(&config.sd_txt2img_params.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
-            ("sd-disable-extra-networks", po::bool_switch(&config.sd_txt2img_params.disable_extra_networks)->default_value(false), "SD disable extra networks")
-            ("sd-firstpass-image", po::value<std::string>(&config.sd_txt2img_params.firstpass_image)->default_value(""), "SD firstpass image")
-            ("sd-comments", po::value<std::string>(&config.sd_txt2img_params.comments)->default_value(""), "SD comments")
-            ("sd-enable-hr", po::bool_switch(&config.sd_txt2img_params.enable_hr)->default_value(false), "SD enable hr")
-            ("sd-firstphase-width", po::value<int>(&config.sd_txt2img_params.firstphase_width)->default_value(0), "SD firstphase width")
-            ("sd-firstphase-height", po::value<int>(&config.sd_txt2img_params.firstphase_height)->default_value(0), "SD firstphase height")
-            ("sd-hr-scale", po::value<double>(&config.sd_txt2img_params.hr_scale)->default_value(0), "SD hr scale")
-            ("sd-hr-upscaler", po::value<std::string>(&config.sd_txt2img_params.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-            ("sd-hr-second-pass-steps", po::value<int>(&config.sd_txt2img_params.hr_second_pass_steps)->default_value(20), "SD hr second pass steps")
-            ("sd-hr-resize-x", po::value<int>(&config.sd_txt2img_params.hr_resize_x)->default_value(0), "SD hr resize x")
-            ("sd-hr-resize-y", po::value<int>(&config.sd_txt2img_params.hr_resize_y)->default_value(0), "SD hr resize y")
-            ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd_txt2img_params.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+            ("sd-host", po::value<std::string>(&config.sd.host)->default_value("localhost"), "SD host")
+            ("sd-port", po::value<std::string>(&config.sd.port)->default_value("7860"), "SD port")
+            ("sd-target", po::value<std::string>(&config.sd.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+            ("sd-prompt-file", po::value<std::string>(&config.sd.prompt_file)->default_value("prompt.txt"), "SD prompt file")
+            ("sd-negative-prompt-file", po::value<std::string>(&config.sd.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
+            ("sd-output-file", po::value<std::string>(&config.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
+            ("sd-prompt", po::value<std::string>(&config.sd.prompt)->default_value(""), "SD prompt")
+            ("sd-negative-prompt", po::value<std::string>(&config.sd.negative_prompt)->default_value(""), "SD negative prompt")
+            ("sd-styles", po::value<std::vector<std::string>>(&config.sd.styles), "SD styles")
+            ("sd-seed", po::value<int>(&config.sd.seed)->default_value(-1), "SD seed")
+            ("sd-subseed", po::value<int>(&config.sd.subseed)->default_value(-1), "SD subseed")
+            ("sd-subseed-strength", po::value<double>(&config.sd.subseed_strength)->default_value(0), "SD subseed strength")
+            ("sd-seed-resize-from-h", po::value<int>(&config.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+            ("sd-seed-resize-from-w", po::value<int>(&config.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+            ("sd-sampler-name", po::value<std::string>(&config.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
+            ("sd-scheduler", po::value<std::string>(&config.sd.scheduler)->default_value("Automatic"), "SD scheduler")
+            ("sd-batch_size", po::value<int>(&config.sd.batch_size)->default_value(1), "SD batch size")
+            ("sd-n-iter", po::value<int>(&config.sd.n_iter)->default_value(1), "SD n iter")
+            ("sd-steps", po::value<int>(&config.sd.steps)->default_value(30), "SD steps")
+            ("sd-cfg-scale", po::value<double>(&config.sd.cfg_scale)->default_value(7), "SD cfg scale")
+            ("sd-width", po::value<int>(&config.sd.width)->default_value(1024), "SD image width")
+            ("sd-height", po::value<int>(&config.sd.height)->default_value(1024), "SD image height")
+            ("sd-restore-faces", po::bool_switch(&config.sd.restore_faces)->default_value(false), "SD restore faces")
+            ("sd-tiling", po::bool_switch(&config.sd.tiling)->default_value(false), "SD tiling")
+            ("sd-do-not-save-samples", po::bool_switch(&config.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
+            ("sd-do-not-save-grid", po::bool_switch(&config.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
+            ("sd-eta", po::value<int>(&config.sd.eta)->default_value(0), "SD eta")
+            ("sd-denoising-strength", po::value<double>(&config.sd.denoising_strength)->default_value(0.7, "0.7"), "SD denoising strength")
+            ("sd-s-min-uncond", po::value<int>(&config.sd.s_min_uncond)->default_value(0), "SD s min uncond")
+            ("sd-s-churn", po::value<int>(&config.sd.s_churn)->default_value(0), "SD s churn")
+            ("sd-s-tmax", po::value<int>(&config.sd.s_tmax)->default_value(0), "SD s tmax")
+            ("sd-s-tmin", po::value<int>(&config.sd.s_tmin)->default_value(0), "SD s tmin")
+            ("sd-s-noise", po::value<int>(&config.sd.s_noise)->default_value(1), "SD s noise")
+            ("sd-override-settings", po::value<std::string>(&config.sd.override_settings)->default_value(""), "SD override settings")
+            ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+            ("sd-refiner-checkpoint", po::value<std::string>(&config.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+            ("sd-refiner-switch-at", po::value<double>(&config.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
+            ("sd-disable-extra-networks", po::bool_switch(&config.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
+            ("sd-firstpass-image", po::value<std::string>(&config.sd.firstpass_image)->default_value(""), "SD firstpass image")
+            ("sd-comments", po::value<std::string>(&config.sd.comments)->default_value(""), "SD comments")
+            ("sd-enable-hr", po::bool_switch(&config.sd.enable_hr)->default_value(false), "SD enable hr")
+            ("sd-firstphase-width", po::value<int>(&config.sd.firstphase_width)->default_value(0), "SD firstphase width")
+            ("sd-firstphase-height", po::value<int>(&config.sd.firstphase_height)->default_value(0), "SD firstphase height")
+            ("sd-hr-scale", po::value<double>(&config.sd.hr_scale)->default_value(0), "SD hr scale")
+            ("sd-hr-upscaler", po::value<std::string>(&config.sd.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
+            ("sd-hr-second-pass-steps", po::value<int>(&config.sd.hr_second_pass_steps)->default_value(20), "SD hr second pass steps")
+            ("sd-hr-resize-x", po::value<int>(&config.sd.hr_resize_x)->default_value(0), "SD hr resize x")
+            ("sd-hr-resize-y", po::value<int>(&config.sd.hr_resize_y)->default_value(0), "SD hr resize y")
+            ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
             //("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
             //("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
-            ("sd-force-task-id", po::value<std::string>(&config.sd_txt2img_params.force_task_id)->default_value(""), "SD force task id")
-            ("sd-sampler-index", po::value<std::string>(&config.sd_txt2img_params.sampler_index)->default_value(""), "SD sampler index")
-            ("sd-script-name", po::value<std::string>(&config.sd_txt2img_params.script_name)->default_value(""), "SD script name")
-            ("sd-script-args", po::value<std::vector<std::string>>(&config.sd_txt2img_params.script_args), "SD script_args")
-            ("sd-send-images", po::bool_switch(&config.sd_txt2img_params.send_images)->default_value(true), "SD send images")
-            ("sd-save-images", po::bool_switch(&config.sd_txt2img_params.save_images)->default_value(false), "SD save images")
-            ("sd-ad-enable", po::bool_switch(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-            ("sd-ad-model", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-            ("sd-ad-prompt", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-            ("sd-ad-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
-            ("sd-infotext", po::value<std::string>(&config.sd_txt2img_params.infotext)->default_value(""), "SD infotext")
-            ("sd-abg-remover-enable", po::bool_switch(&config.sd_txt2img_params.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+            ("sd-force-task-id", po::value<std::string>(&config.sd.force_task_id)->default_value(""), "SD force task id")
+            ("sd-sampler-index", po::value<std::string>(&config.sd.sampler_index)->default_value(""), "SD sampler index")
+            ("sd-script-name", po::value<std::string>(&config.sd.script_name)->default_value(""), "SD script name")
+            ("sd-script-args", po::value<std::vector<std::string>>(&config.sd.script_args), "SD script_args")
+            ("sd-send-images", po::bool_switch(&config.sd.send_images)->default_value(true), "SD send images")
+            ("sd-save-images", po::bool_switch(&config.sd.save_images)->default_value(false), "SD save images")
+            ("sd-ad-enable", po::bool_switch(&config.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+            ("sd-ad-model", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+            ("sd-ad-prompt", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+            ("sd-ad-negative-prompt", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+            ("sd-infotext", po::value<std::string>(&config.sd.infotext)->default_value(""), "SD infotext")
+            ("sd-abg-remover-enable", po::bool_switch(&config.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
-            ("sb-host", po::value<std::string>(&config.sb_generation_params.host)->default_value("localhost"), "SB host")
-            ("sb-port", po::value<std::string>(&config.sb_generation_params.port)->default_value("5001"), "SB port")
-            ("sb-target", po::value<std::string>(&config.sb_generation_params.target)->default_value("/voice"), "SB voide target")
-            ("sb-text-file", po::value<std::string>(&config.sb_generation_params.text_file)->default_value("text.txt"), "SB text file")
-            ("sb-output-file", po::value<std::string>(&config.sb_generation_params.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
-            ("sb-text", po::value<std::string>(&config.sb_generation_params.text)->default_value(""), "SB text")
-            ("sb-model-name", po::value<std::string>(&config.sb_generation_params.model_name)->default_value(""), "SB model name")
-            ("sb-model-id", po::value<int>(&config.sb_generation_params.model_id)->default_value(0), "SB model id")
-            ("sb-speaker-name", po::value<std::string>(&config.sb_generation_params.speaker_name)->default_value(""), "SB speaker name")
-            ("sb-speaker-id", po::value<int>(&config.sb_generation_params.speaker_id)->default_value(0), "SB speaker id")
-            ("sb-sdp-ratio", po::value<double>(&config.sb_generation_params.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
-            ("sb-noise", po::value<double>(&config.sb_generation_params.noise)->default_value(0.6, "0.6"), "SB noise")
-            ("sb-noisew", po::value<double>(&config.sb_generation_params.noisew)->default_value(0.8, "0.8"), "SB noisew")
-            ("sb-length", po::value<double>(&config.sb_generation_params.length)->default_value(1), "SB length")
-            ("sb-language", po::value<std::string>(&config.sb_generation_params.language)->default_value(""), "SB language")
-            ("sb-auto-split", po::bool_switch(&config.sb_generation_params.auto_split)->default_value(true), "SB auto split")
-            ("sb-split-interval", po::value<double>(&config.sb_generation_params.split_interval)->default_value(0.5, "0.5"), "SB split interval")
-            ("sb-assist-text", po::value<std::string>(&config.sb_generation_params.assist_text)->default_value(""), "SB assist text")
-            ("sb-assist-text-weight", po::value<double>(&config.sb_generation_params.assist_text_weight)->default_value(1), "SB assist text weight")
-            ("sb-style", po::value<std::string>(&config.sb_generation_params.style)->default_value(""), "SB style")
-            ("sb-style-weight", po::value<double>(&config.sb_generation_params.style_weight)->default_value(1), "SB style weight")
-            ("sb-reference-audio-path", po::value<std::string>(&config.sb_generation_params.reference_audio_path)->default_value(""), "SB reference audio path")
+            ("sb-host", po::value<std::string>(&config.sb.host)->default_value("localhost"), "SB host")
+            ("sb-port", po::value<std::string>(&config.sb.port)->default_value("5001"), "SB port")
+            ("sb-target", po::value<std::string>(&config.sb.target)->default_value("/voice"), "SB voide target")
+            ("sb-text-file", po::value<std::string>(&config.sb.text_file)->default_value("text.txt"), "SB text file")
+            ("sb-output-file", po::value<std::string>(&config.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
+            ("sb-text", po::value<std::string>(&config.sb.text)->default_value(""), "SB text")
+            ("sb-model-name", po::value<std::string>(&config.sb.model_name)->default_value(""), "SB model name")
+            ("sb-model-id", po::value<int>(&config.sb.model_id)->default_value(0), "SB model id")
+            ("sb-speaker-name", po::value<std::string>(&config.sb.speaker_name)->default_value(""), "SB speaker name")
+            ("sb-speaker-id", po::value<int>(&config.sb.speaker_id)->default_value(0), "SB speaker id")
+            ("sb-sdp-ratio", po::value<double>(&config.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
+            ("sb-noise", po::value<double>(&config.sb.noise)->default_value(0.6, "0.6"), "SB noise")
+            ("sb-noisew", po::value<double>(&config.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
+            ("sb-length", po::value<double>(&config.sb.length)->default_value(1), "SB length")
+            ("sb-language", po::value<std::string>(&config.sb.language)->default_value(""), "SB language")
+            ("sb-auto-split", po::bool_switch(&config.sb.auto_split)->default_value(true), "SB auto split")
+            ("sb-split-interval", po::value<double>(&config.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
+            ("sb-assist-text", po::value<std::string>(&config.sb.assist_text)->default_value(""), "SB assist text")
+            ("sb-assist-text-weight", po::value<double>(&config.sb.assist_text_weight)->default_value(1), "SB assist text weight")
+            ("sb-style", po::value<std::string>(&config.sb.style)->default_value(""), "SB style")
+            ("sb-style-weight", po::value<double>(&config.sb.style_weight)->default_value(1), "SB style weight")
+            ("sb-reference-audio-path", po::value<std::string>(&config.sb.reference_audio_path)->default_value(""), "SB reference audio path")
 
-            ("cu-host", po::value<std::string>(&config.cu_generation_params.host)->default_value("localhost"), "Comfy UI host")
-            ("cu-port", po::value<std::string>(&config.cu_generation_params.port)->default_value("8188"), "Comfy UI port")
-            ("cu-prompt-target", po::value<std::string>(&config.cu_generation_params.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
-            ("cu-upload-image-target", po::value<std::string>(&config.cu_generation_params.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
-            ("cu-prompt", po::value<std::string>(&config.cu_generation_params.prompt)->default_value(""), "Comfy UI prompt")
-            ("cu-prompt-file", po::value<std::string>(&config.cu_generation_params.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
-            ("cu-output-directory", po::value<std::string>(&config.cu_generation_params.output_directory)->default_value("output"), "Comfy UI output directory")
-            ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu_generation_params.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
-            ("cu-preserve-subdirectories", po::bool_switch(&config.cu_generation_params.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
+            ("cu-host", po::value<std::string>(&config.cu.host)->default_value("localhost"), "Comfy UI host")
+            ("cu-port", po::value<std::string>(&config.cu.port)->default_value("8188"), "Comfy UI port")
+            ("cu-prompt-target", po::value<std::string>(&config.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
+            ("cu-upload-image-target", po::value<std::string>(&config.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
+            ("cu-prompt", po::value<std::string>(&config.cu.prompt)->default_value(""), "Comfy UI prompt")
+            ("cu-prompt-file", po::value<std::string>(&config.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
+            ("cu-output-directory", po::value<std::string>(&config.cu.output_directory)->default_value("output"), "Comfy UI output directory")
+            ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
+            ("cu-preserve-subdirectories", po::bool_switch(&config.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
             ;
 
         po::options_description config_file_options;
@@ -3558,17 +3559,17 @@ int parse_command_line(
             config.phases = { "" };
         }
 
-        std::transform(config.tg_completions_params.stop.begin(), config.tg_completions_params.stop.end(), config.tg_completions_params.stop.begin(), unescape_string);
+        std::transform(config.tg.stop.begin(), config.tg.stop.end(), config.tg.stop.begin(), unescape_string);
         std::transform(config.user_defined_variables.begin(), config.user_defined_variables.end(), config.user_defined_variables.begin(), unescape_string);
-        std::transform(config.kc_generation_params.stop_sequence.begin(), config.kc_generation_params.stop_sequence.end(), config.kc_generation_params.stop_sequence.begin(), unescape_string);
-        config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
-        config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
-        config.llm_prompt_params.generation_suffix = unescape_string(config.llm_prompt_params.generation_suffix);
-        config.llm_prompt_params.reasoning_prefix = unescape_string(config.llm_prompt_params.reasoning_prefix);
-        config.llm_prompt_params.reasoning_suffix = unescape_string(config.llm_prompt_params.reasoning_suffix);
-        config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
-        config.sd_txt2img_params.negative_prompt = unescape_string(config.sd_txt2img_params.negative_prompt);
-        config.sb_generation_params.text = unescape_string(config.sb_generation_params.text);
+        std::transform(config.kc.stop_sequence.begin(), config.kc.stop_sequence.end(), config.kc.stop_sequence.begin(), unescape_string);
+        config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
+        config.llm.generation_prefix = unescape_string(config.llm.generation_prefix);
+        config.llm.generation_suffix = unescape_string(config.llm.generation_suffix);
+        config.llm.reasoning_prefix = unescape_string(config.llm.reasoning_prefix);
+        config.llm.reasoning_suffix = unescape_string(config.llm.reasoning_suffix);
+        config.sd.prompt = unescape_string(config.sd.prompt);
+        config.sd.negative_prompt = unescape_string(config.sd.negative_prompt);
+        config.sb.text = unescape_string(config.sb.text);
 
         parse_user_defined_variables(config.user_defined_variables, config.context);
     }
@@ -3583,7 +3584,7 @@ int parse_command_line(
 std::string truncate_prompt_by_config(std::string_view prompt, const config& config)
 {
     std::string result;
-    int remaining_tokens{ config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens };
+    int remaining_tokens{ config.tg.truncation_length - config.tg.max_tokens };
     truncate_prompt(prompt, config, false, result, remaining_tokens);
     return result;
 }
@@ -3638,7 +3639,7 @@ void write_file(const config& config, std::string_view response, std::string_vie
 
 void write_code_block(const config& config, std::string_view markdown)
 {
-    if (config.llm_prompt_params.code_block_extract)
+    if (config.llm.code_block_extract)
     {
         const std::map<std::string, std::string> blocks{ extract_code_block_from_markdown(markdown) };
         for (const auto& [name, code] : blocks)
@@ -3659,11 +3660,11 @@ void generate_text_and_write(const config& config, std::string_view prompt, cons
 {
     const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
 
-    std::string response{ generate_text(config, truncated_prompt, config.llm_prompt_params.generation_prefix, ctx) };
-    response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
-    response += config.llm_prompt_params.generation_suffix;
+    std::string response{ generate_text(config, truncated_prompt, config.llm.generation_prefix, ctx) };
+    response = remove_reasoning(response, config.llm.reasoning_prefix, config.llm.reasoning_suffix);
+    response += config.llm.generation_suffix;
 
-    write_file(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+    write_file(config, response, config.llm.output_file, std::ios_base::app);
 
     if (!config.verbose)
     {
@@ -3686,25 +3687,25 @@ void generate_and_output(const config& config)
 {
     if (config.mode == "tg" || config.mode == "kc")
     {
-        const std::string prompt{ prompt_from_string_or_file_path(config.llm_prompt_params.prompt, config.llm_prompt_params.prompt_file, config) };
+        const std::string prompt{ prompt_from_string_or_file_path(config.llm.prompt, config.llm.prompt_file, config) };
         generate_text_and_write(config, prompt, config.context);
     }
     else if (config.mode == "sd")
     {
-        const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config), config, config.context) };
-        const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config), config, config.context) };
+        const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
+        const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
         const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
-        write_file(config, image, config.sd_txt2img_params.output_file, std::ios_base::binary);
+        write_file(config, image, config.sd.output_file, std::ios_base::binary);
     }
     else if (config.mode == "sb")
     {
-        const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config), config, config.context) };
+        const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb.text, config.sb.text_file, config), config, config.context) };
         const std::string voice{ send_style_bert_voice_request(config, text) };
-        write_file(config, voice, config.sb_generation_params.output_file, std::ios_base::binary);
+        write_file(config, voice, config.sb.output_file, std::ios_base::binary);
     }
     else if (config.mode == "cu")
     {
-        const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu_generation_params.prompt, config.cu_generation_params.prompt_file, config), config, config.context) };
+        const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu.prompt, config.cu.prompt_file, config), config, config.context) };
         send_comfy_ui_prompt(config, prompt);
     }
 }
@@ -3713,15 +3714,15 @@ void set_seed(config& config)
 {
     if (config.seed == -1)
     {
-        config.tg_completions_params.seed = random<int>(0);
-        config.kc_generation_params.sampler_seed = random<int>(0, 999999);
-        config.sd_txt2img_params.seed = random<int>(0);
+        config.tg.seed = random<int>(0);
+        config.kc.sampler_seed = random<int>(0, 999999);
+        config.sd.seed = random<int>(0);
     }
     else
     {
-        config.tg_completions_params.seed = config.seed;
-        config.kc_generation_params.sampler_seed = config.seed;
-        config.sd_txt2img_params.seed = config.seed;
+        config.tg.seed = config.seed;
+        config.kc.sampler_seed = config.seed;
+        config.sd.seed = config.seed;
     }
 }
 
