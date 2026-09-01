@@ -844,10 +844,10 @@ std::string base64_decode(std::string_view input)
         ++padding_count;
     }
 
-    const std::string_view trimed_input{ input.substr(0, input.size() - padding_count)};
+    const std::string_view trimed_input{ input.substr(0, input.size() - padding_count) };
     std::string decoded{ iterator{ input.begin() }, iterator{ input.end() } };
 
-    std::size_t expected_size{ input.size() / 4 * 3 - padding_count};
+    std::size_t expected_size{ input.size() / 4 * 3 - padding_count };
     if (decoded.size() > expected_size)
     {
         decoded.resize(expected_size);
