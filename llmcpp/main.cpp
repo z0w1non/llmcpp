@@ -170,6 +170,9 @@ struct llm_prompt_parameters
     std::string completions_target;
     std::string token_count_target;
 
+    int min_completion_tokens{};
+    int max_completion_iterations{};
+
     std::string reasoning_prefix;
     std::string reasoning_suffix;
 
@@ -559,8 +562,6 @@ struct config
     std::vector<std::string> phases;
 
     int seed{};
-    int min_completion_tokens{};
-    int max_completion_iterations{};
 
     bool create_process{};
     bool terminate_process{};
@@ -1290,7 +1291,7 @@ std::string builtin::random(const std::vector<std::string>& arguments, const con
     return std::to_string(::random<std::int64_t>(min, max));
 }
 
-std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx)
+std::string builtin::choice(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     if (arguments.empty())
     {
@@ -1722,63 +1723,63 @@ std::string send_automatic1111_txt2img_request(
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    picojson::object request_body_json;
+    picojson::object json;
 
-    add_pair_into_json(request_body_json, "prompt", prompt);
-    add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
-    //add_pair_into_json(request_body_json, "styles", config.sd_txt2img_params.styles);
-    add_pair_into_json(request_body_json, "seed", config.sd_txt2img_params.seed);
-    add_pair_into_json(request_body_json, "subseed", config.sd_txt2img_params.subseed);
-    add_pair_into_json(request_body_json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
-    add_pair_into_json(request_body_json, "seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
-    add_pair_into_json(request_body_json, "seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
-    add_pair_into_json(request_body_json, "sampler_name", config.sd_txt2img_params.sampler_name);
-    add_pair_into_json(request_body_json, "scheduler", config.sd_txt2img_params.scheduler);
-    add_pair_into_json(request_body_json, "batch_size", config.sd_txt2img_params.batch_size);
-    add_pair_into_json(request_body_json, "n_iter", config.sd_txt2img_params.n_iter);
-    add_pair_into_json(request_body_json, "steps", config.sd_txt2img_params.steps);
-    add_pair_into_json(request_body_json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
-    add_pair_into_json(request_body_json, "width", config.sd_txt2img_params.width);
-    add_pair_into_json(request_body_json, "height", config.sd_txt2img_params.height);
-    add_pair_into_json(request_body_json, "restore_faces", config.sd_txt2img_params.restore_faces);
-    add_pair_into_json(request_body_json, "tiling", config.sd_txt2img_params.tiling);
-    add_pair_into_json(request_body_json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
-    add_pair_into_json(request_body_json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
-    add_pair_into_json(request_body_json, "eta", config.sd_txt2img_params.eta);
-    add_pair_into_json(request_body_json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
-    add_pair_into_json(request_body_json, "s_min_uncond", config.sd_txt2img_params.s_min_uncond);
-    add_pair_into_json(request_body_json, "s_churn", config.sd_txt2img_params.s_churn);
-    add_pair_into_json(request_body_json, "s_tmax", config.sd_txt2img_params.s_tmax);
-    add_pair_into_json(request_body_json, "s_tmin", config.sd_txt2img_params.s_tmin);
-    add_pair_into_json(request_body_json, "s_noise", config.sd_txt2img_params.s_noise);
-    add_pair_into_json(request_body_json, "override_settings", config.sd_txt2img_params.override_settings);
-    add_pair_into_json(request_body_json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
-    add_pair_into_json(request_body_json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
-    add_pair_into_json(request_body_json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
-    add_pair_into_json(request_body_json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
-    add_pair_into_json(request_body_json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
-    add_pair_into_json(request_body_json, "comments", config.sd_txt2img_params.comments);
-    add_pair_into_json(request_body_json, "enable_hr", config.sd_txt2img_params.enable_hr);
-    add_pair_into_json(request_body_json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
-    add_pair_into_json(request_body_json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
-    add_pair_into_json(request_body_json, "hr_scale", config.sd_txt2img_params.hr_scale);
-    add_pair_into_json(request_body_json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
-    add_pair_into_json(request_body_json, "hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
-    add_pair_into_json(request_body_json, "hr_resize_x", config.sd_txt2img_params.hr_resize_x);
-    add_pair_into_json(request_body_json, "hr_resize_y", config.sd_txt2img_params.hr_resize_y);
-    add_pair_into_json(request_body_json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
-    //add_pair_into_json(request_body_json, "hr_prompt", prompt);
-    //add_pair_into_json(request_body_json, "hr_negative_prompt", negative_prompt);
-    add_pair_into_json(request_body_json, "force_task_id", config.sd_txt2img_params.force_task_id);
+    add_pair_into_json(json, "prompt", prompt);
+    add_pair_into_json(json, "negative_prompt", negative_prompt);
+    //add_pair_into_json(json, "styles", config.sd_txt2img_params.styles);
+    add_pair_into_json(json, "seed", config.sd_txt2img_params.seed);
+    add_pair_into_json(json, "subseed", config.sd_txt2img_params.subseed);
+    add_pair_into_json(json, "subseed_strength", config.sd_txt2img_params.subseed_strength);
+    add_pair_into_json(json, "seed_resize_from_h", config.sd_txt2img_params.seed_resize_from_h);
+    add_pair_into_json(json, "seed_resize_from_w", config.sd_txt2img_params.seed_resize_from_w);
+    add_pair_into_json(json, "sampler_name", config.sd_txt2img_params.sampler_name);
+    add_pair_into_json(json, "scheduler", config.sd_txt2img_params.scheduler);
+    add_pair_into_json(json, "batch_size", config.sd_txt2img_params.batch_size);
+    add_pair_into_json(json, "n_iter", config.sd_txt2img_params.n_iter);
+    add_pair_into_json(json, "steps", config.sd_txt2img_params.steps);
+    add_pair_into_json(json, "cfg_scale", config.sd_txt2img_params.cfg_scale);
+    add_pair_into_json(json, "width", config.sd_txt2img_params.width);
+    add_pair_into_json(json, "height", config.sd_txt2img_params.height);
+    add_pair_into_json(json, "restore_faces", config.sd_txt2img_params.restore_faces);
+    add_pair_into_json(json, "tiling", config.sd_txt2img_params.tiling);
+    add_pair_into_json(json, "do_not_save_samples", config.sd_txt2img_params.do_not_save_samples);
+    add_pair_into_json(json, "do_not_save_grid", config.sd_txt2img_params.do_not_save_grid);
+    add_pair_into_json(json, "eta", config.sd_txt2img_params.eta);
+    add_pair_into_json(json, "denoising_strength", config.sd_txt2img_params.denoising_strength);
+    add_pair_into_json(json, "s_min_uncond", config.sd_txt2img_params.s_min_uncond);
+    add_pair_into_json(json, "s_churn", config.sd_txt2img_params.s_churn);
+    add_pair_into_json(json, "s_tmax", config.sd_txt2img_params.s_tmax);
+    add_pair_into_json(json, "s_tmin", config.sd_txt2img_params.s_tmin);
+    add_pair_into_json(json, "s_noise", config.sd_txt2img_params.s_noise);
+    add_pair_into_json(json, "override_settings", config.sd_txt2img_params.override_settings);
+    add_pair_into_json(json, "override_settings_restore_afterwards", config.sd_txt2img_params.override_settings_restore_afterwards);
+    add_pair_into_json(json, "refiner_checkpoint", config.sd_txt2img_params.refiner_checkpoint);
+    add_pair_into_json(json, "refiner_switch_at", config.sd_txt2img_params.refiner_switch_at);
+    add_pair_into_json(json, "disable_extra_networks", config.sd_txt2img_params.disable_extra_networks);
+    add_pair_into_json(json, "firstpass_image", config.sd_txt2img_params.firstpass_image);
+    add_pair_into_json(json, "comments", config.sd_txt2img_params.comments);
+    add_pair_into_json(json, "enable_hr", config.sd_txt2img_params.enable_hr);
+    add_pair_into_json(json, "firstphase_width", config.sd_txt2img_params.firstphase_width);
+    add_pair_into_json(json, "firstphase_height", config.sd_txt2img_params.firstphase_height);
+    add_pair_into_json(json, "hr_scale", config.sd_txt2img_params.hr_scale);
+    add_pair_into_json(json, "hr_upscaler", config.sd_txt2img_params.hr_upscaler);
+    add_pair_into_json(json, "hr_second_pass_steps", config.sd_txt2img_params.hr_second_pass_steps);
+    add_pair_into_json(json, "hr_resize_x", config.sd_txt2img_params.hr_resize_x);
+    add_pair_into_json(json, "hr_resize_y", config.sd_txt2img_params.hr_resize_y);
+    add_pair_into_json(json, "hr_checkpoint_name", config.sd_txt2img_params.hr_checkpoint_name);
+    //add_pair_into_json(json, "hr_prompt", prompt);
+    //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
+    add_pair_into_json(json, "force_task_id", config.sd_txt2img_params.force_task_id);
 
     if (!config.sd_txt2img_params.sampler_index.empty() && config.sd_txt2img_params.sampler_name.empty())
     {
-        add_pair_into_json(request_body_json, "sampler_index", config.sd_txt2img_params.sampler_index);
+        add_pair_into_json(json, "sampler_index", config.sd_txt2img_params.sampler_index);
     }
 
     if (config.sd_txt2img_params.abg_remover_enable)
     {
-        add_pair_into_json(request_body_json, "script_name", "abg remover");
+        add_pair_into_json(json, "script_name", "abg remover");
         picojson::array args_array
         {
             picojson::value{ false },
@@ -1787,11 +1788,11 @@ std::string send_automatic1111_txt2img_request(
             picojson::value{ "#000000" },
             picojson::value{ false }
         };
-        add_pair_into_json(request_body_json, "script_args", args_array);
+        add_pair_into_json(json, "script_args", args_array);
     }
 
-    add_pair_into_json(request_body_json, "send_images", config.sd_txt2img_params.send_images);
-    add_pair_into_json(request_body_json, "save_images", config.sd_txt2img_params.save_images);
+    add_pair_into_json(json, "send_images", config.sd_txt2img_params.send_images);
+    add_pair_into_json(json, "save_images", config.sd_txt2img_params.save_images);
 
     picojson::object alwayson_scripts;
     if (config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.ad_enable)
@@ -1836,14 +1837,14 @@ std::string send_automatic1111_txt2img_request(
     //    add_pair_into_json(seed, "args", args_array);
     //    add_pair_into_json(alwayson_scripts, "Seed", seed);
     //}
-    add_pair_into_json(request_body_json, "alwayson_scripts", alwayson_scripts);
+    add_pair_into_json(json, "alwayson_scripts", alwayson_scripts);
 
     if (!config.sd_txt2img_params.infotext.empty())
     {
-        add_pair_into_json(request_body_json, "infotext", config.sd_txt2img_params.infotext);
+        add_pair_into_json(json, "infotext", config.sd_txt2img_params.infotext);
     }
 
-    const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+    const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
     http::request<http::string_body> request{ http::verb::post, config.sd_txt2img_params.target, 11 };
@@ -2120,12 +2121,12 @@ void send_comfy_ui_prompt(
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    picojson::object request_body_json;
+    picojson::object json;
     picojson::value prompt_json;
     picojson::parse(prompt_json, std::string{ prompt });
-    add_pair_into_json(request_body_json, "prompt", prompt_json);
+    add_pair_into_json(json, "prompt", prompt_json);
 
-    const std::string request_body{ picojson::value{ request_body_json }.serialize() };
+    const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
     http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.prompt_target, 11 };
@@ -2392,75 +2393,75 @@ std::string send_completions_request(
 
 std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
 {
-    picojson::object request_body_json;
-    add_pair_into_json(request_body_json, "prompt", prompt);
-    add_pair_into_json(request_body_json, "model", model);
-    add_pair_into_json(request_body_json, "best_of", best_of);
-    add_pair_into_json(request_body_json, "echo", echo);
-    add_pair_into_json(request_body_json, "frequency_penalty", frequency_penalty);
-    //add_pair_into_json(request_body_json, "logit_bias", logit_bias);
-    add_pair_into_json(request_body_json, "logprobs", logprobs);
-    add_pair_into_json(request_body_json, "max_tokens", max_tokens);
-    add_pair_into_json(request_body_json, "n", n);
-    add_pair_into_json(request_body_json, "presence_penalty", presence_penalty);
-    add_pair_into_json_from_vector(request_body_json, "stop", stop);
-    add_pair_into_json(request_body_json, "stream", stream);
-    add_pair_into_json(request_body_json, "suffix", suffix);
-    add_pair_into_json(request_body_json, "temperature", temperature);
-    add_pair_into_json(request_body_json, "top_p", top_p);
+    picojson::object json;
+    add_pair_into_json(json, "prompt", prompt);
+    add_pair_into_json(json, "model", model);
+    add_pair_into_json(json, "best_of", best_of);
+    add_pair_into_json(json, "echo", echo);
+    add_pair_into_json(json, "frequency_penalty", frequency_penalty);
+    //add_pair_into_json(json, "logit_bias", logit_bias);
+    add_pair_into_json(json, "logprobs", logprobs);
+    add_pair_into_json(json, "max_tokens", max_tokens);
+    add_pair_into_json(json, "n", n);
+    add_pair_into_json(json, "presence_penalty", presence_penalty);
+    add_pair_into_json_from_vector(json, "stop", stop);
+    add_pair_into_json(json, "stream", stream);
+    add_pair_into_json(json, "suffix", suffix);
+    add_pair_into_json(json, "temperature", temperature);
+    add_pair_into_json(json, "top_p", top_p);
 
     if (seed != -1)
     {
-        add_pair_into_json(request_body_json, "seed", seed);
+        add_pair_into_json(json, "seed", seed);
     }
 
-    add_pair_into_json(request_body_json, "user", user);
-    add_pair_into_json(request_body_json, "preset", preset);
-    add_pair_into_json(request_body_json, "dynatemp_low", dynatemp_low);
-    add_pair_into_json(request_body_json, "dynatemp_high", dynatemp_high);
-    add_pair_into_json(request_body_json, "dynatemp_exponent", dynatemp_exponent);
-    add_pair_into_json(request_body_json, "smoothing_factor", smoothing_factor);
-    add_pair_into_json(request_body_json, "smoothing_curve", smoothing_curve);
-    add_pair_into_json(request_body_json, "min_p", min_p);
-    add_pair_into_json(request_body_json, "top_k", top_k);
-    add_pair_into_json(request_body_json, "typical_p", typical_p);
-    add_pair_into_json(request_body_json, "xtc_threshold", xtc_threshold);
-    add_pair_into_json(request_body_json, "xtc_probability", xtc_probability);
-    add_pair_into_json(request_body_json, "epsilon_cutoff", epsilon_cutoff);
-    add_pair_into_json(request_body_json, "eta_cutoff", eta_cutoff);
-    add_pair_into_json(request_body_json, "tfs", tfs);
-    add_pair_into_json(request_body_json, "top_a", top_a);
-    add_pair_into_json(request_body_json, "top_n_sigma", top_n_sigma);
-    add_pair_into_json(request_body_json, "dry_multiplier", dry_multiplier);
-    add_pair_into_json(request_body_json, "dry_allowed_length", dry_allowed_length);
-    add_pair_into_json(request_body_json, "dry_base", dry_base);
-    add_pair_into_json(request_body_json, "repetition_penalty", repetition_penalty);
-    add_pair_into_json(request_body_json, "encoder_repetition_penalty", encoder_repetition_penalty);
-    add_pair_into_json(request_body_json, "no_repeat_ngram_size", no_repeat_ngram_size);
-    add_pair_into_json(request_body_json, "repetition_penalty_range", repetition_penalty_range);
-    add_pair_into_json(request_body_json, "penalty_alpha", penalty_alpha);
-    add_pair_into_json(request_body_json, "guidance_scale", guidance_scale);
-    add_pair_into_json(request_body_json, "mirostat_mode", mirostat_mode);
-    add_pair_into_json(request_body_json, "mirostat_tau", mirostat_tau);
-    add_pair_into_json(request_body_json, "mirostat_eta", mirostat_eta);
-    add_pair_into_json(request_body_json, "prompt_lookup_num_tokens", prompt_lookup_num_tokens);
-    add_pair_into_json(request_body_json, "max_tokens_second", max_tokens_second);
-    add_pair_into_json(request_body_json, "do_sample", do_sample);
-    add_pair_into_json(request_body_json, "dynamic_temperature", max_tokens_second);
-    add_pair_into_json(request_body_json, "temperature_last", temperature_last);
-    add_pair_into_json(request_body_json, "auto_max_new_tokens", auto_max_new_tokens);
-    add_pair_into_json(request_body_json, "ban_eos_token", ban_eos_token);
-    add_pair_into_json(request_body_json, "add_bos_token", add_bos_token);
-    add_pair_into_json(request_body_json, "skip_special_tokens", skip_special_tokens);
-    add_pair_into_json(request_body_json, "static_cache", static_cache);
-    add_pair_into_json(request_body_json, "truncation_length", truncation_length);
-    add_pair_into_json_from_vector(request_body_json, "sampler_priority", sampler_priority);
-    add_pair_into_json(request_body_json, "custom_token_bans", custom_token_bans);
-    add_pair_into_json(request_body_json, "negative_prompt", negative_prompt);
-    add_pair_into_json(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
-    add_pair_into_json(request_body_json, "grammar_string", grammar_string);
+    add_pair_into_json(json, "user", user);
+    add_pair_into_json(json, "preset", preset);
+    add_pair_into_json(json, "dynatemp_low", dynatemp_low);
+    add_pair_into_json(json, "dynatemp_high", dynatemp_high);
+    add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
+    add_pair_into_json(json, "smoothing_factor", smoothing_factor);
+    add_pair_into_json(json, "smoothing_curve", smoothing_curve);
+    add_pair_into_json(json, "min_p", min_p);
+    add_pair_into_json(json, "top_k", top_k);
+    add_pair_into_json(json, "typical_p", typical_p);
+    add_pair_into_json(json, "xtc_threshold", xtc_threshold);
+    add_pair_into_json(json, "xtc_probability", xtc_probability);
+    add_pair_into_json(json, "epsilon_cutoff", epsilon_cutoff);
+    add_pair_into_json(json, "eta_cutoff", eta_cutoff);
+    add_pair_into_json(json, "tfs", tfs);
+    add_pair_into_json(json, "top_a", top_a);
+    add_pair_into_json(json, "top_n_sigma", top_n_sigma);
+    add_pair_into_json(json, "dry_multiplier", dry_multiplier);
+    add_pair_into_json(json, "dry_allowed_length", dry_allowed_length);
+    add_pair_into_json(json, "dry_base", dry_base);
+    add_pair_into_json(json, "repetition_penalty", repetition_penalty);
+    add_pair_into_json(json, "encoder_repetition_penalty", encoder_repetition_penalty);
+    add_pair_into_json(json, "no_repeat_ngram_size", no_repeat_ngram_size);
+    add_pair_into_json(json, "repetition_penalty_range", repetition_penalty_range);
+    add_pair_into_json(json, "penalty_alpha", penalty_alpha);
+    add_pair_into_json(json, "guidance_scale", guidance_scale);
+    add_pair_into_json(json, "mirostat_mode", mirostat_mode);
+    add_pair_into_json(json, "mirostat_tau", mirostat_tau);
+    add_pair_into_json(json, "mirostat_eta", mirostat_eta);
+    add_pair_into_json(json, "prompt_lookup_num_tokens", prompt_lookup_num_tokens);
+    add_pair_into_json(json, "max_tokens_second", max_tokens_second);
+    add_pair_into_json(json, "do_sample", do_sample);
+    add_pair_into_json(json, "dynamic_temperature", max_tokens_second);
+    add_pair_into_json(json, "temperature_last", temperature_last);
+    add_pair_into_json(json, "auto_max_new_tokens", auto_max_new_tokens);
+    add_pair_into_json(json, "ban_eos_token", ban_eos_token);
+    add_pair_into_json(json, "add_bos_token", add_bos_token);
+    add_pair_into_json(json, "skip_special_tokens", skip_special_tokens);
+    add_pair_into_json(json, "static_cache", static_cache);
+    add_pair_into_json(json, "truncation_length", truncation_length);
+    add_pair_into_json_from_vector(json, "sampler_priority", sampler_priority);
+    add_pair_into_json(json, "custom_token_bans", custom_token_bans);
+    add_pair_into_json(json, "negative_prompt", negative_prompt);
+    add_pair_into_json(json, "dry_sequence_breakers", dry_sequence_breakers);
+    add_pair_into_json(json, "grammar_string", grammar_string);
 
-    return picojson::value{ request_body_json }.serialize();
+    return picojson::value{ json }.serialize();
 }
 
 std::string tg_completions_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
@@ -2475,9 +2476,9 @@ std::string tg_completions_parameters::parse_response_for_text_completions(const
 
 std::string tg_completions_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
-    picojson::object request_body_json;
-    add_pair_into_json(request_body_json, "text", prompt);
-    return picojson::value{ request_body_json }.serialize();
+    picojson::object json;
+    add_pair_into_json(json, "text", prompt);
+    return picojson::value{ json }.serialize();
 }
 
 int tg_completions_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
@@ -2491,55 +2492,55 @@ int tg_completions_parameters::parse_response_for_token_count(const boost::beast
 
 std::string kc_generation_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
 {
-    picojson::object request_body_json;
+    picojson::object json;
 
-    add_pair_into_json(request_body_json, "max_context_length", max_context_length);
-    add_pair_into_json(request_body_json, "max_length", max_tokens);
-    add_pair_into_json(request_body_json, "prompt", std::string{ prompt });
-    add_pair_into_json(request_body_json, "rep_pen", rep_pen);
-    add_pair_into_json(request_body_json, "rep_pen_range", rep_pen_range);
-    add_pair_into_json_from_vector(request_body_json, "sampler_order", sampler_order);
+    add_pair_into_json(json, "max_context_length", max_context_length);
+    add_pair_into_json(json, "max_length", max_tokens);
+    add_pair_into_json(json, "prompt", std::string{ prompt });
+    add_pair_into_json(json, "rep_pen", rep_pen);
+    add_pair_into_json(json, "rep_pen_range", rep_pen_range);
+    add_pair_into_json_from_vector(json, "sampler_order", sampler_order);
 
     if (sampler_seed != -1)
     {
-        add_pair_into_json(request_body_json, "sampler_seed", sampler_seed);
+        add_pair_into_json(json, "sampler_seed", sampler_seed);
     }
 
-    add_pair_into_json_from_vector(request_body_json, "stop_sequence", stop_sequence);
-    add_pair_into_json(request_body_json, "temperature", temperature);
-    add_pair_into_json(request_body_json, "tfs", tfs);
-    add_pair_into_json(request_body_json, "top_a", top_a);
-    add_pair_into_json(request_body_json, "top_k", top_k);
-    add_pair_into_json(request_body_json, "top_p", top_p);
-    add_pair_into_json(request_body_json, "min_p", min_p);
-    add_pair_into_json(request_body_json, "typical", typical);
-    add_pair_into_json(request_body_json, "use_default_badwordsids", use_default_badwordsids);
-    add_pair_into_json(request_body_json, "dynatemp_range", dynatemp_range);
-    add_pair_into_json(request_body_json, "smoothing_factor", smoothing_factor);
-    add_pair_into_json(request_body_json, "dynatemp_exponent", dynatemp_exponent);
-    add_pair_into_json(request_body_json, "mirostat", mirostat);
-    add_pair_into_json(request_body_json, "mirostat_tau", mirostat_tau);
-    add_pair_into_json(request_body_json, "mirostat_eta", mirostat_eta);
-    add_pair_into_json(request_body_json, "genkey", genkey);
-    add_pair_into_json(request_body_json, "grammar", grammar);
-    add_pair_into_json(request_body_json, "grammar_retain_state", grammar_retain_state);
-    add_pair_into_json(request_body_json, "memory", memory);
-    add_pair_into_json_from_vector(request_body_json, "images", images);
-    add_pair_into_json(request_body_json, "trim_stop", trim_stop);
-    add_pair_into_json(request_body_json, "render_special", render_special);
-    add_pair_into_json(request_body_json, "bypass_eos", bypass_eos);
-    add_pair_into_json_from_vector(request_body_json, "banned_tokens", banned_tokens);
-    add_pair_into_json(request_body_json, "dry_multiplier", dry_multiplier);
-    add_pair_into_json(request_body_json, "dry_base", dry_base);
-    add_pair_into_json(request_body_json, "dry_allowed_length", dry_allowed_length);
-    add_pair_into_json(request_body_json, "dry_penalty_last_n", dry_penalty_last_n);
-    add_pair_into_json_from_vector(request_body_json, "dry_sequence_breakers", dry_sequence_breakers);
-    add_pair_into_json(request_body_json, "xtc_probability", xtc_probability);
-    add_pair_into_json(request_body_json, "nsigma", nsigma);
-    add_pair_into_json(request_body_json, "logprobs", logprobs);
-    add_pair_into_json(request_body_json, "replace_instruct_placeholders", replace_instruct_placeholders);
+    add_pair_into_json_from_vector(json, "stop_sequence", stop_sequence);
+    add_pair_into_json(json, "temperature", temperature);
+    add_pair_into_json(json, "tfs", tfs);
+    add_pair_into_json(json, "top_a", top_a);
+    add_pair_into_json(json, "top_k", top_k);
+    add_pair_into_json(json, "top_p", top_p);
+    add_pair_into_json(json, "min_p", min_p);
+    add_pair_into_json(json, "typical", typical);
+    add_pair_into_json(json, "use_default_badwordsids", use_default_badwordsids);
+    add_pair_into_json(json, "dynatemp_range", dynatemp_range);
+    add_pair_into_json(json, "smoothing_factor", smoothing_factor);
+    add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
+    add_pair_into_json(json, "mirostat", mirostat);
+    add_pair_into_json(json, "mirostat_tau", mirostat_tau);
+    add_pair_into_json(json, "mirostat_eta", mirostat_eta);
+    add_pair_into_json(json, "genkey", genkey);
+    add_pair_into_json(json, "grammar", grammar);
+    add_pair_into_json(json, "grammar_retain_state", grammar_retain_state);
+    add_pair_into_json(json, "memory", memory);
+    add_pair_into_json_from_vector(json, "images", images);
+    add_pair_into_json(json, "trim_stop", trim_stop);
+    add_pair_into_json(json, "render_special", render_special);
+    add_pair_into_json(json, "bypass_eos", bypass_eos);
+    add_pair_into_json_from_vector(json, "banned_tokens", banned_tokens);
+    add_pair_into_json(json, "dry_multiplier", dry_multiplier);
+    add_pair_into_json(json, "dry_base", dry_base);
+    add_pair_into_json(json, "dry_allowed_length", dry_allowed_length);
+    add_pair_into_json(json, "dry_penalty_last_n", dry_penalty_last_n);
+    add_pair_into_json_from_vector(json, "dry_sequence_breakers", dry_sequence_breakers);
+    add_pair_into_json(json, "xtc_probability", xtc_probability);
+    add_pair_into_json(json, "nsigma", nsigma);
+    add_pair_into_json(json, "logprobs", logprobs);
+    add_pair_into_json(json, "replace_instruct_placeholders", replace_instruct_placeholders);
 
-    return picojson::value{ request_body_json }.serialize();
+    return picojson::value{ json }.serialize();
 }
 
 std::string kc_generation_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
@@ -2554,9 +2555,9 @@ std::string kc_generation_parameters::parse_response_for_text_completions(const 
 
 std::string kc_generation_parameters::get_request_body_for_token_count(std::string_view prompt) const
 {
-    picojson::object request_body_json;
-    add_pair_into_json(request_body_json, "prompt", prompt);
-    return picojson::value{ request_body_json }.serialize();
+    picojson::object json;
+    add_pair_into_json(json, "prompt", prompt);
+    return picojson::value{ json }.serialize();
 }
 
 int kc_generation_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
@@ -2729,11 +2730,11 @@ std::string generate_text(
 
     std::string current_prompt{ expanded_prompt };
     int current_tokens = initial_tokens;
-    for (int completion_iterations{}; completion_iterations < config.max_completion_iterations; ++completion_iterations)
+    for (int completion_iterations{}; completion_iterations < config.llm_prompt_params.max_completion_iterations; ++completion_iterations)
     {
         BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
 
-        if (current_tokens - initial_tokens >= config.min_completion_tokens)
+        if (current_tokens - initial_tokens >= config.llm_prompt_params.min_completion_tokens)
         {
             break;
         }
@@ -3297,12 +3298,12 @@ int parse_command_line(
             ("llm-api-key", po::value<std::string>(&config.llm_prompt_params.api_key)->default_value(""), "LLM API key")
             ("llm-completions-target", po::value<std::string>(&config.llm_prompt_params.completions_target)->default_value(""), "LLM completions target")
             ("llm-token-count-target", po::value<std::string>(&config.llm_prompt_params.token_count_target)->default_value(""), "LLM token count target")
+            ("llm-min-completion-tokens", po::value<int>(&config.llm_prompt_params.min_completion_tokens)->default_value(256), "LLM min completion tokens")
+            ("llm-max-completion-iterations", po::value<int>(&config.llm_prompt_params.max_completion_iterations)->default_value(5), "LLM max completion iterations")
             ("llm-reasoning-prefix", po::value<std::string>(&config.llm_prompt_params.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
             ("llm-reasoning-suffix", po::value<std::string>(&config.llm_prompt_params.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
             ("llm-code-block-extract", po::bool_switch(&config.llm_prompt_params.code_block_extract)->default_value(false), "code block extract switch")
 
-            ("tg-min-completion-tokens", po::value<int>(&config.min_completion_tokens)->default_value(256), "TG min completion tokens")
-            ("tg-max-completion-iterations", po::value<int>(&config.max_completion_iterations)->default_value(5), "TG max completion iterations")
             ("tg-model", po::value<std::string>(&config.tg_completions_params.model)->default_value("", "TG model"))
             ("tg-num-best-of", po::value<int>(&config.tg_completions_params.best_of)->default_value(1), "TG best of")
             ("tg-echo", po::bool_switch(&config.tg_completions_params.echo)->default_value(false), "TG echo")
