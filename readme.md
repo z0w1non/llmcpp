@@ -89,11 +89,11 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 | オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
-| --llm-system-prompts-file | システムプロンプト | system_prompts.txt |
+| --llm-prompt-file | プロンプトファイル | prompt.txt |
 | --llm-output-file | 出力ファイル | output.txt |
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
-システムプロンプトとは、例えば以下のようなプロンプトである。
+プロンプトとは、例えば以下のようなテキストである。
 
 ```
 <|turn>system
@@ -110,6 +110,9 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 <|turn>model
 ```
 
+既存のファイルの内容ではなく特定の文字列をプロンプトして使用する場合、 `--*-prompt-file` オプションではなく `--*-prompt` オプションを使用する。
+`--*-prompt` オプションが指定されている場合、`--*-prompt-file` で指定されたファイルの内容は無視される。
+
 | オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
 | --llm-host | ホスト | localhost |
@@ -117,7 +120,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 実行を開始すると、 llmcpp は下記のように LLM に渡すプロンプトを作成する。
 
-1. `system_prompts.txt` の内容をプロンプトに追加する。
+1. `prompt.txt` の内容をプロンプトに追加する。
 2. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
 
 プロンプトを作成した後、LLM と通信し、テキストを生成する。生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。

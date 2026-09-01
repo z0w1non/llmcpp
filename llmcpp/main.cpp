@@ -157,7 +157,8 @@ runtime_exception::runtime_exception()
 
 struct llm_prompt_parameters
 {
-    std::string system_prompts_file;
+    std::string prompt;
+    std::string prompt_file;
     std::string output_file;
     std::string generation_prefix;
     std::string generation_suffix;
@@ -492,6 +493,7 @@ struct cu_generation_parameters
     std::string prompt_target;
     std::string upload_image_target;
 
+    std::string prompt;
     std::string prompt_file;
     std::string output_directory;
     std::vector<std::string> upload_images;
@@ -596,12 +598,7 @@ struct config
     context context;
 };
 
-struct prompts
-{
-    std::vector<std::string> system_prompts;
-
-    std::string to_string(const config& config) const;
-};
+std::string truncate_prompt_by_config(std::string_view prompt, const config& config);
 
 template<typename Value>
 const Value& throwable_get(const picojson::value& value);
@@ -618,7 +615,7 @@ std::string trim(std::string_view str);
 
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
 
-void try_append(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
+void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
 
 template<typename Container>
 std::string concatenate(const Container& strings);
@@ -683,9 +680,9 @@ int get_tokens_from_cache(const config& config, std::string_view str);
 void write_cache(const config& config);
 void read_cache(const config& config);
 
-std::string generate_and_complete_text(
+std::string generate_text(
     const config& config,
-    std::string_view prompts,
+    std::string_view prompt,
     std::string_view prefix
 );
 
@@ -739,15 +736,13 @@ int parse_command_line(
     config& config
 );
 
-void read_prompts(const config& config, prompts& prompts);
-
 std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
-void write_response(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
+void write_text_to_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
 
 void llm_write_code_block(const config& config, std::string_view markdown);
 
-void llm_append_mode(const config& config, prompts& prompts);
+void llm_append_mode(const config& config, std::string_view prompt);
 
 std::string prompt_from_string_or_file_path(
     std::string_view string,
@@ -755,7 +750,7 @@ std::string prompt_from_string_or_file_path(
     const config& config
 );
 
-void generate_and_output(const config& config, prompts& prompts);
+void generate_and_output(const config& config);
 
 void set_seed(config& config);
 
@@ -1395,7 +1390,7 @@ void truncate_by_tokens(std::string_view string, int max_tokens, const config& c
     }
 }
 
-void try_append(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens)
+void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens)
 {
     std::string truncated;
     int tokens{};
@@ -2723,15 +2718,15 @@ void read_cache(const config& config)
     }
 }
 
-std::string generate_and_complete_text(
+std::string generate_text(
     const config& config,
-    std::string_view prompts,
+    std::string_view prompt,
     std::string_view prefix
 )
 {
-    std::string expanded_prompt{ expand_macro(prompts, config) };
+    std::string expanded_prompt{ expand_macro(prompt, config) };
     const std::string expanded_prefix{ expand_macro(prefix, config) };
-    const std::size_t initial_prompts_size{ expanded_prompt.size() };
+    const std::size_t initial_prompt_size{ expanded_prompt.size() };
     expanded_prompt += expanded_prefix;
 
     const int initial_tokens{ send_token_count_request(config, expanded_prompt) };
@@ -2777,7 +2772,7 @@ std::string generate_and_complete_text(
         current_tokens = send_token_count_request(config, current_prompt);
     }
 
-    return current_prompt.substr(initial_prompts_size);
+    return current_prompt.substr(initial_prompt_size);
 }
 
 std::string unescape_string(std::string_view str)
@@ -3297,7 +3292,8 @@ int parse_command_line(
             ("server-max-retries", po::value<int>(&config.server_max_retries)->default_value(60), "server max retries")
             ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
 
-            ("llm-system-prompts-file", po::value<std::string>(&config.llm_prompt_params.system_prompts_file)->default_value("system_prompts.txt"), "LLM system prompt file path")
+            ("llm-prompt", po::value<std::string>(&config.llm_prompt_params.prompt)->default_value(""), "LLM prompt")
+            ("llm-prompt-file", po::value<std::string>(&config.llm_prompt_params.prompt_file)->default_value("prompt.txt"), "LLM prompt file path")
             ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("output.txt"), "LLM output file path")
             ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
             ("llm-generation-suffix", po::value<std::string>(&config.llm_prompt_params.generation_suffix)->default_value(""), "LLM generation suffix")
@@ -3503,6 +3499,7 @@ int parse_command_line(
             ("cu-port", po::value<std::string>(&config.cu_generation_params.port)->default_value("8188"), "Comfy UI port")
             ("cu-prompt-target", po::value<std::string>(&config.cu_generation_params.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
             ("cu-upload-image-target", po::value<std::string>(&config.cu_generation_params.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
+            ("cu-prompt", po::value<std::string>(&config.cu_generation_params.prompt)->default_value(""), "Comfy UI prompt")
             ("cu-prompt-file", po::value<std::string>(&config.cu_generation_params.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
             ("cu-output-directory", po::value<std::string>(&config.cu_generation_params.output_directory)->default_value("output"), "Comfy UI output directory")
             ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu_generation_params.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
@@ -3588,25 +3585,12 @@ int parse_command_line(
     return 0;
 }
 
-std::string prompts::to_string(const config& config) const
+std::string truncate_prompt_by_config(std::string_view prompt, const config& config)
 {
     std::string result;
-
     int remaining_tokens{ config.tg_completions_params.truncation_length - config.tg_completions_params.max_tokens };
-
-    const std::string expanded_system_prompts{ expand_macro(concatenate(system_prompts), config) };
-    try_append(expanded_system_prompts, config, false, result, remaining_tokens);
-
+    truncate_prompt(prompt, config, false, result, remaining_tokens);
     return result;
-}
-
-void read_prompts(const config& config, prompts& prompts)
-{
-    if (config.mode == "tg" || config.mode == "kc")
-    {
-        const std::filesystem::path system_prompts_path{ string_to_path_by_config(config.llm_prompt_params.system_prompts_file, config) };
-        read_file_to_container(system_prompts_path, prompts.system_prompts);
-    }
 }
 
 std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix)
@@ -3642,7 +3626,7 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     return result;
 }
 
-void write_response(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
+void write_text_to_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
     const std::filesystem::path file_path{ string_to_path_by_config(filepath, config) };
     create_parent_directories(file_path);
@@ -3652,7 +3636,7 @@ void write_response(const config& config, std::string_view response, std::string
         throw file_open_exception{} << error_info::path{ file_path };
     }
     ofs << response;
-    BOOST_LOG_TRIVIAL(info) << "Write response to " << file_path;
+    BOOST_LOG_TRIVIAL(info) << "Write text to " << file_path;
 }
 
 void llm_write_code_block(const config& config, std::string_view markdown)
@@ -3668,21 +3652,21 @@ void llm_write_code_block(const config& config, std::string_view markdown)
             }
             else
             {
-                write_response(config, code, complement_extension(name, ".txt"), 0);
+                write_text_to_file(config, code, complement_extension(name, ".txt"), 0);
             }
         }
     }
 }
 
-void llm_append_mode(const config& config, prompts& prompts)
+void llm_append_mode(const config& config, std::string_view prompt)
 {
-    const std::string prompts_string{ expand_macro(prompts.to_string(config), config) };
+    const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
 
-    std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
+    std::string response{ generate_text(config, truncated_prompt, config.llm_prompt_params.generation_prefix) };
     response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
     response += config.llm_prompt_params.generation_suffix;
 
-    write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+    write_text_to_file(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
 
     if (!config.verbose)
     {
@@ -3698,36 +3682,33 @@ std::string prompt_from_string_or_file_path(
     const config& config
 )
 {
-    return expand_macro(string.empty() ? read_file_to_string(string_to_path_by_config(file_path, config)) : std::string{ string }, config);
+    return string.empty() ? read_file_to_string(string_to_path_by_config(file_path, config)) : std::string{ string };
 }
 
-void generate_and_output(const config& config, prompts& prompts)
+void generate_and_output(const config& config)
 {
     if (config.mode == "tg" || config.mode == "kc")
     {
-        llm_append_mode(config, prompts);
+        const std::string prompt{ prompt_from_string_or_file_path(config.llm_prompt_params.prompt, config.llm_prompt_params.prompt_file, config) };
+        llm_append_mode(config, prompt);
     }
     else if (config.mode == "sd")
     {
         const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
         create_parent_directories(output_file_path);
 
-        const std::string prompt_string{ prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config) };
-        const std::string negative_prompt_string{ prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config) };
-
+        const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config), config) };
+        const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config), config) };
         send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
     }
     else if (config.mode == "sb")
     {
-        const std::string text{ prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config) };
-
+        const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config), config) };
         send_style_bert_voice_request(config, text);
     }
     else if (config.mode == "cu")
     {
-        const std::filesystem::path prompt_file{ string_to_path_by_config(config.cu_generation_params.prompt_file, config) };
-        const std::string prompt{ expand_macro(read_file_to_string(prompt_file), config) };
-
+        const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu_generation_params.prompt, config.cu_generation_params.prompt_file, config), config) };
         send_comfy_ui_prompt(config, prompt);
     }
 }
@@ -3783,9 +3764,6 @@ void iterate(config& config)
     {
         const scoped_stack_guard ssg{ config.context.variables };
 
-        prompts prompts;
-        read_prompts(config, prompts);
-
         set_seed(config);
 
         set_dynamic_builtin_variables(config);
@@ -3794,7 +3772,7 @@ void iterate(config& config)
         for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
         {
             set_phase_variables(config.phases, phase_index, config.context);
-            generate_and_output(config, prompts);
+            generate_and_output(config);
         }
 
         write_cache(config);
