@@ -940,6 +940,7 @@ namespace builtin
     std::string include(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string head(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string head_tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string env(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string generated(const std::vector<std::string>& arguments, const config& config, context& ctx);
@@ -952,6 +953,7 @@ namespace builtin
         {"include", include},
         {"head", head},
         {"tail", tail},
+        {"head_tail", head_tail},
         {"json_literal", json_literal},
         {"env", env},
         {"generated", generated},
@@ -1144,8 +1146,7 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
         throw macro_exception{};
     }
 
-    std::string result;
-
+    const std::string_view filename{ arguments[0] };
     int max_tokens{};
     try
     {
@@ -1157,10 +1158,11 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
         throw macro_exception{};
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(filename, ".txt"), config) };
     const std::string file_content{ read_file_to_string(file_path) };
     const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
 
+    std::string result;
     int tokens{};
     truncate_by_tokens(expaned_file_content, max_tokens, config, reverse, result, tokens);
 
@@ -1175,6 +1177,48 @@ std::string builtin::head(const std::vector<std::string>& arguments, const confi
 std::string builtin::tail(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     return head_tail_impl(arguments, config, ctx, true);
+}
+
+std::string builtin::head_tail(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 3)
+    {
+        throw macro_exception{};
+    }
+
+    const std::string_view filename{ arguments[0] };
+    int head_max_tokens{};
+    int tail_max_tokens{};
+    try
+    {
+        head_max_tokens = boost::lexical_cast<unsigned int>(arguments[1]);
+        tail_max_tokens = boost::lexical_cast<unsigned int>(arguments[2]);
+    }
+    catch (const boost::bad_lexical_cast&)
+    {
+        throw macro_exception{};
+    }
+
+    const std::string_view ellipsis{ "..." };
+    const int ellipsis_tokens{ get_tokens_from_cache(config, ellipsis) };
+
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(filename, ".txt"), config) };
+    const std::string file_content{ read_file_to_string(file_path) };
+    const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
+    const int total_tokens{ get_tokens_from_cache(config, expaned_file_content) };
+
+    if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
+    {
+        return expaned_file_content;
+    }
+
+    std::string result;
+    int tokens{};
+    truncate_by_tokens(expaned_file_content, head_max_tokens, config, false, result, tokens);
+    result.append(ellipsis);
+    truncate_by_tokens(expaned_file_content, tail_max_tokens, config, true, result, tokens);
+
+    return result;
 }
 
 std::string builtin::json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx)
@@ -1248,9 +1292,9 @@ std::string builtin::random(const std::vector<std::string>& arguments, const con
 
 std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
-    if (arguments.size() < 1)
+    if (arguments.empty())
     {
-        throw macro_exception{};
+        return std::string{};
     }
 
     return arguments[::random<std::size_t>(0, arguments.size() - 1)];
@@ -1428,7 +1472,7 @@ void truncate_by_tokens(std::string_view string, int max_tokens, const config& c
 
     for (const std::string& line : temp)
     {
-        result += line;
+        result.append(line);
     }
 }
 
