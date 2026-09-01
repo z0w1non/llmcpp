@@ -120,9 +120,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 1. `system_prompts.txt` の内容をプロンプトに追加する。
 2. `--llm-generation-prefix` オプションで指定された文字列をプロンプトに追加する。(デフォルトは空文字)
 
-プロンプトを作成した後、LLM と通信し、テキストを生成する。
-生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。
-この挙動に不都合がある場合、 `--llm-skip-generation-prefix` として `true` を指定することにより、この挙動を変更することができる。
+プロンプトを作成した後、LLM と通信し、テキストを生成する。生成されたテキストの先頭には `--llm-generation-prefix` オプションで指定された文字列が含まれる。
 デフォルトでは、生成したテキストは `output.txt` の末尾に追加される。
 変更する場合は `--llm-output-file` で出力先を指定する。親フォルダが存在しない場合、自動的に作成される。
 

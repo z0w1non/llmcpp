@@ -161,8 +161,6 @@ struct llm_prompt_parameters
     std::string output_file;
     std::string generation_prefix;
     std::string generation_suffix;
-    bool skip_generation_prefix{};
-    std::string retry_generation_prefix;
     std::string paragraphs_file;
 
     std::string host;
@@ -2733,10 +2731,7 @@ std::string generate_and_complete_text(
 {
     std::string expanded_prompt{ expand_macro(prompts, config) };
     const std::string expanded_prefix{ expand_macro(prefix, config) };
-    const std::size_t initial_prompts_size{
-        config.llm_prompt_params.skip_generation_prefix
-        ? expanded_prompt.size() + expanded_prefix.size() : expanded_prompt.size()
-    };
+    const std::size_t initial_prompts_size{ expanded_prompt.size() };
     expanded_prompt += expanded_prefix;
 
     const int initial_tokens{ send_token_count_request(config, expanded_prompt) };
@@ -3306,8 +3301,6 @@ int parse_command_line(
             ("llm-output-file", po::value<std::string>(&config.llm_prompt_params.output_file)->default_value("output.txt"), "LLM output file path")
             ("llm-generation-prefix", po::value<std::string>(&config.llm_prompt_params.generation_prefix)->default_value(""), "LLM generation prefix")
             ("llm-generation-suffix", po::value<std::string>(&config.llm_prompt_params.generation_suffix)->default_value(""), "LLM generation suffix")
-            ("llm-skip-generation-prefix", po::bool_switch(&config.llm_prompt_params.skip_generation_prefix)->default_value(false), "LLM skip generation prefix")
-            ("llm-retry-generation-prefix", po::value<std::string>(&config.llm_prompt_params.retry_generation_prefix)->default_value(""), "LLM prefix to be used after a failed text generation")
             ("llm-paragraphs-file", po::value<std::string>(&config.llm_prompt_params.paragraphs_file)->default_value(""), "LLM paragraphs file")
             ("llm-host", po::value<std::string>(&config.llm_prompt_params.host)->default_value("localhost"), "LLM host")
             ("llm-port", po::value<std::string>(&config.llm_prompt_params.port)->default_value("5000"), "LLM port")
@@ -3579,7 +3572,6 @@ int parse_command_line(
         config.tg_completions_params.dry_sequence_breakers = unescape_string(config.tg_completions_params.dry_sequence_breakers);
         config.llm_prompt_params.generation_prefix = unescape_string(config.llm_prompt_params.generation_prefix);
         config.llm_prompt_params.generation_suffix = unescape_string(config.llm_prompt_params.generation_suffix);
-        config.llm_prompt_params.retry_generation_prefix = unescape_string(config.llm_prompt_params.retry_generation_prefix);
         config.llm_prompt_params.reasoning_prefix = unescape_string(config.llm_prompt_params.reasoning_prefix);
         config.llm_prompt_params.reasoning_suffix = unescape_string(config.llm_prompt_params.reasoning_suffix);
         config.sd_txt2img_params.prompt = unescape_string(config.sd_txt2img_params.prompt);
@@ -3686,39 +3678,18 @@ void llm_append_mode(const config& config, prompts& prompts)
 {
     const std::string prompts_string{ expand_macro(prompts.to_string(config), config) };
 
-    try
+    std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
+    response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
+    response += config.llm_prompt_params.generation_suffix;
+
+    write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+
+    if (!config.verbose)
     {
-        std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.generation_prefix) };
-        response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
-        response += config.llm_prompt_params.generation_suffix;
-
-        write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
-
-        if (!config.verbose)
-        {
-            boost::nowide::cout << response << std::flush;
-        }
-
-        llm_write_code_block(config, response);
-
+        boost::nowide::cout << response << std::flush;
     }
-    catch (const text_generation_exception& exception)
-    {
-        BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(exception);
-        if (!config.llm_prompt_params.retry_generation_prefix.empty())
-        {
-            BOOST_LOG_TRIVIAL(info) << "Start to retry text generation with retry-generation-prefix.";
-            std::string response{ generate_and_complete_text(config, prompts_string, config.llm_prompt_params.retry_generation_prefix) };
-            response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
-            response += config.llm_prompt_params.generation_suffix;
-            write_response(config, response, config.llm_prompt_params.output_file, std::ios_base::out | std::ios_base::app);
-            if (!config.verbose)
-            {
-                boost::nowide::cout << response << std::flush;
-            }
-            llm_write_code_block(config, response);
-        }
-    }
+
+    llm_write_code_block(config, response);
 }
 
 std::string prompt_from_string_or_file_path(
