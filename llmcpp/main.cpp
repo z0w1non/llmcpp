@@ -1557,7 +1557,7 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(host, port, error_code);
+    const tcp::resolver::results_type results{ resolver.resolve(host, port, error_code) };
     if_error_throw<dns_resolve_exception>(error_code);
 
     tcp_stream.expires_after(std::chrono::seconds{ expires_after });
@@ -1621,7 +1621,7 @@ void send_automatic1111_txt2img_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.sd_txt2img_params.host, config.sd_txt2img_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -1808,7 +1808,7 @@ void send_style_bert_voice_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.sb_generation_params.host, config.sb_generation_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -1946,7 +1946,7 @@ std::string upload_image_to_comfy_ui(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2034,7 +2034,7 @@ void send_comfy_ui_prompt(
         std::string type;
     };
 
-    const auto results = resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.cu_generation_params.host, config.cu_generation_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2291,7 +2291,7 @@ std::string send_completions_request(
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    auto const results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2523,7 +2523,7 @@ int send_token_count_request(const config& config, std::string_view prompt)
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
-    const auto results = resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port);
+    const tcp::resolver::results_type results{ resolver.resolve(config.llm_prompt_params.host, config.llm_prompt_params.port) };
     tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
@@ -2568,7 +2568,7 @@ int get_tokens_from_cache(const config& config, std::string_view str)
     constexpr std::size_t capacity{ 1000 };
     int tokens{};
 
-    auto iter = config.lru_cache.get<key_tag>().find(std::string{ str });
+    lru_cache::const_iterator iter{ config.lru_cache.get<key_tag>().find(std::string{ str }) };
     if (iter != config.lru_cache.get<key_tag>().end())
     {
         tokens = iter->tokens;
@@ -2637,7 +2637,7 @@ void read_cache(const config& config)
         lru_cache lru_cache;
         const picojson::object& object{ throwable_get<picojson::object>(json) };
         const picojson::array& caches{ throwable_find<picojson::array>(object, "cache") };
-        for (const auto& cache : caches)
+        for (const picojson::value& cache : caches)
         {
             const picojson::object& cache_object{ throwable_get<picojson::object>(cache) };
             const std::string str{ throwable_find<std::string>(cache_object, "string") };
@@ -3056,7 +3056,7 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
 
     boost::asio::io_context ctx;
     boost::asio::ip::tcp::resolver resolver{ ctx };
-    auto results = resolver.resolve(host, port, error_code);
+    const boost::asio::ip::tcp::resolver::results_type results{ resolver.resolve(host, port, error_code) };
     if (error_code || results.empty())
     {
         throw dns_resolve_exception{} << error_info::asio::error_code{ error_code };
