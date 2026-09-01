@@ -740,9 +740,9 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
 
 void write_text_to_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
 
-void llm_write_code_block(const config& config, std::string_view markdown);
+void write_code_block(const config& config, std::string_view markdown);
 
-void llm_append_mode(const config& config, std::string_view prompt);
+void generate_text_and_write(const config& config, std::string_view prompt);
 
 std::string prompt_from_string_or_file_path(
     std::string_view string,
@@ -3639,7 +3639,7 @@ void write_text_to_file(const config& config, std::string_view response, std::st
     BOOST_LOG_TRIVIAL(info) << "Write text to " << file_path;
 }
 
-void llm_write_code_block(const config& config, std::string_view markdown)
+void write_code_block(const config& config, std::string_view markdown)
 {
     if (config.llm_prompt_params.code_block_extract)
     {
@@ -3658,7 +3658,7 @@ void llm_write_code_block(const config& config, std::string_view markdown)
     }
 }
 
-void llm_append_mode(const config& config, std::string_view prompt)
+void generate_text_and_write(const config& config, std::string_view prompt)
 {
     const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
 
@@ -3673,7 +3673,7 @@ void llm_append_mode(const config& config, std::string_view prompt)
         boost::nowide::cout << response << std::flush;
     }
 
-    llm_write_code_block(config, response);
+    write_code_block(config, response);
 }
 
 std::string prompt_from_string_or_file_path(
@@ -3690,7 +3690,7 @@ void generate_and_output(const config& config)
     if (config.mode == "tg" || config.mode == "kc")
     {
         const std::string prompt{ prompt_from_string_or_file_path(config.llm_prompt_params.prompt, config.llm_prompt_params.prompt_file, config) };
-        llm_append_mode(config, prompt);
+        generate_text_and_write(config, prompt);
     }
     else if (config.mode == "sd")
     {
