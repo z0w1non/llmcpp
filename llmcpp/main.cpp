@@ -83,7 +83,6 @@
 #undef FAR
 #endif
 
-// is_cin_from_pipe
 #if defined(_WIN32) || defined(_WIN64)
 #include <io.h>
 #else
