@@ -516,11 +516,11 @@ private:
     stack_type stack;
 };
 
-class stack_map_guard
+class scoped_stack_guard
 {
 public:
-    stack_map_guard(stack_map& target);
-    ~stack_map_guard();
+    scoped_stack_guard(stack_map& target);
+    ~scoped_stack_guard();
 
 private:
     stack_map& target;
@@ -801,13 +801,13 @@ std::optional<std::string> stack_map::get(std::string_view key) const
     return std::nullopt;
 }
 
-stack_map_guard::stack_map_guard(stack_map& target)
+scoped_stack_guard::scoped_stack_guard(stack_map& target)
     : target{ target }
 {
     target.push();
 }
 
-stack_map_guard::~stack_map_guard()
+scoped_stack_guard::~scoped_stack_guard()
 {
     target.pop();
 }
@@ -3809,7 +3809,7 @@ void iterate(config& config)
     int iteration_count{};
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
-        stack_map_guard stack_map_guard{ config.context.variables };
+        scoped_stack_guard ssg{ config.context.variables };
 
         prompts prompts;
         read_prompts(config, prompts);
