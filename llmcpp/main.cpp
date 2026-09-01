@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <cstdint>
 #include <variant>
+#include <deque>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -499,11 +500,35 @@ struct cu_generation_parameters
     bool preserve_subdirectories{};
 };
 
-//using macros = std::map<std::string, std::string>;
+class stack_map
+{
+public:
+    using map_type = std::unordered_map<std::string, std::string>;
+    using stack_type = std::deque<map_type>;
+
+    stack_map();
+    void push();
+    void pop();
+    void set(std::string_view key, std::string_view value);
+    std::optional<std::string> get(std::string_view key) const;
+
+private:
+    stack_type stack;
+};
+
+class stack_map_guard
+{
+public:
+    stack_map_guard(stack_map& target);
+    ~stack_map_guard();
+
+private:
+    stack_map& target;
+};
 
 struct context
 {
-    std::unordered_map<std::string, std::string> variables;
+    stack_map variables;
 };
 
 struct token_count_string
@@ -679,7 +704,7 @@ void init_chat_mode(config& config);
 void set_phase_variables(
     const std::vector<std::string>& phases,
     std::size_t phase_index,
-    std::unordered_map<std::string, std::string>& variables
+    context& context
 );
 
 void set_static_builtin_variables(
@@ -740,6 +765,52 @@ void process_create_or_terminate(const config& config);
 void iterate(config& config);
 
 int exception_safe_main(int argc, char** argv);
+
+stack_map::stack_map()
+{
+    push();
+}
+
+void stack_map::push()
+{
+    stack.emplace_back();
+}
+
+void stack_map::pop()
+{
+    stack.pop_back();
+}
+
+void stack_map::set(std::string_view key, std::string_view value)
+{
+    stack.back()[std::string{ key }] = value;
+}
+
+std::optional<std::string> stack_map::get(std::string_view key) const
+{
+    const std::string key_string{ key };
+    for (stack_type::const_reverse_iterator stack_iterator{ stack.crbegin() }; stack_iterator != stack.crend(); ++stack_iterator)
+    {
+        const map_type& map{ *stack_iterator };
+        const stack_type::value_type::const_iterator map_iterator{ stack_iterator->find(key_string) };
+        if (map_iterator != stack_iterator->end())
+        {
+            return map_iterator->second;
+        }
+    }
+    return std::nullopt;
+}
+
+stack_map_guard::stack_map_guard(stack_map& target)
+    : target{ target }
+{
+    target.push();
+}
+
+stack_map_guard::~stack_map_guard()
+{
+    target.pop();
+}
 
 template<typename Value>
 const Value& throwable_get(const picojson::value& value)
@@ -935,9 +1006,9 @@ std::string parser::evaluate_argument(const argument& arg, const config& config)
             }
             else if constexpr (std::is_same_v<decayed_type, variable>)
             {
-                if (auto iter{ config.context.variables.find(value.name) }; iter != config.context.variables.end())
+                if (const std::optional<std::string> variable_value{ config.context.variables.get(value.name) }; variable_value)
                 {
-                    return iter->second;
+                    return *variable_value;
                 }
                 return "{{" + value.name + "}}";
             }
@@ -957,10 +1028,10 @@ std::string parser::evaluate_expression(const expression& expr, const config& co
 
             if constexpr (std::is_same_v<decayed_type, variable>)
             {
-                if (auto iter{ config.context.variables.find(value.name) }; iter != config.context.variables.end())
+                if (const std::optional<std::string> variable_value{ config.context.variables.get(value.name) }; variable_value)
                 {
-                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << iter->second << ")";
-                    return iter->second;
+                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << *variable_value << ")";
+                    return *variable_value;
                 }
 
                 BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ")";
@@ -2000,7 +2071,7 @@ void upload_images_to_comfy_ui(
             {
                 const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, config) };
                 const std::string server_path{ upload_image_to_comfy_ui(config, local_path) };
-                context.variables[variable_name] = server_path;
+                context.variables.set(variable_name, server_path);
                 BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
             }
         }
@@ -2809,7 +2880,7 @@ void parse_user_defined_variables(const std::vector<std::string>& user_defined_v
             const std::string value{ key_value_pair.substr(separator_position + 1) };
             if (!key.empty())
             {
-                context.variables[key] = value;
+                context.variables.set(key, value);
                 BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
             }
         }
@@ -2925,7 +2996,7 @@ void init_chat_mode(config& config)
 void set_phase_variables(
     const std::vector<std::string>& phases,
     std::size_t phase_index,
-    std::unordered_map<std::string, std::string>& variables
+    context& context
 )
 {
     if (phase_index >= phases.size())
@@ -2935,22 +3006,14 @@ void set_phase_variables(
 
     if (phase_index > 0)
     {
-        variables["prev_phase"] = phases[phase_index - 1];
-    }
-    else
-    {
-        variables.erase("prev_phase");
+        context.variables.set("prev_phase", phases[phase_index - 1]);
     }
 
-    variables["phase"] = phases[phase_index];
+    context.variables.set("phase", phases[phase_index]);
 
     if (phase_index < phases.size() - 1)
     {
-        variables["next_phase"] = phases[phase_index + 1];
-    }
-    else
-    {
-        variables.erase("next_phase");
+        context.variables.set("next_phase", phases[phase_index + 1]);
     }
 }
 
@@ -2958,16 +3021,16 @@ void set_static_builtin_variables(
     config& config
 )
 {
-    config.context.variables["stdin"] = builtin::stdin_(config);
+    config.context.variables.set("stdin", builtin::stdin_(config));
 }
 
 void set_dynamic_builtin_variables(
     config& config
 )
 {
-    config.context.variables["date"] = builtin::date();
-    config.context.variables["time"] = builtin::time();
-    config.context.variables["datetime"] = builtin::datetime();
+    config.context.variables.set("date", builtin::date());
+    config.context.variables.set("time", builtin::time());
+    config.context.variables.set("datetime", builtin::datetime());
 }
 
 void set_paragraphs_to_phases(
@@ -3746,17 +3809,19 @@ void iterate(config& config)
     int iteration_count{};
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
+        stack_map_guard stack_map_guard{ config.context.variables };
+
         prompts prompts;
         read_prompts(config, prompts);
 
         set_seed(config);
 
         set_dynamic_builtin_variables(config);
-        config.context.variables["N"] = std::to_string(iteration_count + 1);
+        config.context.variables.set("N", std::to_string(iteration_count + 1));
 
         for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
         {
-            set_phase_variables(config.phases, phase_index, config.context.variables);
+            set_phase_variables(config.phases, phase_index, config.context);
             generate_and_output(config, prompts);
         }
 
