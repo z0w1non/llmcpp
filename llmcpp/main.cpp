@@ -3102,7 +3102,7 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
     std::size_t terminated_count{};
 
 #if defined(_WIN32)
-    HANDLE snapshot{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    const HANDLE snapshot{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if (snapshot == INVALID_HANDLE_VALUE)
     {
         return 0;
