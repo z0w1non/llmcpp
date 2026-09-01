@@ -18,7 +18,6 @@
 #include <type_traits>
 #include <cstdint>
 #include <variant>
-#include <deque>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -60,6 +59,7 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/nocopyable.hpp>
 
 #include "picojson.h"
 
@@ -517,6 +517,7 @@ private:
 };
 
 class scoped_stack_guard
+    : private boost::noncopyable
 {
 public:
     scoped_stack_guard(stack_map& target);
@@ -3809,7 +3810,7 @@ void iterate(config& config)
     int iteration_count{};
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
-        scoped_stack_guard ssg{ config.context.variables };
+        const scoped_stack_guard ssg{ config.context.variables };
 
         prompts prompts;
         read_prompts(config, prompts);
