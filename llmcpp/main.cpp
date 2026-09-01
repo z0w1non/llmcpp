@@ -682,11 +682,11 @@ void set_phase_variables(
     std::unordered_map<std::string, std::string>& variables
 );
 
-void set_builtin_variables(
+void set_static_builtin_variables(
     config& config
 );
 
-void set_builtin_variables_each_iteration(
+void set_dynamic_builtin_variables(
     config& config
 );
 
@@ -2958,14 +2958,14 @@ void set_phase_variables(
     }
 }
 
-void set_builtin_variables(
+void set_static_builtin_variables(
     config& config
 )
 {
     config.context.variables["stdin"] = builtin::stdin_(config);
 }
 
-void set_builtin_variables_each_iteration(
+void set_dynamic_builtin_variables(
     config& config
 )
 {
@@ -3755,7 +3755,7 @@ void iterate(config& config)
 
         set_seed(config);
 
-        set_builtin_variables_each_iteration(config);
+        set_dynamic_builtin_variables(config);
         config.context.variables["N"] = std::to_string(iteration_count + 1);
 
         for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
@@ -3787,7 +3787,7 @@ int exception_safe_main(int argc, char** argv)
         }
         else
         {
-            set_builtin_variables(config);
+            set_static_builtin_variables(config);
 
             if (config.mode == "cu")
             {
