@@ -902,7 +902,7 @@ namespace builtin
     std::string tail_json_literal(const std::vector<std::string>& arguments, const config& config);
     std::string env(const std::vector<std::string>& arguments, const config& config);
 
-    const static std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&)>> macros
+    static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&)>> macros
     {
         {"include", include},
         {"tail", tail},
@@ -1410,8 +1410,8 @@ template<typename Integer>
 Integer random(Integer min, Integer max)
 {
     static std::random_device seed_gen;
-    static std::default_random_engine random_engine(seed_gen());
-    static std::uniform_int_distribution<Integer> distribution(min, max);
+    static std::default_random_engine random_engine{ seed_gen() };
+    static std::uniform_int_distribution<Integer> distribution{ min, max };
     return distribution(random_engine);
 }
 
