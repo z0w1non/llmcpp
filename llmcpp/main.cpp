@@ -155,6 +155,19 @@ runtime_exception::runtime_exception()
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
 
+struct config;
+
+struct text_generation_parameters
+{
+    virtual ~text_generation_parameters() {}
+    virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
+    virtual std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+    virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
+    virtual int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+    virtual int get_max_tokens() const = 0;
+    virtual int get_truncation_length() const = 0;
+};
+
 struct llm_prompt_parameters
 {
     std::string prompt;
@@ -179,19 +192,6 @@ struct llm_prompt_parameters
     bool code_block_extract{};
 
     text_generation_parameters* backend{};
-};
-
-struct config;
-
-struct text_generation_parameters
-{
-    virtual ~text_generation_parameters() {}
-    virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
-    virtual std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
-    virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
-    virtual int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
-    virtual int get_max_tokens() const = 0;
-    virtual int get_truncation_length() const = 0;
 };
 
 struct tg_completions_parameters
@@ -3559,17 +3559,21 @@ int parse_command_line(
             config.phases = { "" };
         }
 
-        std::transform(config.tg.stop.begin(), config.tg.stop.end(), config.tg.stop.begin(), unescape_string);
         std::transform(config.user_defined_variables.begin(), config.user_defined_variables.end(), config.user_defined_variables.begin(), unescape_string);
+        std::transform(config.phases.begin(), config.phases.end(), config.phases.begin(), unescape_string);
+        std::transform(config.tg.stop.begin(), config.tg.stop.end(), config.tg.stop.begin(), unescape_string);
         std::transform(config.kc.stop_sequence.begin(), config.kc.stop_sequence.end(), config.kc.stop_sequence.begin(), unescape_string);
-        config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
+        config.llm.prompt = unescape_string(config.llm.prompt);
         config.llm.generation_prefix = unescape_string(config.llm.generation_prefix);
         config.llm.generation_suffix = unescape_string(config.llm.generation_suffix);
         config.llm.reasoning_prefix = unescape_string(config.llm.reasoning_prefix);
         config.llm.reasoning_suffix = unescape_string(config.llm.reasoning_suffix);
+        config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
+        std::transform(config.kc.dry_sequence_breakers.begin(), config.kc.dry_sequence_breakers.end(), config.kc.dry_sequence_breakers.begin(), unescape_string);
         config.sd.prompt = unescape_string(config.sd.prompt);
         config.sd.negative_prompt = unescape_string(config.sd.negative_prompt);
         config.sb.text = unescape_string(config.sb.text);
+        config.cu.prompt = unescape_string(config.cu.prompt);
 
         parse_user_defined_variables(config.user_defined_variables, config.context);
     }
