@@ -3630,14 +3630,9 @@ void write_file(const config& config, std::string_view response, std::string_vie
         throw file_open_exception{} << error_info::path{ file_path };
     }
     ofs << response;
-    if ((mode & std::ios_base::binary) == 0)
-    {
-        BOOST_LOG_TRIVIAL(info) << "Write text to " << file_path;
-    }
-    else
-    {
-        BOOST_LOG_TRIVIAL(info) << "Write binary to " << file_path;
-    }
+
+    const std::string_view file_type{ (mode & std::ios_base::binary) ? "binary" : "text" };
+    BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
 }
 
 void write_code_block(const config& config, std::string_view markdown)
