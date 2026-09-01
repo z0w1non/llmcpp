@@ -224,6 +224,9 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ### `{{let("name", "value")}}`
 マクロ変数を定義する。定義されたマクロは同ファイル、および同ファイルから `generated` マクロで呼び出されたサブプロンプト内でのみ有効である。
 
+### `{{random(min, max)}}`
+ランダムな整数値の10進数表記に展開される。引数は後ろ側から省略可能。`min` のデフォルト値は `0`、`max` のデフォルト値は `2147483647` である。`{{random()}}` で 32bit 整数値の表現範囲のうち正の値のみに展開される。例として seed 値を実行単位で変更したい場合に使用する。
+
 ### `{{phase}}`
 1回の処理は1個以上の phase から構成され、それらは順番に実行される。
 phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意の数だけ指定可能である。 

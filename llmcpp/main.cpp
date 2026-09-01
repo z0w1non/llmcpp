@@ -825,6 +825,15 @@ std::string trim(std::string_view str)
     return trimmed_string;
 }
 
+template<typename Integer>
+Integer random(Integer min, Integer max)
+{
+    static std::random_device seed_gen;
+    static std::default_random_engine random_engine{ seed_gen() };
+    static std::uniform_int_distribution<Integer> distribution{ min, max };
+    return distribution(random_engine);
+}
+
 namespace parser
 {
     struct macro_call;
@@ -934,6 +943,7 @@ namespace builtin
     std::string env(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string generated(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string let(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string random(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
@@ -942,7 +952,8 @@ namespace builtin
         {"json_literal", json_literal},
         {"env", env},
         {"generated", generated},
-        {"let", let}
+        {"let", let},
+        {"random", random}
     };
 
     std::string date();
@@ -1219,6 +1230,13 @@ std::string builtin::let(const std::vector<std::string>& arguments, const config
     return std::string{};
 }
 
+std::string builtin::random(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    const std::int64_t min{ arguments.size() >= 1 ? boost::lexical_cast<std::int64_t>(arguments[0]) : 0 };
+    const std::int64_t max{ arguments.size() >= 2 ? boost::lexical_cast<std::int64_t>(arguments[1]) : static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()) };
+    return std::to_string(::random<std::int64_t>(min, max));
+}
+
 std::string builtin::date()
 {
     const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
@@ -1429,15 +1447,6 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
     result = file_content;
     return result;
-}
-
-template<typename Integer>
-Integer random(Integer min, Integer max)
-{
-    static std::random_device seed_gen;
-    static std::default_random_engine random_engine{ seed_gen() };
-    static std::uniform_int_distribution<Integer> distribution{ min, max };
-    return distribution(random_engine);
 }
 
 std::string complement_extension(std::string_view filepath, std::string_view extension)
