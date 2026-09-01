@@ -60,6 +60,7 @@
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/range/algorithm.hpp>
 
 #include "picojson.h"
 
@@ -668,6 +669,8 @@ std::string generate_text(
 std::string unescape_string(std::string_view str);
 
 std::string json_escape_string(std::string_view str);
+
+void unescape_parameters(config& config);
 
 void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& context);
 
@@ -2856,6 +2859,26 @@ std::string json_escape_string(std::string_view str)
     return result;
 }
 
+void unescape_parameters(config& config)
+{
+    boost::transform(config.user_defined_variables, config.user_defined_variables.begin(), unescape_string);
+    boost::transform(config.phases, config.phases.begin(), unescape_string);
+    config.llm.prompt = unescape_string(config.llm.prompt);
+    config.llm.generation_prefix = unescape_string(config.llm.generation_prefix);
+    config.llm.generation_suffix = unescape_string(config.llm.generation_suffix);
+    config.llm.reasoning_prefix = unescape_string(config.llm.reasoning_prefix);
+    config.llm.reasoning_suffix = unescape_string(config.llm.reasoning_suffix);
+    boost::transform(config.tg.stop, config.tg.stop.begin(), unescape_string);
+    config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
+    boost::transform(config.kc.stop_sequence, config.kc.stop_sequence.begin(), unescape_string);
+    boost::transform(config.kc.banned_tokens, config.kc.banned_tokens.begin(), unescape_string);
+    boost::transform(config.kc.dry_sequence_breakers, config.kc.dry_sequence_breakers.begin(), unescape_string);
+    config.sd.prompt = unescape_string(config.sd.prompt);
+    config.sd.negative_prompt = unescape_string(config.sd.negative_prompt);
+    config.sb.text = unescape_string(config.sb.text);
+    config.cu.prompt = unescape_string(config.cu.prompt);
+}
+
 void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& context)
 {
     for (const std::string& key_value_pair : user_defined_variables)
@@ -3559,22 +3582,7 @@ int parse_command_line(
             config.phases = { "" };
         }
 
-        std::transform(config.user_defined_variables.begin(), config.user_defined_variables.end(), config.user_defined_variables.begin(), unescape_string);
-        std::transform(config.phases.begin(), config.phases.end(), config.phases.begin(), unescape_string);
-        std::transform(config.tg.stop.begin(), config.tg.stop.end(), config.tg.stop.begin(), unescape_string);
-        std::transform(config.kc.stop_sequence.begin(), config.kc.stop_sequence.end(), config.kc.stop_sequence.begin(), unescape_string);
-        config.llm.prompt = unescape_string(config.llm.prompt);
-        config.llm.generation_prefix = unescape_string(config.llm.generation_prefix);
-        config.llm.generation_suffix = unescape_string(config.llm.generation_suffix);
-        config.llm.reasoning_prefix = unescape_string(config.llm.reasoning_prefix);
-        config.llm.reasoning_suffix = unescape_string(config.llm.reasoning_suffix);
-        config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
-        std::transform(config.kc.dry_sequence_breakers.begin(), config.kc.dry_sequence_breakers.end(), config.kc.dry_sequence_breakers.begin(), unescape_string);
-        config.sd.prompt = unescape_string(config.sd.prompt);
-        config.sd.negative_prompt = unescape_string(config.sd.negative_prompt);
-        config.sb.text = unescape_string(config.sb.text);
-        config.cu.prompt = unescape_string(config.cu.prompt);
-
+        unescape_parameters(config);
         parse_user_defined_variables(config.user_defined_variables, config.context);
     }
     catch (const po::error& e)
