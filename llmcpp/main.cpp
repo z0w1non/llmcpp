@@ -819,7 +819,7 @@ const Value& throwable_find(const picojson::object& object, std::string_view key
 std::string base64_encode(std::string_view input)
 {
     using namespace boost::archive::iterators;
-    using iterator = transform_width<base64_from_binary<std::string_view::const_iterator>, 6, 8>;
+    using iterator = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
 
     const std::size_t missing_size{ (3 - input.size() % 3) % 3 };
     std::string padded_input{ input };
@@ -838,7 +838,7 @@ std::string base64_decode(std::string_view input)
     using namespace boost::archive::iterators;
     using iterator = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
 
-    const std::size_t padding_count{};
+    std::size_t padding_count{};
     while (padding_count < input.size() && input[input.size() - 1 - padding_count] == '=')
     {
         ++padding_count;
