@@ -938,22 +938,26 @@ BOOST_FUSION_ADAPT_STRUCT(
 namespace builtin
 {
     std::string include(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string head(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string env(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string generated(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string let(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string random(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
         {"include", include},
+        {"head", head},
         {"tail", tail},
         {"json_literal", json_literal},
         {"env", env},
         {"generated", generated},
         {"let", let},
-        {"random", random}
+        {"random", random},
+        {"choice", choice}
     };
 
     std::string date();
@@ -1133,7 +1137,7 @@ std::string builtin::include(const std::vector<std::string>& arguments, const co
     return read_file_to_string(file_path);
 }
 
-std::string builtin::tail(const std::vector<std::string>& arguments, const config& config, context& ctx)
+std::string head_tail_impl(const std::vector<std::string>& arguments, const config& config, context& ctx, bool reverse)
 {
     if (arguments.size() < 2)
     {
@@ -1154,18 +1158,23 @@ std::string builtin::tail(const std::vector<std::string>& arguments, const confi
     }
 
     const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
-    if (!std::filesystem::exists(file_path))
-    {
-        return result;
-    }
-
     const std::string file_content{ read_file_to_string(file_path) };
     const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
 
     int tokens{};
-    truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
+    truncate_by_tokens(expaned_file_content, max_tokens, config, reverse, result, tokens);
 
     return result;
+}
+
+std::string builtin::head(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    return head_tail_impl(arguments, config, ctx, false);
+}
+
+std::string builtin::tail(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    return head_tail_impl(arguments, config, ctx, true);
 }
 
 std::string builtin::json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx)
@@ -1235,6 +1244,16 @@ std::string builtin::random(const std::vector<std::string>& arguments, const con
     const std::int64_t min{ arguments.size() >= 1 ? boost::lexical_cast<std::int64_t>(arguments[0]) : 0 };
     const std::int64_t max{ arguments.size() >= 2 ? boost::lexical_cast<std::int64_t>(arguments[1]) : static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()) };
     return std::to_string(::random<std::int64_t>(min, max));
+}
+
+std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    return arguments[::random<std::size_t>(0, arguments.size() - 1)];
 }
 
 std::string builtin::date()
