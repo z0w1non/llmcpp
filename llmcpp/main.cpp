@@ -50,6 +50,7 @@
 #include <boost/algorithm/string.hpp> 
 #include <boost/date_time.hpp>
 #include <boost/date_time/time_facet.hpp>
+#include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/url.hpp>
@@ -597,6 +598,8 @@ const Value& throwable_at(const picojson::array& array, std::size_t index);
 template<typename Value>
 const Value& throwable_find(const picojson::object& object, std::string_view key);
 
+std::string base64_encode(std::string_view encoded_string);
+
 std::string base64_decode(std::string_view encoded_string);
 
 std::string trim(std::string_view str);
@@ -813,10 +816,44 @@ const Value& throwable_find(const picojson::object& object, std::string_view key
     return iter->second.get<Value>();
 }
 
-std::string base64_decode(std::string_view encoded_string)
+std::string base64_encode(std::string_view input)
 {
-    using iterator = boost::archive::iterators::transform_width<boost::archive::iterators::binary_from_base64<std::string_view::const_iterator>, 8, 6>;
-    return std::string{ iterator{ encoded_string.begin() }, iterator{ encoded_string.end() } };
+    using namespace boost::archive::iterators;
+    using iterator = transform_width<base64_from_binary<std::string_view::const_iterator>, 6, 8>;
+
+    const std::size_t missing_size{ (3 - input.size() % 3) % 3 };
+    std::string padded_input{ input };
+    padded_input.append(missing_size, '\0');
+
+    std::string encoded{ iterator{ padded_input.begin() }, iterator{ padded_input.end() } };
+    if (missing_size > 0)
+    {
+        encoded.replace(encoded.size() - missing_size, missing_size, missing_size, '=');
+    }
+    return encoded;
+}
+
+std::string base64_decode(std::string_view input)
+{
+    using namespace boost::archive::iterators;
+    using iterator = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+
+    std::size_t padding_count{};
+    while (padding_count < input.size() && input[input.size() - 1 - padding_count] == '=')
+    {
+        ++padding_count;
+    }
+
+    std::string_view trimed_input{ input.substr(0, input.size() - padding_count)};
+    std::string decoded{ iterator{ input.begin() }, iterator{ input.end() } };
+
+    std::size_t expected_size{ input.size() / 4 * 3 - padding_count};
+    if (decoded.size() > expected_size)
+    {
+        decoded.resize(expected_size);
+    }
+
+    return decoded;
 }
 
 std::string trim(std::string_view str)
