@@ -617,16 +617,7 @@ void truncate_by_tokens(std::string_view string, int max_tokens, const config& c
 
 void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
 
-template<typename Container>
-std::string concatenate(const Container& strings);
-
-template <typename Container>
-void split_string_by_new_line(std::string_view str, Container& container);
-
 void create_parent_directories(const std::filesystem::path& path);
-
-template <typename Container>
-void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode = {});
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
@@ -1399,35 +1390,6 @@ void truncate_prompt(std::string_view string, const config& config, bool reverse
     remaining_tokens -= tokens;
 }
 
-template<typename Container>
-std::string concatenate(const Container& strings)
-{
-    std::string result;
-    for (const std::string& s : strings)
-    {
-        result += s;
-    }
-    return result;
-}
-
-template <typename Container>
-void split_string_by_new_line(std::string_view str, Container& container)
-{
-    size_t start_position{};
-    size_t end_position{};
-
-    while ((end_position = str.find('\n', start_position)) != std::string::npos)
-    {
-        container.push_back(typename Container::value_type{ str.substr(start_position, end_position - start_position + 1) });
-        start_position = end_position + 1;
-    }
-
-    if (start_position < str.length())
-    {
-        container.push_back(typename Container::value_type{ str.substr(start_position) });
-    }
-}
-
 void create_parent_directories(const std::filesystem::path& path)
 {
     if (path.empty() || !path.has_parent_path())
@@ -1436,22 +1398,6 @@ void create_parent_directories(const std::filesystem::path& path)
     }
 
     std::filesystem::create_directories(path.parent_path());
-}
-
-template <typename Container>
-void read_file_to_container(const std::filesystem::path& file, Container& container, std::ios::openmode openmode)
-{
-    container.clear();
-    if (std::filesystem::exists(file) && std::filesystem::is_regular_file(file))
-    {
-        boost::nowide::ifstream ifs{ file, openmode };
-        if (!ifs.is_open())
-        {
-            throw file_open_exception{} << error_info::path{ file };
-        }
-        const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
-        split_string_by_new_line(file_content, container);
-    }
 }
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode)
