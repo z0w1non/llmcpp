@@ -500,36 +500,21 @@ struct cu_generation_parameters
     bool preserve_subdirectories{};
 };
 
-class stack_map
+class context
+    : private boost::noncopyable
 {
 public:
-    using map_type = std::unordered_map<std::string, std::string>;
-    using stack_type = std::deque<map_type>;
+    using variable_map_type = std::unordered_map<std::string, std::string>;
 
-    stack_map();
-    void push();
-    void pop();
+    context();
+    context make_pushed() const;
     void set(std::string_view key, std::string_view value);
     std::optional<std::string> get(std::string_view key) const;
 
 private:
-    stack_type stack;
-};
-
-class scoped_stack_guard
-    : private boost::noncopyable
-{
-public:
-    scoped_stack_guard(stack_map& target);
-    ~scoped_stack_guard();
-
-private:
-    stack_map& target;
-};
-
-struct context
-{
-    stack_map variables;
+    context(const context& ctx);
+    variable_map_type variable_map;
+    const context* base{};
 };
 
 struct token_count_string
@@ -637,14 +622,14 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
 
 std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
-void send_automatic1111_txt2img_request(
+std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
     std::string_view negative_prompt,
     const std::filesystem::path& path
 );
 
-void send_style_bert_voice_request(
+std::string send_style_bert_voice_request(
     const config& config,
     std::string_view text
 );
@@ -674,7 +659,8 @@ void read_cache(const config& config);
 std::string generate_text(
     const config& config,
     std::string_view prompt,
-    std::string_view prefix
+    std::string_view prefix,
+    const context& ctx
 );
 
 std::string unescape_string(std::string_view str);
@@ -691,7 +677,7 @@ void init_chat_mode(config& config);
 void set_phase_variables(
     const std::vector<std::string>& phases,
     std::size_t phase_index,
-    context& context
+    const context& context
 );
 
 void set_static_builtin_variables(
@@ -729,11 +715,11 @@ int parse_command_line(
 
 std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
-void write_text_to_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
+void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
 
 void write_code_block(const config& config, std::string_view markdown);
 
-void generate_text_and_write(const config& config, std::string_view prompt);
+void generate_text_and_write(const config& config, std::string_view prompt, const context& ctx);
 
 std::string prompt_from_string_or_file_path(
     std::string_view string,
@@ -751,50 +737,40 @@ void iterate(config& config);
 
 int exception_safe_main(int argc, char** argv);
 
-stack_map::stack_map()
+context::context()
 {
-    push();
 }
 
-void stack_map::push()
+context::context(const context& ctx)
+    : base{ &ctx }
 {
-    stack.emplace_back();
 }
 
-void stack_map::pop()
+context context::make_pushed() const
 {
-    stack.pop_back();
+    return context{ *this };
 }
 
-void stack_map::set(std::string_view key, std::string_view value)
+void context::set(std::string_view key, std::string_view value)
 {
-    stack.back()[std::string{ key }] = value;
+    variable_map[std::string{ key }] = value;
 }
 
-std::optional<std::string> stack_map::get(std::string_view key) const
+std::optional<std::string> context::get(std::string_view key) const
 {
     const std::string key_string{ key };
-    for (stack_type::const_reverse_iterator stack_iterator{ stack.crbegin() }; stack_iterator != stack.crend(); ++stack_iterator)
+    const context* current{ this };
+
+    while (current != nullptr)
     {
-        const map_type& map{ *stack_iterator };
-        const stack_type::value_type::const_iterator map_iterator{ stack_iterator->find(key_string) };
-        if (map_iterator != stack_iterator->end())
+        const context::variable_map_type::const_iterator map_iterator{ current->variable_map.find(key_string) };
+        if (map_iterator != current->variable_map.end())
         {
             return map_iterator->second;
         }
+        current = current->base;
     }
     return std::nullopt;
-}
-
-scoped_stack_guard::scoped_stack_guard(stack_map& target)
-    : target{ target }
-{
-    target.push();
-}
-
-scoped_stack_guard::~scoped_stack_guard()
-{
-    target.pop();
 }
 
 template<typename Value>
@@ -931,12 +907,12 @@ namespace parser
 
     using grammar = document_grammar<std::string_view::const_iterator>;
 
-    std::string evaluate_expression(const expression& expr, const config& config);
-    std::string evaluate_argument(const argument& arg, const config& config);
-    std::string evaluate_expression(const expression& expr, const config& config);
-    std::string evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar);
-    std::string evaluate_document(std::string_view document, const config& config, grammar& grammar);
-    std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth);
+    std::string evaluate_expression(const expression& expr, const config& config, context& ctx);
+    std::string evaluate_argument(const argument& arg, const config& config, context& ctx);
+    std::string evaluate_expression(const expression& expr, const config& config, context& ctx);
+    std::string evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar, context& ctx);
+    std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx);
+    std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx);
 }
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -952,19 +928,21 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 namespace builtin
 {
-    std::string include(const std::vector<std::string>& arguments, const config& config);
-    std::string tail(const std::vector<std::string>& arguments, const config& config);
-    std::string include_json_literal(const std::vector<std::string>& arguments, const config& config);
-    std::string tail_json_literal(const std::vector<std::string>& arguments, const config& config);
-    std::string env(const std::vector<std::string>& arguments, const config& config);
+    std::string include(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string env(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string generated(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string let(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
-    static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&)>> macros
+    static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
         {"include", include},
         {"tail", tail},
-        {"include_json_literal", include_json_literal},
-        {"tail_json_literal", tail_json_literal},
+        {"json_literal", json_literal},
         {"env", env},
+        {"generated", generated},
+        {"let", let}
     };
 
     std::string date();
@@ -973,9 +951,9 @@ namespace builtin
     std::string stdin_(const config& config);
 }
 
-std::string expand_macro(std::string_view input, const config& config);
+std::string expand_macro(std::string_view input, const config& config, const context& ctx);
 
-std::string parser::evaluate_argument(const argument& arg, const config& config)
+std::string parser::evaluate_argument(const argument& arg, const config& config, context& ctx)
 {
     auto visitor = [&](auto&& value) -> std::string
         {
@@ -991,7 +969,7 @@ std::string parser::evaluate_argument(const argument& arg, const config& config)
             }
             else if constexpr (std::is_same_v<decayed_type, variable>)
             {
-                if (const std::optional<std::string> variable_value{ config.context.variables.get(value.name) }; variable_value)
+                if (const std::optional<std::string> variable_value{ config.context.get(value.name) }; variable_value)
                 {
                     return *variable_value;
                 }
@@ -999,13 +977,13 @@ std::string parser::evaluate_argument(const argument& arg, const config& config)
             }
             else if constexpr (std::is_same_v<decayed_type, boost::recursive_wrapper<macro_call>>)
             {
-                return evaluate_expression(value.get(), config);
+                return evaluate_expression(value.get(), config, ctx);
             }
         };
     return std::visit(visitor, arg);
 }
 
-std::string parser::evaluate_expression(const expression& expr, const config& config)
+std::string parser::evaluate_expression(const expression& expr, const config& config, context& ctx)
 {
     auto visitor = [&](auto&& value) -> std::string
         {
@@ -1013,7 +991,7 @@ std::string parser::evaluate_expression(const expression& expr, const config& co
 
             if constexpr (std::is_same_v<decayed_type, variable>)
             {
-                if (const std::optional<std::string> variable_value{ config.context.variables.get(value.name) }; variable_value)
+                if (const std::optional<std::string> variable_value{ ctx.get(value.name) }; variable_value)
                 {
                     BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << *variable_value << ")";
                     return *variable_value;
@@ -1028,14 +1006,14 @@ std::string parser::evaluate_expression(const expression& expr, const config& co
                 std::vector<std::string> evaluated_args;
                 for (const argument& arg : value.arguments)
                 {
-                    evaluated_args.push_back(evaluate_argument(arg, config));
+                    evaluated_args.push_back(evaluate_argument(arg, config, ctx));
                 }
 
                 if (auto iter{ builtin::macros.find(value.name) }; iter != builtin::macros.end())
                 {
                     try
                     {
-                        const std::string evaluated{ iter->second(evaluated_args, config) };
+                        const std::string evaluated{ iter->second(evaluated_args, config, ctx) };
                         BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << evaluated << ")";
                         return evaluated;
                     }
@@ -1054,7 +1032,7 @@ std::string parser::evaluate_expression(const expression& expr, const config& co
     return std::visit(visitor, expr);
 }
 
-std::string parser::evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar)
+std::string parser::evaluate_node(const std::vector<node>& ast, const config& config, const grammar& grammar, context& ctx)
 {
     std::string result;
 
@@ -1068,7 +1046,7 @@ std::string parser::evaluate_node(const std::vector<node>& ast, const config& co
             }
             else if constexpr (std::is_same_v<decayed_type, expression>)
             {
-                result += evaluate_expression(value, config);
+                result += evaluate_expression(value, config, ctx);
             }
         };
 
@@ -1080,7 +1058,7 @@ std::string parser::evaluate_node(const std::vector<node>& ast, const config& co
     return result;
 }
 
-std::string parser::evaluate_document(std::string_view document, const config& config, grammar& grammar)
+std::string parser::evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx)
 {
     namespace qi = boost::spirit::qi;
 
@@ -1091,7 +1069,7 @@ std::string parser::evaluate_document(std::string_view document, const config& c
 
     if (qi::parse(iter, end, grammar, ast) && iter == end)
     {
-        return evaluate_node(ast, config, grammar);
+        return evaluate_node(ast, config, grammar, ctx);
     }
     else
     {
@@ -1101,7 +1079,7 @@ std::string parser::evaluate_document(std::string_view document, const config& c
     }
 }
 
-std::string parser::evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth)
+std::string parser::evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx)
 {
     grammar grammar;
 
@@ -1114,7 +1092,7 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
             return input;
         }
 
-        std::string evaluated{ evaluate_document(input, config, grammar) };
+        std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
 
         if (evaluated == input)
         {
@@ -1133,7 +1111,7 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
     return input;
 }
 
-std::string builtin::include(const std::vector<std::string>& arguments, const config& config)
+std::string builtin::include(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     if (arguments.size() < 1)
     {
@@ -1144,7 +1122,7 @@ std::string builtin::include(const std::vector<std::string>& arguments, const co
     return read_file_to_string(file_path);
 }
 
-std::string builtin::tail(const std::vector<std::string>& arguments, const config& config)
+std::string builtin::tail(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     if (arguments.size() < 2)
     {
@@ -1171,7 +1149,7 @@ std::string builtin::tail(const std::vector<std::string>& arguments, const confi
     }
 
     const std::string file_content{ read_file_to_string(file_path) };
-    const std::string expaned_file_content{ expand_macro(file_content, config) };
+    const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
 
     int tokens{};
     truncate_by_tokens(expaned_file_content, max_tokens, config, true, result, tokens);
@@ -1179,17 +1157,17 @@ std::string builtin::tail(const std::vector<std::string>& arguments, const confi
     return result;
 }
 
-std::string builtin::include_json_literal(const std::vector<std::string>& arguments, const config& config)
+std::string builtin::json_literal(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
-    return json_escape_string(include(arguments, config));
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    return json_escape_string(arguments[0]);
 }
 
-std::string builtin::tail_json_literal(const std::vector<std::string>& arguments, const config& config)
-{
-    return json_escape_string(tail(arguments, config));
-}
-
-std::string builtin::env(const std::vector<std::string>& arguments, const config& config)
+std::string builtin::env(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     if (arguments.size() < 1)
     {
@@ -1204,6 +1182,41 @@ std::string builtin::env(const std::vector<std::string>& arguments, const config
     }
 
     return std::string{ env };
+}
+
+std::string builtin::generated(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 1)
+    {
+        throw macro_exception{};
+    }
+
+    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
+    const std::string prompt{ read_file_to_string(file_path) };
+    const std::string prefix{ arguments.size() >= 2 ? arguments[1] : std::string{} };
+
+    std::string result;
+    {
+        context pushed{ ctx.make_pushed() };
+        result = generate_text(config, prompt, prefix, pushed);
+    }
+    return result;
+}
+
+std::string builtin::let(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 2)
+    {
+        throw macro_exception{};
+    }
+
+    const std::string_view key{ arguments[0] };
+    const std::string_view value{ arguments[1] };
+
+    ctx.set(key, value);
+    BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
+
+    return std::string{};
 }
 
 std::string builtin::date()
@@ -1252,10 +1265,11 @@ std::string builtin::stdin_(const config& config)
     return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
 }
 
-std::string expand_macro(std::string_view input, const config& config)
+std::string expand_macro(std::string_view input, const config& config, const context& ctx)
 {
     constexpr unsigned int max_depth{ 32 };
-    return parser::evaluate_document_recursive(std::string{ input }, config, max_depth);
+    context pushed{ ctx.make_pushed() };
+    return parser::evaluate_document_recursive(std::string{ input }, config, max_depth, pushed);
 }
 
 template<typename T>
@@ -1438,10 +1452,10 @@ std::string complement_extension(std::string_view filepath, std::string_view ext
 
 std::filesystem::path string_to_path_by_config(std::string_view path, const config& config)
 {
-    const std::filesystem::path file_path{ expand_macro(path, config) };
+    const std::filesystem::path file_path{ expand_macro(path, config, config.context) };
     if (file_path.is_relative())
     {
-        const std::filesystem::path base_path{ expand_macro(config.base_path, config) };
+        const std::filesystem::path base_path{ expand_macro(config.base_path, config, config.context) };
         return base_path / file_path;
 
     }
@@ -1614,11 +1628,10 @@ std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& param
     return oss.str();
 }
 
-void send_automatic1111_txt2img_request(
+std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt,
-    const std::filesystem::path& path
+    std::string_view negative_prompt
 )
 {
     namespace beast = boost::beast;
@@ -1718,13 +1731,11 @@ void send_automatic1111_txt2img_request(
         add_pair_into_json(object, "ad_model", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
         if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
         {
-            const std::string ad_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt, config) };
-            add_pair_into_json(object, "ad_prompt", ad_prompt);
+            add_pair_into_json(object, "ad_prompt", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
         }
         if (!config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
         {
-            const std::string ad_negative_prompt{ expand_macro(config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt, config) };
-            add_pair_into_json(object, "ad_negative_prompt", ad_negative_prompt);
+            add_pair_into_json(object, "ad_negative_prompt", config.sd_txt2img_params.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
         }
         args_array.push_back(picojson::value{ true });
         args_array.push_back(picojson::value{ false });
@@ -1794,16 +1805,10 @@ void send_automatic1111_txt2img_request(
 
     const std::string decoded_image{ base64_decode(base64_image_data) };
 
-    boost::nowide::ofstream ofs{ path, std::ios::binary };
-    if (!ofs.is_open())
-    {
-        throw file_open_exception{} << error_info::path{ path };
-    }
-    ofs.write(decoded_image.data(), decoded_image.size());
-    BOOST_LOG_TRIVIAL(info) << "Save image to " << path;
+    return decoded_image;
 }
 
-void send_style_bert_voice_request(
+std::string send_style_bert_voice_request(
     const config& config,
     std::string_view text
 )
@@ -1901,14 +1906,7 @@ void send_style_bert_voice_request(
         ;
     }
 
-    const std::string macro_expanded_string{ expand_macro(config.sb_generation_params.output_file, config) };
-    const std::filesystem::path output_file_path{ string_to_path_by_config(macro_expanded_string, config) };
-    boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
-    if (!ofs.is_open())
-    {
-        throw file_open_exception{} << error_info::path{ output_file_path };
-    }
-    ofs.write(response.body().data(), response.body().size());
+    return response.body();
 }
 
 std::string generate_boundary()
@@ -2011,7 +2009,7 @@ void upload_images_to_comfy_ui(
             {
                 const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, config) };
                 const std::string server_path{ upload_image_to_comfy_ui(config, local_path) };
-                context.variables.set(variable_name, server_path);
+                context.set(variable_name, server_path);
                 BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
             }
         }
@@ -2198,17 +2196,7 @@ void send_comfy_ui_prompt(
             config.expires_after
         ) };
 
-        {
-            const std::filesystem::path output_file_path{ string_to_path_by_config(relative_file_path.string(), config) };
-            create_parent_directories(output_file_path);
-            boost::nowide::ofstream ofs{ output_file_path, std::ios::binary };
-            if (!ofs.is_open())
-            {
-                throw file_open_exception{} << error_info::path{ output_file_path };
-            }
-            ofs.write(view_response.body().data(), view_response.body().size());
-            BOOST_LOG_TRIVIAL(info) << "Saved output to " << output_file_path;
-        }
+        write_file(config, view_response.body(), relative_file_path.string(), std::ios_base::binary);
     }
 
     tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
@@ -2258,29 +2246,16 @@ std::vector<item> parse_item_list(std::string_view str)
 
 void write_item_list(const config& config, std::string_view task)
 {
-    std::vector<item> items = parse_item_list(task);
+    const std::vector<item> items{ parse_item_list(task) };
 
     for (const item& item : items)
     {
-        std::filesystem::path item_file_path{ string_to_path_by_config(item.head, config) };
-        item_file_path += ".txt";
-        if (std::filesystem::exists(item_file_path))
+        std::string descriptions;
+        for (const std::string& description : item.descriptions)
         {
-            throw file_open_exception{} << error_info::description{ "File already exists." } << error_info::path{ item_file_path };
+            descriptions.append(description);
         }
-        else
-        {
-            create_parent_directories(item_file_path);
-            boost::nowide::ofstream ofs{ item_file_path };
-            if (!ofs.is_open())
-            {
-                throw file_open_exception{} << error_info::path{ item_file_path };
-            }
-            for (const std::string& description : item.descriptions)
-            {
-                ofs << description;
-            }
-        }
+        write_file(config, descriptions, complement_extension(item.head, ".txt"), std::ios_base::binary);
     }
 }
 
@@ -2667,11 +2642,12 @@ void read_cache(const config& config)
 std::string generate_text(
     const config& config,
     std::string_view prompt,
-    std::string_view prefix
+    std::string_view prefix,
+    const context& ctx
 )
 {
-    std::string expanded_prompt{ expand_macro(prompt, config) };
-    const std::string expanded_prefix{ expand_macro(prefix, config) };
+    std::string expanded_prompt{ expand_macro(prompt, config, ctx) };
+    const std::string expanded_prefix{ expand_macro(prefix, config, ctx) };
     const std::size_t initial_prompt_size{ expanded_prompt.size() };
     expanded_prompt += expanded_prefix;
 
@@ -2817,7 +2793,7 @@ void parse_user_defined_variables(const std::vector<std::string>& user_defined_v
             const std::string value{ key_value_pair.substr(separator_position + 1) };
             if (!key.empty())
             {
-                context.variables.set(key, value);
+                context.set(key, value);
                 BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
             }
         }
@@ -2943,14 +2919,14 @@ void set_phase_variables(
 
     if (phase_index > 0)
     {
-        context.variables.set("prev_phase", phases[phase_index - 1]);
+        context.set("prev_phase", phases[phase_index - 1]);
     }
 
-    context.variables.set("phase", phases[phase_index]);
+    context.set("phase", phases[phase_index]);
 
     if (phase_index < phases.size() - 1)
     {
-        context.variables.set("next_phase", phases[phase_index + 1]);
+        context.set("next_phase", phases[phase_index + 1]);
     }
 }
 
@@ -2958,16 +2934,16 @@ void set_static_builtin_variables(
     config& config
 )
 {
-    config.context.variables.set("stdin", builtin::stdin_(config));
+    config.context.set("stdin", builtin::stdin_(config));
 }
 
 void set_dynamic_builtin_variables(
     config& config
 )
 {
-    config.context.variables.set("date", builtin::date());
-    config.context.variables.set("time", builtin::time());
-    config.context.variables.set("datetime", builtin::datetime());
+    config.context.set("date", builtin::date());
+    config.context.set("time", builtin::time());
+    config.context.set("datetime", builtin::datetime());
 }
 
 void set_paragraphs_to_phases(
@@ -3572,7 +3548,7 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
     return result;
 }
 
-void write_text_to_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
+void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
     const std::filesystem::path file_path{ string_to_path_by_config(filepath, config) };
     create_parent_directories(file_path);
@@ -3582,7 +3558,14 @@ void write_text_to_file(const config& config, std::string_view response, std::st
         throw file_open_exception{} << error_info::path{ file_path };
     }
     ofs << response;
-    BOOST_LOG_TRIVIAL(info) << "Write text to " << file_path;
+    if ((mode & std::ios_base::binary) == 0)
+    {
+        BOOST_LOG_TRIVIAL(info) << "Write text to " << file_path;
+    }
+    else
+    {
+        BOOST_LOG_TRIVIAL(info) << "Write binary to " << file_path;
+    }
 }
 
 void write_code_block(const config& config, std::string_view markdown)
@@ -3598,21 +3581,21 @@ void write_code_block(const config& config, std::string_view markdown)
             }
             else
             {
-                write_text_to_file(config, code, complement_extension(name, ".txt"), 0);
+                write_file(config, code, complement_extension(name, ".txt"), 0);
             }
         }
     }
 }
 
-void generate_text_and_write(const config& config, std::string_view prompt)
+void generate_text_and_write(const config& config, std::string_view prompt, const context& ctx)
 {
     const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
 
-    std::string response{ generate_text(config, truncated_prompt, config.llm_prompt_params.generation_prefix) };
+    std::string response{ generate_text(config, truncated_prompt, config.llm_prompt_params.generation_prefix, ctx) };
     response = remove_reasoning(response, config.llm_prompt_params.reasoning_prefix, config.llm_prompt_params.reasoning_suffix);
     response += config.llm_prompt_params.generation_suffix;
 
-    write_text_to_file(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
+    write_file(config, response, config.llm_prompt_params.output_file, std::ios_base::app);
 
     if (!config.verbose)
     {
@@ -3636,25 +3619,24 @@ void generate_and_output(const config& config)
     if (config.mode == "tg" || config.mode == "kc")
     {
         const std::string prompt{ prompt_from_string_or_file_path(config.llm_prompt_params.prompt, config.llm_prompt_params.prompt_file, config) };
-        generate_text_and_write(config, prompt);
+        generate_text_and_write(config, prompt, config.context);
     }
     else if (config.mode == "sd")
     {
-        const std::filesystem::path output_file_path{ string_to_path_by_config(config.sd_txt2img_params.output_file, config) };
-        create_parent_directories(output_file_path);
-
-        const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config), config) };
-        const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config), config) };
-        send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, output_file_path);
+        const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.prompt, config.sd_txt2img_params.prompt_file, config), config, config.context) };
+        const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd_txt2img_params.negative_prompt, config.sd_txt2img_params.negative_prompt_file, config), config, config.context) };
+        const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
+        write_file(config, image, config.sd_txt2img_params.output_file, std::ios_base::binary);
     }
     else if (config.mode == "sb")
     {
-        const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config), config) };
-        send_style_bert_voice_request(config, text);
+        const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb_generation_params.text, config.sb_generation_params.text_file, config), config, config.context) };
+        const std::string voice{ send_style_bert_voice_request(config, text) };
+        write_file(config, voice, config.sb_generation_params.output_file, std::ios_base::binary);
     }
     else if (config.mode == "cu")
     {
-        const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu_generation_params.prompt, config.cu_generation_params.prompt_file, config), config) };
+        const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu_generation_params.prompt, config.cu_generation_params.prompt_file, config), config, config.context) };
         send_comfy_ui_prompt(config, prompt);
     }
 }
@@ -3708,12 +3690,10 @@ void iterate(config& config)
     int iteration_count{};
     while (config.number_iterations == -1 || iteration_count < config.number_iterations)
     {
-        const scoped_stack_guard ssg{ config.context.variables };
-
         set_seed(config);
 
         set_dynamic_builtin_variables(config);
-        config.context.variables.set("N", std::to_string(iteration_count + 1));
+        config.context.set("N", std::to_string(iteration_count + 1));
 
         for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
         {
@@ -3741,18 +3721,17 @@ int exception_safe_main(int argc, char** argv)
         if (config.create_process || config.terminate_process)
         {
             process_create_or_terminate(config);
+            return 0;
         }
-        else
+
+        set_static_builtin_variables(config);
+
+        if (config.mode == "cu")
         {
-            set_static_builtin_variables(config);
-
-            if (config.mode == "cu")
-            {
-                upload_images_to_comfy_ui(config, config.context);
-            }
-
-            iterate(config);
+            upload_images_to_comfy_ui(config, config.context);
         }
+
+        iterate(config);
     }
     catch (const boost::exception& exception)
     {

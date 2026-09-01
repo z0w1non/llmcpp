@@ -203,11 +203,8 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ### `{{tail("filename", 1024}}`
 `:` の右側で指定されたテキストファイルの内容のうち、末尾から指定されたトークン数分の文字列に展開される。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。例えば `{{tail("output", 1024)}}` のように記述して、直近の出力をプロンプトに含めることができる。
 
-### `{{include_json_literal("filename")}}`
-`include` とほぼ同様であるが、生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。`{ "key": "{{include_json_literal("filename")}}" }` などと使用する。
-
-### `{{tail_json_literal("filename", 1024)}}`
-`tail` とほぼ同様であるが、生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。`{ "key": "{{tail_json_literal("filename", 1024)}}" }` などと使用する。
+### `{{json_literal("text")}}`
+生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。`{ "key": "{{json_literal(include("filename"))}}" }` などと使用する。
 
 ### `{{env("var")}}`
 環境変数 `var` の値に展開される。
@@ -220,6 +217,12 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 
 ### `{{stdin}}`
 標準入力から渡された文字列に展開される。
+
+### `{{generated("subprompt")}}`
+サブプロンプトを実行した結果に展開される。
+
+### `{{let("name", "value")}}`
+マクロ変数を定義する。定義されたマクロは同ファイル、および同ファイルから `generated` マクロで呼び出されたサブプロンプト内でのみ有効である。
 
 ### `{{phase}}`
 1回の処理は1個以上の phase から構成され、それらは順番に実行される。
