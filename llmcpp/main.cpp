@@ -3547,7 +3547,7 @@ int parse_command_line(
             }
         }
 
-        if (vm.count("help"))
+        if (vm.find("help") != vm.end())
         {
             boost::nowide::cout << allowed_options << std::endl;
             return 1;
