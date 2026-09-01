@@ -490,7 +490,9 @@ struct cu_generation_parameters
 {
     std::string host;
     std::string port;
-    std::string target;
+    std::string prompt_target;
+    std::string upload_image_target;
+
     std::string prompt_file;
     std::string output_directory;
     std::vector<std::string> upload_images;
@@ -1949,7 +1951,7 @@ std::string upload_image_to_comfy_ui(
     tcp_stream.connect(results, error_code);
     if_error_throw<connect_exception>(error_code);
 
-    http::request<http::string_body> request{ http::verb::post, "/upload/image", 11 };
+    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.upload_image_target, 11 };
     request.set(http::field::host, config.cu_generation_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "multipart/form-data; boundary=" + std::string{ boundary });
@@ -2045,7 +2047,7 @@ void send_comfy_ui_prompt(
     const std::string request_body{ picojson::value{ request_body_json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.target, 11 };
+    http::request<http::string_body> request{ http::verb::post, config.cu_generation_params.prompt_target, 11 };
     request.set(http::field::host, config.cu_generation_params.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -3446,7 +3448,8 @@ int parse_command_line(
 
             ("cu-host", po::value<std::string>(&config.cu_generation_params.host)->default_value("localhost"), "Comfy UI host")
             ("cu-port", po::value<std::string>(&config.cu_generation_params.port)->default_value("8188"), "Comfy UI port")
-            ("cu-target", po::value<std::string>(&config.cu_generation_params.target)->default_value("/prompt"), "Comfy UI prompt target")
+            ("cu-prompt-target", po::value<std::string>(&config.cu_generation_params.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
+            ("cu-upload-image-target", po::value<std::string>(&config.cu_generation_params.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
             ("cu-prompt-file", po::value<std::string>(&config.cu_generation_params.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
             ("cu-output-directory", po::value<std::string>(&config.cu_generation_params.output_directory)->default_value("output"), "Comfy UI output directory")
             ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu_generation_params.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
