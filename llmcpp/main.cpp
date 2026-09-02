@@ -98,7 +98,14 @@ public:
     runtime_exception();
 };
 
-class runtime_exception;
+class logic_error
+    : public boost::exception
+    , public std::exception
+{
+public:
+    logic_error();
+};
+
 class io_exception : public runtime_exception {};
 class file_open_exception : public io_exception {};
 class socket_exception : public runtime_exception {};
@@ -108,7 +115,7 @@ class comfy_ui_generation_exception : public runtime_exception {};
 class syntax_exception : public runtime_exception {};
 class json_parse_exception : public runtime_exception {};
 class macro_exception : public runtime_exception {};
-class command_line_syntax_exception : public runtime_exception {};
+class command_line_exception : public runtime_exception {};
 class array_index_out_of_bounds_exception : public runtime_exception {};
 class dns_resolve_exception : public runtime_exception {};
 class connect_exception : public runtime_exception {};
@@ -152,6 +159,11 @@ namespace error_info
 }
 
 runtime_exception::runtime_exception()
+{
+    *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
+}
+
+logic_error::logic_error()
 {
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
@@ -396,9 +408,32 @@ struct alwayson_scripts
     adetailer_parametesrs adetailer_parametesrs;
 };
 
+enum class sd_mode
+{
+    txt2img, img2img
+};
+
+sd_mode string_to_sd_mode(std::string_view str);
+
+std::string sd_mode_to_target(sd_mode mode, const config& config);
+
 struct sd_txt2img_parameters
 {
     std::string target;
+
+    bool enable_hr{};
+    int firstphase_width{};
+    int firstphase_height{};
+    double hr_scale{};
+    std::string hr_upscaler;
+    int hr_second_pass_steps{};
+    int hr_resize_x{};
+    int hr_resize_y{};
+    std::string hr_checkpoint_name;
+    //std::string hr_sampler_name;
+    //std::string hr_scheduler;
+    //std::string hr_prompt;
+    //std::string hr_negative_prompt;
 };
 
 struct sd_img2img_parameters
@@ -469,19 +504,6 @@ struct sd_parameters
     bool disable_extra_networks{};
     std::string firstpass_image;
     std::string comments;
-    bool enable_hr{};
-    int firstphase_width{};
-    int firstphase_height{};
-    double hr_scale{};
-    std::string hr_upscaler;
-    int hr_second_pass_steps{};
-    int hr_resize_x{};
-    int hr_resize_y{};
-    std::string hr_checkpoint_name;
-    //std::string hr_sampler_name;
-    //std::string hr_scheduler;
-    //std::string hr_prompt;
-    //std::string hr_negative_prompt;
     std::string force_task_id;
     std::string sampler_index;
     std::string script_name;
@@ -493,6 +515,7 @@ struct sd_parameters
 
     bool abg_remover_enable{};
 
+    std::string mode;
     sd_txt2img_parameters txt2img;
     sd_img2img_parameters img2img;
 };
@@ -663,7 +686,8 @@ std::string make_automatic1111_png_parameters(const sd_parameters& parameters, s
 std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt
+    std::string_view negative_prompt,
+    sd_mode mode
 );
 
 std::string send_style_bert_voice_request(
@@ -810,6 +834,33 @@ std::optional<std::string> context::get(std::string_view key) const
         current = current->base;
     }
     return std::nullopt;
+}
+
+sd_mode string_to_sd_mode(std::string_view str)
+{
+    static const std::unordered_map<std::string_view, sd_mode> map
+    {
+        { "txt2img", sd_mode::txt2img },
+        { "img2img", sd_mode::img2img }
+    };
+    if (const auto iter{ map.find(str) }; iter != map.end())
+    {
+        return iter->second;
+    }
+    throw command_line_exception{} << error_info::description{ "Unknown sd_mode string " + std::string{ str } };
+}
+
+std::string sd_mode_to_target(sd_mode mode, const config& config)
+{
+    if (mode == sd_mode::txt2img)
+    {
+        return config.sd.txt2img.target;
+    }
+    else if (mode == sd_mode::img2img)
+    {
+        return config.sd.img2img.target;
+    }
+    throw logic_error{} << error_info::description{ "Unknown sd_mode" };
 }
 
 template<typename Value>
@@ -1766,9 +1817,9 @@ std::string make_automatic1111_png_parameters(const sd_parameters& parameters, s
         << "Size: " << parameters.width << "x" << parameters.height << ", "
         //<< "Model hash: "
         << "Denoising strength: " << parameters.denoising_strength << ", "
-        << "Hires upscale: " << parameters.hr_scale << ", "
-        << "Hires steps: " << parameters.hr_second_pass_steps << ", "
-        << "Hires upscaler: " << parameters.hr_upscaler
+        << "Hires upscale: " << parameters.txt2img.hr_scale << ", "
+        << "Hires steps: " << parameters.txt2img.hr_second_pass_steps << ", "
+        << "Hires upscaler: " << parameters.txt2img.hr_upscaler
         << std::flush;
     return oss.str();
 }
@@ -1776,7 +1827,8 @@ std::string make_automatic1111_png_parameters(const sd_parameters& parameters, s
 std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt
+    std::string_view negative_prompt,
+    sd_mode mode
 )
 {
     namespace beast = boost::beast;
@@ -1831,17 +1883,58 @@ std::string send_automatic1111_txt2img_request(
     add_pair_into_json(json, "disable_extra_networks", config.sd.disable_extra_networks);
     add_pair_into_json(json, "firstpass_image", config.sd.firstpass_image);
     add_pair_into_json(json, "comments", config.sd.comments);
-    add_pair_into_json(json, "enable_hr", config.sd.enable_hr);
-    add_pair_into_json(json, "firstphase_width", config.sd.firstphase_width);
-    add_pair_into_json(json, "firstphase_height", config.sd.firstphase_height);
-    add_pair_into_json(json, "hr_scale", config.sd.hr_scale);
-    add_pair_into_json(json, "hr_upscaler", config.sd.hr_upscaler);
-    add_pair_into_json(json, "hr_second_pass_steps", config.sd.hr_second_pass_steps);
-    add_pair_into_json(json, "hr_resize_x", config.sd.hr_resize_x);
-    add_pair_into_json(json, "hr_resize_y", config.sd.hr_resize_y);
-    add_pair_into_json(json, "hr_checkpoint_name", config.sd.hr_checkpoint_name);
-    //add_pair_into_json(json, "hr_prompt", prompt);
-    //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
+
+    if (mode == sd_mode::txt2img)
+    {
+        add_pair_into_json(json, "enable_hr", config.sd.txt2img.enable_hr);
+        add_pair_into_json(json, "firstphase_width", config.sd.txt2img.firstphase_width);
+        add_pair_into_json(json, "firstphase_height", config.sd.txt2img.firstphase_height);
+        add_pair_into_json(json, "hr_scale", config.sd.txt2img.hr_scale);
+        add_pair_into_json(json, "hr_upscaler", config.sd.txt2img.hr_upscaler);
+        add_pair_into_json(json, "hr_second_pass_steps", config.sd.txt2img.hr_second_pass_steps);
+        add_pair_into_json(json, "hr_resize_x", config.sd.txt2img.hr_resize_x);
+        add_pair_into_json(json, "hr_resize_y", config.sd.txt2img.hr_resize_y);
+        add_pair_into_json(json, "hr_checkpoint_name", config.sd.txt2img.hr_checkpoint_name);
+        //add_pair_into_json(json, "hr_prompt", prompt);
+        //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
+    }
+    else if (mode == sd_mode::img2img)
+    {
+        add_pair_into_json(json, "sd_img2img_target", config.sd.img2img.target);
+
+        {
+            if (config.sd.img2img.init_images.empty())
+            {
+                throw command_line_exception{};
+            }
+            std::vector<std::string> encoded_images;
+            for (const std::string_view path : config.sd.img2img.init_images)
+            {
+                encoded_images.emplace_back(base64_encode(read_file_to_string(string_to_path_by_config(path, config))));
+            };
+            add_pair_into_json_from_vector(json, "sd_init_images", encoded_images);
+        }
+
+        add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
+        add_pair_into_json(json, "sd_seed_resize_from_w", config.sd.img2img.seed_resize_from_w);
+        add_pair_into_json(json, "sd_resize_mode", config.sd.img2img.resize_mode);
+        add_pair_into_json(json, "sd_image_cfg_scale", config.sd.img2img.image_cfg_scale);
+
+        add_pair_into_json(json, "sd_mask", config.sd.img2img.mask);
+
+        add_pair_into_json(json, "sd_mask_blur_x", config.sd.img2img.mask_blur_x);
+        add_pair_into_json(json, "sd_mask_blur_y", config.sd.img2img.mask_blur_y);
+        add_pair_into_json(json, "sd_mask_blur", config.sd.img2img.mask_blur);
+        add_pair_into_json(json, "sd_mask_round", config.sd.img2img.mask_round);
+        add_pair_into_json(json, "sd_inpainting_fill", config.sd.img2img.inpainting_fill);
+        add_pair_into_json(json, "sd_inpaint_full_res", config.sd.img2img.inpaint_full_res);
+        add_pair_into_json(json, "sd_inpaint_full_res_padding", config.sd.img2img.inpaint_full_res_padding);
+        add_pair_into_json(json, "sd_inpainting_mask_invert", config.sd.img2img.inpainting_mask_invert);
+        add_pair_into_json(json, "sd_initial_noise_multiplier", config.sd.img2img.initial_noise_multiplier);
+
+        add_pair_into_json(json, "sd_latent_mask", config.sd.img2img.latent_mask);
+    }
+
     add_pair_into_json(json, "force_task_id", config.sd.force_task_id);
 
     if (!config.sd.sampler_index.empty() && config.sd.sampler_name.empty())
@@ -1919,7 +2012,7 @@ std::string send_automatic1111_txt2img_request(
     const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.sd.txt2img.target, 11 };
+    http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(mode, config), 11 };
     request.set(http::field::host, config.sd.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -3534,17 +3627,6 @@ int parse_command_line(
             ("sd-disable-extra-networks", po::bool_switch(&config.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
             ("sd-firstpass-image", po::value<std::string>(&config.sd.firstpass_image)->default_value(""), "SD firstpass image")
             ("sd-comments", po::value<std::string>(&config.sd.comments)->default_value(""), "SD comments")
-            ("sd-enable-hr", po::bool_switch(&config.sd.enable_hr)->default_value(false), "SD enable hr")
-            ("sd-firstphase-width", po::value<int>(&config.sd.firstphase_width)->default_value(0), "SD firstphase width")
-            ("sd-firstphase-height", po::value<int>(&config.sd.firstphase_height)->default_value(0), "SD firstphase height")
-            ("sd-hr-scale", po::value<double>(&config.sd.hr_scale)->default_value(0), "SD hr scale")
-            ("sd-hr-upscaler", po::value<std::string>(&config.sd.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-            ("sd-hr-second-pass-steps", po::value<int>(&config.sd.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
-            ("sd-hr-resize-x", po::value<int>(&config.sd.hr_resize_x)->default_value(0), "SD hr resize x")
-            ("sd-hr-resize-y", po::value<int>(&config.sd.hr_resize_y)->default_value(0), "SD hr resize y")
-            ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
-            //("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
-            //("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
             ("sd-force-task-id", po::value<std::string>(&config.sd.force_task_id)->default_value(""), "SD force task id")
             ("sd-sampler-index", po::value<std::string>(&config.sd.sampler_index)->default_value(""), "SD sampler index")
             ("sd-script-name", po::value<std::string>(&config.sd.script_name)->default_value(""), "SD script name")
@@ -3558,7 +3640,20 @@ int parse_command_line(
             ("sd-infotext", po::value<std::string>(&config.sd.infotext)->default_value(""), "SD infotext")
             ("sd-abg-remover-enable", po::bool_switch(&config.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
+            ("sd-mode", po::value<std::string>(&config.sd.mode)->default_value("txt2img"), "SD mode (txt2img | img2img)")
+
             ("sd-txt2img-target", po::value<std::string>(&config.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+            ("sd-enable-hr", po::bool_switch(&config.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
+            ("sd-firstphase-width", po::value<int>(&config.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
+            ("sd-firstphase-height", po::value<int>(&config.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
+            ("sd-hr-scale", po::value<double>(&config.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
+            ("sd-hr-upscaler", po::value<std::string>(&config.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
+            ("sd-hr-second-pass-steps", po::value<int>(&config.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+            ("sd-hr-resize-x", po::value<int>(&config.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
+            ("sd-hr-resize-y", po::value<int>(&config.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
+            ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+            //("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+            //("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
 
             ("sd-img2img-target", po::value<std::string>(&config.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
             ("sd-init-images", po::value<std::vector<std::string>>(&config.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
@@ -3674,7 +3769,7 @@ int parse_command_line(
     }
     catch (const po::error& e)
     {
-        throw command_line_syntax_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() };
+        throw command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() };
     }
 
     return 0;
@@ -3793,7 +3888,7 @@ void generate_and_output(const config& config)
     {
         const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
         const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
-        const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
+        const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, string_to_sd_mode(config.sd.mode)) };
         write_file(config, image, config.sd.output_file, std::ios_base::binary);
     }
     else if (config.mode == "sb")
