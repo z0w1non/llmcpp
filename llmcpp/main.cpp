@@ -1900,8 +1900,6 @@ std::string send_automatic1111_txt2img_request(
     }
     else if (mode == sd_mode::img2img)
     {
-        add_pair_into_json(json, "sd_img2img_target", config.sd.img2img.target);
-
         {
             if (config.sd.img2img.init_images.empty())
             {
