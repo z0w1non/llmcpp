@@ -1912,14 +1912,11 @@ std::string send_automatic1111_txt2img_request(
     }
     else if (mode == sd_mode::img2img)
     {
+        if (config.sd.img2img.init_images.empty())
         {
-            if (config.sd.img2img.init_images.empty())
-            {
-                throw command_line_exception{};
-            }
-            add_pair_into_json_from_vector(json, "sd_init_images", paths_to_base64_encoded_images(config.sd.img2img.init_images, config));
+            throw command_line_exception{};
         }
-
+        add_pair_into_json_from_vector(json, "sd_init_images", paths_to_base64_encoded_images(config.sd.img2img.init_images, config));
         add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
         add_pair_into_json(json, "sd_seed_resize_from_w", config.sd.img2img.seed_resize_from_w);
         add_pair_into_json(json, "sd_resize_mode", config.sd.img2img.resize_mode);
