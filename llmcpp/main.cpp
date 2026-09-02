@@ -3539,7 +3539,7 @@ int parse_command_line(
             ("sd-firstphase-height", po::value<int>(&config.sd.firstphase_height)->default_value(0), "SD firstphase height")
             ("sd-hr-scale", po::value<double>(&config.sd.hr_scale)->default_value(0), "SD hr scale")
             ("sd-hr-upscaler", po::value<std::string>(&config.sd.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-            ("sd-hr-second-pass-steps", po::value<int>(&config.sd.hr_second_pass_steps)->default_value(20), "SD hr second pass steps")
+            ("sd-hr-second-pass-steps", po::value<int>(&config.sd.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
             ("sd-hr-resize-x", po::value<int>(&config.sd.hr_resize_x)->default_value(0), "SD hr resize x")
             ("sd-hr-resize-y", po::value<int>(&config.sd.hr_resize_y)->default_value(0), "SD hr resize y")
             ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
