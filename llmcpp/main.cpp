@@ -669,7 +669,7 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
 
 std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config);
 
-std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string> paths, const config& config);
+std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& config);
 
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
@@ -1645,7 +1645,7 @@ std::string image_path_to_base64_encoded_string(std::string_view image_path, con
     return base64_encode(read_file_to_string(string_to_path_by_config(image_path, config)));
 }
 
-std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string> paths, const config& config)
+std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& config)
 {
     std::vector<std::string> encoded_images;
     encoded_images.reserve(paths.size());
