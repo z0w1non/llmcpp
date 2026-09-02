@@ -667,7 +667,7 @@ void create_parent_directories(const std::filesystem::path& path);
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
-std::vector<std::string> paths_to_base64_encoded_images(const std::vector<std::string> paths, const config& config);
+std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string> paths, const config& config);
 
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
@@ -1638,7 +1638,7 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     return result;
 }
 
-std::vector<std::string> paths_to_base64_encoded_images(const std::vector<std::string> paths, const config& config)
+std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string> paths, const config& config)
 {
     std::vector<std::string> encoded_images;
     for (const std::string_view path : config.sd.img2img.init_images)
@@ -1916,7 +1916,7 @@ std::string send_automatic1111_txt2img_request(
         {
             throw command_line_exception{};
         }
-        add_pair_into_json_from_vector(json, "sd_init_images", paths_to_base64_encoded_images(config.sd.img2img.init_images, config));
+        add_pair_into_json_from_vector(json, "sd_init_images", image_paths_to_base64_encoded_strings(config.sd.img2img.init_images, config));
         add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
         add_pair_into_json(json, "sd_seed_resize_from_w", config.sd.img2img.seed_resize_from_w);
         add_pair_into_json(json, "sd_resize_mode", config.sd.img2img.resize_mode);
