@@ -3521,7 +3521,7 @@ int parse_command_line(
             ("sd-do-not-save-samples", po::bool_switch(&config.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
             ("sd-do-not-save-grid", po::bool_switch(&config.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
             ("sd-eta", po::value<int>(&config.sd.eta)->default_value(0), "SD eta")
-            ("sd-denoising-strength", po::value<double>(&config.sd.denoising_strength)->default_value(0.7, "0.7"), "SD denoising strength")
+            ("sd-denoising-strength", po::value<double>(&config.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
             ("sd-s-min-uncond", po::value<int>(&config.sd.s_min_uncond)->default_value(0), "SD s min uncond")
             ("sd-s-churn", po::value<int>(&config.sd.s_churn)->default_value(0), "SD s churn")
             ("sd-s-tmax", po::value<int>(&config.sd.s_tmax)->default_value(0), "SD s tmax")
