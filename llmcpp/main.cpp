@@ -1463,8 +1463,7 @@ std::string builtin::generated(const std::vector<std::string>& arguments, const 
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
-    const std::string prompt{ read_file_to_string(file_path) };
+    const std::string prompt{ arguments[1] };
     const std::string prefix{ arguments.size() >= 2 ? arguments[1] : std::string{} };
 
     std::string result;
