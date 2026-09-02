@@ -1007,7 +1007,7 @@ std::string console_string_to_u8string(std::string_view input)
         return std::string{ input };
     }
 
-    int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
+    const int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
     if (wstring_length <= 0)
     {
         return std::string{ input };
@@ -1016,7 +1016,7 @@ std::string console_string_to_u8string(std::string_view input)
     std::wstring wstring(wstring_length, L'\0');
     MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
 
-    int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
+    const int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
     if (u8string_length <= 0)
     {
         return std::string{ input };
