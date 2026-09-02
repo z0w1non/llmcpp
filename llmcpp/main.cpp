@@ -178,6 +178,39 @@ logic_error::logic_error()
     *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
 }
 
+template<typename Key, typename T, typename Compare = std::less<>, typename Allocator = std::allocator<std::pair<const Key, T> >>
+using transparent_map = std::map<Key, T, Compare>;
+
+template<typename T>
+using string_map = std::map<std::string, T, std::less<>>;
+
+template<typename Key, typename T, typename Allocator = std::allocator<std::pair<const Key, T> >>
+using transparent_unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<>, Allocator>;
+
+// for <= C++ 17
+struct string_hash
+{
+    using is_transparent = void;
+
+    std::size_t operator()(std::string_view sv) const noexcept
+    {
+        return std::hash<std::string_view>{}(sv);
+    }
+
+    std::size_t operator()(const std::string& s) const noexcept
+    {
+        return std::hash<std::string>{}(s);
+    }
+
+    std::size_t operator()(const char* s) const noexcept
+    {
+        return std::hash<std::string_view>{}(s);
+    }
+};
+
+template<typename T>
+using string_unordered_map = std::unordered_map<std::string, T, string_hash, std::equal_to<>>;
+
 struct config;
 
 struct text_generation_parameters
@@ -787,7 +820,9 @@ void init_llm_mode(config& config);
 
 std::string sanitize_as_filename(std::string_view name);
 
-std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content);
+using code_blocks = string_unordered_map<std::string>;
+
+code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
 
 bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
 
@@ -1154,6 +1189,7 @@ namespace builtin
     std::string random(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string exec(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string code_block(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
@@ -1167,7 +1203,8 @@ namespace builtin
         {"let", let},
         {"random", random},
         {"choice", choice},
-        {"exec", exec}
+        {"exec", exec},
+        {"code_block", code_block}
     };
 
     std::string date();
@@ -1554,6 +1591,25 @@ std::string builtin::exec(const std::vector<std::string>& arguments, const confi
     ctx.set("exit_code", std::to_string(exit_code));
 
     return console_string_to_u8string(output);
+}
+
+std::string builtin::code_block(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 2)
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{});
+    }
+
+    const std::string_view markdown{ arguments[0] };
+    const std::string_view code_block{ arguments[1] };
+
+    const code_blocks map{ extract_code_block_from_markdown(markdown) };
+    if (const code_blocks::const_iterator iter{ map.find(code_block) }; iter != map.end())
+    {
+        return iter->second;
+    }
+
+    return std::string{};
 }
 
 std::string builtin::date()
@@ -3396,9 +3452,9 @@ std::string sanitize_as_filename(std::string_view name)
     return sanitized;
 }
 
-std::map<std::string, std::string> extract_code_block_from_markdown(std::string_view markdown_content)
+code_blocks extract_code_block_from_markdown(std::string_view markdown_content)
 {
-    std::map<std::string, std::string> result;
+    code_blocks result;
     const std::regex code_block_regex{ R"(```(\S+)\s*\n([\s\S]*?)```)" };
 
     for (std::cregex_iterator iter{ markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex }; iter != std::cregex_iterator{}; ++iter)
@@ -3969,7 +4025,7 @@ void write_code_block(const config& config, std::string_view markdown)
 {
     if (config.llm.code_block_extract)
     {
-        const std::map<std::string, std::string> blocks{ extract_code_block_from_markdown(markdown) };
+        const code_blocks blocks{ extract_code_block_from_markdown(markdown) };
         for (const auto& [name, code] : blocks)
         {
             if (name == "stdout")
