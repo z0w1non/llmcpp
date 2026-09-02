@@ -27,6 +27,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/readable_pipe.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/program_options.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -69,7 +70,7 @@
 
 #include "picojson.h"
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <boost/process/v2/windows/creation_flags.hpp>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -88,7 +89,7 @@
 #undef FAR
 #endif
 
-#if defined(_WIN32) || defined(_WIN64)
+#ifdef _WIN32
 #include <io.h>
 #else
 #include <unistd.h>
@@ -1112,7 +1113,7 @@ namespace builtin
     std::string let(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string random(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx);
-    std::string command(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string exec(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
@@ -1126,7 +1127,7 @@ namespace builtin
         {"let", let},
         {"random", random},
         {"choice", choice},
-        {"command", command}
+        {"exec", exec}
     };
 
     std::string date();
@@ -1467,7 +1468,45 @@ std::string builtin::choice(const std::vector<std::string>& arguments, const con
     return arguments[::random<std::size_t>(0, arguments.size() - 1)];
 }
 
-std::string builtin::command(const std::vector<std::string>& arguments, const config& config, context& ctx)
+std::string console_string_to_u8string(std::string_view input)
+{
+#ifdef _WIN32
+    if (input.empty())
+    {
+        return std::string{};
+    }
+
+    const UINT cp{ GetConsoleOutputCP() };
+    if (cp == CP_UTF8)
+    {
+        return std::string{ input };
+    }
+
+    int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
+    if (wstring_length <= 0)
+    {
+        return std::string{ input };
+    }
+
+    std::wstring wstring(wstring_length, L'\0');
+    MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
+
+    int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
+    if (u8string_length <= 0)
+    {
+        return std::string{ input };
+    }
+
+    std::string u8_string(u8string_length, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, u8_string.data(), u8string_length, nullptr, nullptr);
+
+    return u8_string;
+#else
+    return std::string{ input };
+#endif
+}
+
+std::string builtin::exec(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     namespace process = boost::process::v2;
     namespace asio = boost::asio;
@@ -1479,9 +1518,10 @@ std::string builtin::command(const std::vector<std::string>& arguments, const co
 
     const std::string_view exe_name{ arguments[0] };
     std::vector<std::string> args;
+    args.reserve(arguments.size());
+
     if (arguments.size() > 1)
     {
-        args.reserve(arguments.size() - 1);
         args.assign(arguments.begin() + 1, arguments.end());
     }
 
@@ -1495,24 +1535,24 @@ std::string builtin::command(const std::vector<std::string>& arguments, const co
     asio::readable_pipe pipe{ ioctx };
     int exit_code{};
 
-    process::process_stdio pstdio{ nullptr, pipe, {} };
-    process::process child{ ioctx, exe_path, args,  pstdio };
-    exit_code = child.wait();
+    {
+        process::process_stdio pstdio{ nullptr, pipe, {} };
+        process::process child{ ioctx, exe_path, args,  pstdio };
+        exit_code = child.wait();
+    }
 
     std::string output;
     boost::system::error_code error_code;
-    asio::async_read(pipe, asio::dynamic_buffer(output), [&](const boost::system::error_code& ec, std::size_t) { error_code = ec; });
+    asio::read(pipe, asio::dynamic_buffer(output), error_code);
 
-    ioctx.run();
-
-    if (error_code && error_code != asio::error::eof)
+    if (error_code && error_code != asio::error::eof && error_code != asio::error::broken_pipe)
     {
         BOOST_THROW_EXCEPTION(macro_exception{} << error_info::system::error_code{ error_code });
     }
 
     ctx.set("exit_code", std::to_string(exit_code));
 
-    return output;
+    return console_string_to_u8string(output);
 }
 
 std::string builtin::date()
@@ -1547,7 +1587,7 @@ std::string builtin::datetime()
 
 std::string builtin::stdin_(const config& config)
 {
-#if defined(_WIN32) || defined(_WIN64)
+#ifdef _WIN32
     bool is_terminal = (_isatty(0) != 0);
 #else
     bool is_terminal = (isatty() != 0);
@@ -3422,7 +3462,7 @@ std::size_t terminate_process_by_path(const std::filesystem::path& executable_fi
 {
     std::size_t terminated_count{};
 
-#if defined(_WIN32)
+#ifdef _WIN32
     const HANDLE snapshot{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if (snapshot == INVALID_HANDLE_VALUE)
     {
