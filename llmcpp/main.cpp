@@ -1915,12 +1915,12 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -1978,12 +1978,12 @@ std::string send_automatic1111_txt2img_request(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -2181,12 +2181,12 @@ std::string send_style_bert_voice_request(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -2292,8 +2292,8 @@ std::string upload_image_to_comfy_ui(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
@@ -2317,7 +2317,7 @@ std::string upload_image_to_comfy_ui(
     }
     body << "--" << boundary << "--\r\n";
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -2393,12 +2393,12 @@ void send_comfy_ui_prompt(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -2634,12 +2634,12 @@ std::string send_completions_request(
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
@@ -2866,12 +2866,12 @@ int send_token_count_request(const config& config, std::string_view prompt)
 {
     namespace beast = boost::beast;
     namespace http = beast::http;
-    namespace net = boost::asio;
-    using tcp = net::ip::tcp;
+    namespace asio = boost::asio;
+    using tcp = asio::ip::tcp;
 
     beast::error_code error_code;
 
-    net::io_context ioc;
+    asio::io_context ioc;
     tcp::resolver resolver{ ioc };
     beast::tcp_stream tcp_stream{ ioc };
 
