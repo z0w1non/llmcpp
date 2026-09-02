@@ -667,6 +667,8 @@ void create_parent_directories(const std::filesystem::path& path);
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
+std::vector<std::string> paths_to_base64_encoded_images(const std::vector<std::string> paths, const config& config);
+
 template<typename Integer>
 Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
@@ -1636,6 +1638,16 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     return result;
 }
 
+std::vector<std::string> paths_to_base64_encoded_images(const std::vector<std::string> paths, const config& config)
+{
+    std::vector<std::string> encoded_images;
+    for (const std::string_view path : config.sd.img2img.init_images)
+    {
+        encoded_images.emplace_back(base64_encode(read_file_to_string(string_to_path_by_config(path, config))));
+    }
+    return encoded_images;
+}
+
 std::string complement_extension(std::string_view filepath, std::string_view extension)
 {
     std::filesystem::path temp{ filepath };
@@ -1905,21 +1917,14 @@ std::string send_automatic1111_txt2img_request(
             {
                 throw command_line_exception{};
             }
-            std::vector<std::string> encoded_images;
-            for (const std::string_view path : config.sd.img2img.init_images)
-            {
-                encoded_images.emplace_back(base64_encode(read_file_to_string(string_to_path_by_config(path, config))));
-            };
-            add_pair_into_json_from_vector(json, "sd_init_images", encoded_images);
+            add_pair_into_json_from_vector(json, "sd_init_images", paths_to_base64_encoded_images(config.sd.img2img.init_images, config));
         }
 
         add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
         add_pair_into_json(json, "sd_seed_resize_from_w", config.sd.img2img.seed_resize_from_w);
         add_pair_into_json(json, "sd_resize_mode", config.sd.img2img.resize_mode);
         add_pair_into_json(json, "sd_image_cfg_scale", config.sd.img2img.image_cfg_scale);
-
-        add_pair_into_json(json, "sd_mask", config.sd.img2img.mask);
-
+        add_pair_into_json(json, "sd_mask", base64_encode(read_file_to_string(string_to_path_by_config(config.sd.img2img.mask, config))));
         add_pair_into_json(json, "sd_mask_blur_x", config.sd.img2img.mask_blur_x);
         add_pair_into_json(json, "sd_mask_blur_y", config.sd.img2img.mask_blur_y);
         add_pair_into_json(json, "sd_mask_blur", config.sd.img2img.mask_blur);
@@ -1929,8 +1934,7 @@ std::string send_automatic1111_txt2img_request(
         add_pair_into_json(json, "sd_inpaint_full_res_padding", config.sd.img2img.inpaint_full_res_padding);
         add_pair_into_json(json, "sd_inpainting_mask_invert", config.sd.img2img.inpainting_mask_invert);
         add_pair_into_json(json, "sd_initial_noise_multiplier", config.sd.img2img.initial_noise_multiplier);
-
-        add_pair_into_json(json, "sd_latent_mask", config.sd.img2img.latent_mask);
+        add_pair_into_json(json, "sd_latent_mask", base64_encode(read_file_to_string(string_to_path_by_config(config.sd.img2img.latent_mask, config))));
     }
 
     add_pair_into_json(json, "force_task_id", config.sd.force_task_id);
