@@ -515,7 +515,7 @@ struct sd_parameters
 
     bool abg_remover_enable{};
 
-    std::string mode;
+    sd_mode mode;
     sd_txt2img_parameters txt2img;
     sd_img2img_parameters img2img;
 };
@@ -702,8 +702,7 @@ std::string make_automatic1111_png_parameters(const sd_parameters& parameters, s
 std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt,
-    sd_mode mode
+    std::string_view negative_prompt
 );
 
 std::string send_style_bert_voice_request(
@@ -1874,8 +1873,7 @@ std::string make_automatic1111_png_parameters(const sd_parameters& parameters, s
 std::string send_automatic1111_txt2img_request(
     const config& config,
     std::string_view prompt,
-    std::string_view negative_prompt,
-    sd_mode mode
+    std::string_view negative_prompt
 )
 {
     namespace beast = boost::beast;
@@ -1931,7 +1929,7 @@ std::string send_automatic1111_txt2img_request(
     add_pair_into_json(json, "firstpass_image", config.sd.firstpass_image);
     add_pair_into_json(json, "comments", config.sd.comments);
 
-    if (mode == sd_mode::txt2img)
+    if (config.sd.mode == sd_mode::txt2img)
     {
         add_pair_into_json(json, "enable_hr", config.sd.txt2img.enable_hr);
         add_pair_into_json(json, "firstphase_width", config.sd.txt2img.firstphase_width);
@@ -1945,7 +1943,7 @@ std::string send_automatic1111_txt2img_request(
         //add_pair_into_json(json, "hr_prompt", prompt);
         //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
     }
-    else if (mode == sd_mode::img2img)
+    else if (config.sd.mode == sd_mode::img2img)
     {
         add_pair_into_json_from_vector(json, "sd_init_images", image_paths_to_base64_encoded_strings(config.sd.img2img.init_images, config));
         add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
@@ -2042,7 +2040,7 @@ std::string send_automatic1111_txt2img_request(
     const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(mode, config), 11 };
+    http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(config.sd.mode, config), 11 };
     request.set(http::field::host, config.sd.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -3479,6 +3477,7 @@ int parse_command_line(
         config.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
         std::string command_mode_string;
+        std::string sd_mode_string;
 
         po::options_description allowed_options("Allowed options");
         allowed_options.add_options()
@@ -3672,7 +3671,7 @@ int parse_command_line(
             ("sd-infotext", po::value<std::string>(&config.sd.infotext)->default_value(""), "SD infotext")
             ("sd-abg-remover-enable", po::bool_switch(&config.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
-            ("sd-mode", po::value<std::string>(&config.sd.mode)->default_value("txt2img"), "SD mode (txt2img | img2img)")
+            ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
 
             ("sd-txt2img-target", po::value<std::string>(&config.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
             ("sd-enable-hr", po::bool_switch(&config.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
@@ -3747,6 +3746,7 @@ int parse_command_line(
         po::notify(vm);
 
         config.command_mode = string_to_command_mode(command_mode_string);
+        config.sd.mode = string_to_sd_mode(sd_mode_string);
 
         if (vm.count("config-file"))
         {
@@ -3922,7 +3922,7 @@ void generate_and_output(const config& config)
     {
         const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
         const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
-        const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, string_to_sd_mode(config.sd.mode)) };
+        const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
         write_file(config, image, config.sd.output_file, std::ios_base::binary);
     }
     else if (config.command_mode == command_mode::sb)
