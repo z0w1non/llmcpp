@@ -1649,8 +1649,8 @@ std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector
 {
     std::vector<std::string> encoded_images;
     encoded_images.reserve(paths.size());
-    boost::transform(paths, std::back_inserter(encoded_images),
-        [&config](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, config); });
+    auto unary_operator = [&config](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, config); };
+    boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
     return encoded_images;
 }
 
