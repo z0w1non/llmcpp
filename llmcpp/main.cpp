@@ -1178,7 +1178,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 namespace builtin
 {
-    std::string include(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string file(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string head(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string head_tail(const std::vector<std::string>& arguments, const config& config, context& ctx);
@@ -1193,7 +1193,7 @@ namespace builtin
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
-        {"include", include},
+        {"file", file},
         {"head", head},
         {"tail", tail},
         {"head_tail", head_tail},
@@ -1373,7 +1373,7 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
     return input;
 }
 
-std::string builtin::include(const std::vector<std::string>& arguments, const config& config, context& ctx)
+std::string builtin::file(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
     if (arguments.size() < 1)
     {
@@ -1391,7 +1391,7 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::string_view filename{ arguments[0] };
+    const std::string_view str{ arguments[0] };
     int max_tokens{};
     try
     {
@@ -1403,13 +1403,9 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(filename, ".txt"), config) };
-    const std::string file_content{ read_file_to_string(file_path) };
-    const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
-
     std::string result;
     int tokens{};
-    truncate_by_tokens(expaned_file_content, max_tokens, config, reverse, result, tokens);
+    truncate_by_tokens(str, max_tokens, config, reverse, result, tokens);
 
     return result;
 }
@@ -1431,7 +1427,7 @@ std::string builtin::head_tail(const std::vector<std::string>& arguments, const 
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::string_view filename{ arguments[0] };
+    const std::string_view str{ arguments[0] };
     int head_max_tokens{};
     int tail_max_tokens{};
     try
@@ -1447,21 +1443,18 @@ std::string builtin::head_tail(const std::vector<std::string>& arguments, const 
     const std::string_view ellipsis{ "..." };
     const int ellipsis_tokens{ get_tokens_from_cache(config, ellipsis) };
 
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(filename, ".txt"), config) };
-    const std::string file_content{ read_file_to_string(file_path) };
-    const std::string expaned_file_content{ expand_macro(file_content, config, ctx) };
-    const int total_tokens{ get_tokens_from_cache(config, expaned_file_content) };
+    const int total_tokens{ get_tokens_from_cache(config, str) };
 
     if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
     {
-        return expaned_file_content;
+        return std::string{ str };
     }
 
     std::string result;
     int tokens{};
-    truncate_by_tokens(expaned_file_content, head_max_tokens, config, false, result, tokens);
+    truncate_by_tokens(str, head_max_tokens, config, false, result, tokens);
     result.append(ellipsis);
-    truncate_by_tokens(expaned_file_content, tail_max_tokens, config, true, result, tokens);
+    truncate_by_tokens(str, tail_max_tokens, config, true, result, tokens);
 
     return result;
 }
