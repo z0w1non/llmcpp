@@ -398,9 +398,38 @@ struct alwayson_scripts
 
 struct sd_txt2img_parameters
 {
+    std::string target;
+};
+
+struct sd_img2img_parameters
+{
+    std::string target;
+
+    std::vector<std::string> init_images;
+
+    int seed_resize_from_h{};
+    int seed_resize_from_w{};
+
+    int resize_mode{};
+    double image_cfg_scale{};
+    std::string mask;
+    int mask_blur_x{};
+    int mask_blur_y{};
+    int mask_blur{};
+    bool mask_round{};
+    int inpainting_fill{};
+    bool inpaint_full_res{};
+    int inpaint_full_res_padding{};
+    int inpainting_mask_invert{};
+
+    double initial_noise_multiplier{};
+    std::string latent_mask;
+};
+
+struct sd_parameters
+{
     std::string host;
     std::string port;
-    std::string target;
 
     std::string prompt_file;
     std::string negative_prompt_file;
@@ -463,6 +492,9 @@ struct sd_txt2img_parameters
     std::string infotext;
 
     bool abg_remover_enable{};
+
+    sd_txt2img_parameters txt2img;
+    sd_img2img_parameters img2img;
 };
 
 struct sb_generation_parameters
@@ -579,7 +611,7 @@ struct config
     llm_prompt_parameters llm;
     tg_completions_parameters tg;
     kc_generation_parameters kc;
-    sd_txt2img_parameters sd;
+    sd_parameters sd;
     sb_generation_parameters sb;
     cu_generation_parameters cu;
 
@@ -626,7 +658,7 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
     unsigned int expires_after
 );
 
-std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
+std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
 std::string send_automatic1111_txt2img_request(
     const config& config,
@@ -1721,7 +1753,7 @@ boost::beast::http::response<boost::beast::http::string_body> send_http_get(
 };
 
 // unused
-std::string make_automatic1111_png_parameters(const sd_txt2img_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
 {
     std::ostringstream oss;
     oss
@@ -1887,7 +1919,7 @@ std::string send_automatic1111_txt2img_request(
     const std::string request_body{ picojson::value{ json }.serialize() };
     BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-    http::request<http::string_body> request{ http::verb::post, config.sd.target, 11 };
+    http::request<http::string_body> request{ http::verb::post, config.sd.txt2img.target, 11 };
     request.set(http::field::host, config.sd.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -3465,7 +3497,6 @@ int parse_command_line(
 
             ("sd-host", po::value<std::string>(&config.sd.host)->default_value("localhost"), "SD host")
             ("sd-port", po::value<std::string>(&config.sd.port)->default_value("7860"), "SD port")
-            ("sd-target", po::value<std::string>(&config.sd.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
             ("sd-prompt-file", po::value<std::string>(&config.sd.prompt_file)->default_value("prompt.txt"), "SD prompt file")
             ("sd-negative-prompt-file", po::value<std::string>(&config.sd.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
             ("sd-output-file", po::value<std::string>(&config.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
@@ -3526,6 +3557,26 @@ int parse_command_line(
             ("sd-ad-negative-prompt", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
             ("sd-infotext", po::value<std::string>(&config.sd.infotext)->default_value(""), "SD infotext")
             ("sd-abg-remover-enable", po::bool_switch(&config.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+
+            ("sd-txt2img-target", po::value<std::string>(&config.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+
+            ("sd-img2img-target", po::value<std::string>(&config.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
+            ("sd-init-images", po::value<std::vector<std::string>>(&config.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
+            ("sd-seed-resize-from-h", po::value<int>(&config.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
+            ("sd-seed-resize-from-w", po::value<int>(&config.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
+            ("sd-resize-mode", po::value<int>(&config.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
+            ("sd-image-cfg-scale", po::value<double>(&config.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
+            ("sd-mask", po::value<std::string>(&config.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
+            ("sd-mask-blur-x", po::value<int>(&config.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
+            ("sd-mask-blur-y", po::value<int>(&config.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
+            ("sd-mask-blur", po::value<int>(&config.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
+            ("sd-mask-round", po::bool_switch(&config.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
+            ("sd-inpainting-fill", po::value<int>(&config.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
+            ("sd-inpaint-full-res", po::bool_switch(&config.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
+            ("sd-inpaint-full-res-padding", po::value<int>(&config.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
+            ("sd-inpainting-mask-invert", po::value<int>(&config.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
+            ("sd-initial-noise-multiplier", po::value<double>(&config.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
+            ("sd-latent-mask", po::value<std::string>(&config.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
 
             ("sb-host", po::value<std::string>(&config.sb.host)->default_value("localhost"), "SB host")
             ("sb-port", po::value<std::string>(&config.sb.port)->default_value("5001"), "SB port")
