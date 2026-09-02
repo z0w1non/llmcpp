@@ -681,6 +681,8 @@ std::string base64_decode(std::string_view encoded_string);
 
 std::string trim(std::string_view str);
 
+std::string console_string_to_u8string(std::string_view input);
+
 void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
 
 void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
@@ -989,6 +991,44 @@ std::string trim(std::string_view str)
     trimmed_string = std::regex_replace(trimmed_string, leading_spaces, {});
     trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
     return trimmed_string;
+}
+
+std::string console_string_to_u8string(std::string_view input)
+{
+#ifdef _WIN32
+    if (input.empty())
+    {
+        return std::string{};
+    }
+
+    const UINT cp{ GetConsoleOutputCP() };
+    if (cp == CP_UTF8)
+    {
+        return std::string{ input };
+    }
+
+    int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
+    if (wstring_length <= 0)
+    {
+        return std::string{ input };
+    }
+
+    std::wstring wstring(wstring_length, L'\0');
+    MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
+
+    int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
+    if (u8string_length <= 0)
+    {
+        return std::string{ input };
+    }
+
+    std::string u8_string(u8string_length, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, u8_string.data(), u8string_length, nullptr, nullptr);
+
+    return u8_string;
+#else
+    return std::string{ input };
+#endif
 }
 
 template<typename Integer>
@@ -1466,44 +1506,6 @@ std::string builtin::choice(const std::vector<std::string>& arguments, const con
     }
 
     return arguments[::random<std::size_t>(0, arguments.size() - 1)];
-}
-
-std::string console_string_to_u8string(std::string_view input)
-{
-#ifdef _WIN32
-    if (input.empty())
-    {
-        return std::string{};
-    }
-
-    const UINT cp{ GetConsoleOutputCP() };
-    if (cp == CP_UTF8)
-    {
-        return std::string{ input };
-    }
-
-    int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
-    if (wstring_length <= 0)
-    {
-        return std::string{ input };
-    }
-
-    std::wstring wstring(wstring_length, L'\0');
-    MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
-
-    int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
-    if (u8string_length <= 0)
-    {
-        return std::string{ input };
-    }
-
-    std::string u8_string(u8string_length, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, u8_string.data(), u8string_length, nullptr, nullptr);
-
-    return u8_string;
-#else
-    return std::string{ input };
-#endif
 }
 
 std::string builtin::exec(const std::vector<std::string>& arguments, const config& config, context& ctx)
