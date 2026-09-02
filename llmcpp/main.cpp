@@ -606,9 +606,21 @@ struct item
     std::vector<std::string> descriptions;
 };
 
+enum class command_mode
+{
+    none,
+    tg,
+    kc,
+    sd,
+    sb,
+    cu
+};
+
+command_mode string_to_command_mode(std::string_view str);
+
 struct config
 {
-    std::string mode;
+    command_mode command_mode;
     std::string base_path;
     std::string log_level;
     std::string log_file;
@@ -803,6 +815,23 @@ void process_create_or_terminate(const config& config);
 void iterate(config& config);
 
 int exception_safe_main(int argc, char** argv);
+
+command_mode string_to_command_mode(std::string_view str)
+{
+    static const std::unordered_map<std::string_view, command_mode> map
+    {
+        { "tg", command_mode::tg },
+        { "kc", command_mode::kc },
+        { "sd", command_mode::sd },
+        { "sb", command_mode::sb },
+        { "cu", command_mode::cu }
+    };
+    if (const auto iter{ map.find(str) }; iter != map.end())
+    {
+        return iter->second;
+    }
+    throw command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ str } };
+}
 
 context::context()
 {
@@ -1649,7 +1678,7 @@ std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector
 {
     std::vector<std::string> encoded_images;
     encoded_images.reserve(paths.size());
-    auto unary_operator = [&config](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, config); };
+    const auto unary_operator = [&config](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, config); };
     boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
     return encoded_images;
 }
@@ -2817,7 +2846,7 @@ int get_tokens_from_cache(const config& config, std::string_view str)
 
 void write_cache(const config& config)
 {
-    if (config.mode != "tg"/* && config.mode != "kc"*/)
+    if (config.command_mode != command_mode::tg/* && config.command_mode != command_mode::kc*/)
     {
         return;
     }
@@ -2842,7 +2871,7 @@ void write_cache(const config& config)
 
 void read_cache(const config& config)
 {
-    if (config.mode != "tg")
+    if (config.command_mode != command_mode::tg)
     {
         return;
     }
@@ -3233,7 +3262,7 @@ void init_llm_mode(config& config)
         set_paragraphs_to_phases(paragraphs, config.phases);
     }
 
-    if (config.mode == "tg")
+    if (config.command_mode == command_mode::tg)
     {
         config.llm.backend = &config.tg;
         if (config.llm.completions_target.empty())
@@ -3245,7 +3274,7 @@ void init_llm_mode(config& config)
             config.llm.token_count_target = "/v1/internal/token-count";
         }
     }
-    else if (config.mode == "kc")
+    else if (config.command_mode == command_mode::kc)
     {
         config.llm.backend = &config.kc;
         if (config.llm.completions_target.empty())
@@ -3449,10 +3478,12 @@ int parse_command_line(
         };
         config.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
+        std::string command_mode_string;
+
         po::options_description allowed_options("Allowed options");
         allowed_options.add_options()
             ("help,h", "produce help message")
-            ("mode", po::value<std::string>(&config.mode)->default_value("tg"), "Specify mode tg | kc | sd | sb")
+            ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg|kc|sd|sb|cu)")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
             ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
@@ -3715,6 +3746,8 @@ int parse_command_line(
         po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
         po::notify(vm);
 
+        config.command_mode = string_to_command_mode(command_mode_string);
+
         if (vm.count("config-file"))
         {
             const std::filesystem::path config_file_path{ string_to_path_by_config(config.config_file, config) };
@@ -3738,19 +3771,19 @@ int parse_command_line(
 
         init_logging(config);
 
-        if (config.mode == "tg" || config.mode == "kc")
+        if (config.command_mode == command_mode::tg || config.command_mode == command_mode::kc)
         {
             init_llm_mode(config);
         }
-        else if (config.mode == "sd")
+        else if (config.command_mode == command_mode::sd)
         {
             ;
         }
-        else if (config.mode == "sb")
+        else if (config.command_mode == command_mode::sb)
         {
             ;
         }
-        else if (config.mode == "cu")
+        else if (config.command_mode == command_mode::cu)
         {
             ;
         }
@@ -3880,25 +3913,25 @@ std::string prompt_from_string_or_file_path(
 
 void generate_and_output(const config& config)
 {
-    if (config.mode == "tg" || config.mode == "kc")
+    if (config.command_mode == command_mode::tg || config.command_mode == command_mode::kc)
     {
         const std::string prompt{ prompt_from_string_or_file_path(config.llm.prompt, config.llm.prompt_file, config) };
         generate_text_and_write(config, prompt, config.context);
     }
-    else if (config.mode == "sd")
+    else if (config.command_mode == command_mode::sd)
     {
         const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
         const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
         const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string, string_to_sd_mode(config.sd.mode)) };
         write_file(config, image, config.sd.output_file, std::ios_base::binary);
     }
-    else if (config.mode == "sb")
+    else if (config.command_mode == command_mode::sb)
     {
         const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb.text, config.sb.text_file, config), config, config.context) };
         const std::string voice{ send_style_bert_voice_request(config, text) };
         write_file(config, voice, config.sb.output_file, std::ios_base::binary);
     }
-    else if (config.mode == "cu")
+    else if (config.command_mode == command_mode::cu)
     {
         const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu.prompt, config.cu.prompt_file, config), config, config.context) };
         send_comfy_ui_prompt(config, prompt);
@@ -3990,7 +4023,7 @@ int exception_safe_main(int argc, char** argv)
 
         set_static_builtin_variables(config);
 
-        if (config.mode == "cu")
+        if (config.command_mode == command_mode::cu)
         {
             upload_images_to_comfy_ui(config, config.context);
         }
