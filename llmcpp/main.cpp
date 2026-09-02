@@ -24,6 +24,9 @@
 #include <boost/beast/version.hpp>
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/readable_pipe.hpp>
+#include <boost/asio/read.hpp>
 #include <boost/program_options.hpp>
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -57,6 +60,7 @@
 #include <boost/process/v2/process.hpp>
 #include <boost/process/v2/environment.hpp>
 #include <boost/process/v2/execute.hpp>
+#include <boost/process/v2/stdio.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
@@ -90,39 +94,39 @@
 #include <unistd.h>
 #endif
 
-class runtime_exception
-    : public boost::exception
-    , public std::exception
+struct runtime_exception
+    : virtual boost::exception
+    , virtual std::exception
 {
 public:
     runtime_exception();
 };
 
-class logic_error
-    : public boost::exception
-    , public std::exception
+struct logic_error
+    : virtual boost::exception
+    , virtual std::exception
 {
 public:
     logic_error();
 };
 
-class io_exception : public runtime_exception {};
-class file_open_exception : public io_exception {};
-class socket_exception : public runtime_exception {};
-class text_generation_exception : public runtime_exception {};
-class image_generation_exception : public runtime_exception {};
-class comfy_ui_generation_exception : public runtime_exception {};
-class syntax_exception : public runtime_exception {};
-class json_parse_exception : public runtime_exception {};
-class macro_exception : public runtime_exception {};
-class command_line_exception : public runtime_exception {};
-class array_index_out_of_bounds_exception : public runtime_exception {};
-class dns_resolve_exception : public runtime_exception {};
-class connect_exception : public runtime_exception {};
-class http_send_exception : public runtime_exception {};
-class http_receive_exception : public runtime_exception {};
-class http_status_exception : public runtime_exception {};
-class png_exception : public runtime_exception {};
+struct io_exception : runtime_exception {};
+struct file_open_exception : io_exception {};
+struct socket_exception : runtime_exception {};
+struct text_generation_exception : runtime_exception {};
+struct image_generation_exception : runtime_exception {};
+struct comfy_ui_generation_exception : runtime_exception {};
+struct syntax_exception : runtime_exception {};
+struct json_parse_exception : runtime_exception {};
+struct macro_exception : runtime_exception {};
+struct command_line_exception : runtime_exception {};
+struct array_index_out_of_bounds_exception : runtime_exception {};
+struct dns_resolve_exception : runtime_exception {};
+struct connect_exception : runtime_exception {};
+struct http_send_exception : runtime_exception {};
+struct http_receive_exception : runtime_exception {};
+struct http_status_exception : runtime_exception {};
+struct png_exception : runtime_exception {};
 
 namespace error_info
 {
@@ -155,6 +159,11 @@ namespace error_info
     {
         using name = boost::error_info<struct tag_name, std::string>;
         using arguments = boost::error_info<struct tag_arguments, std::string>;
+    }
+
+    namespace system
+    {
+        using error_code = boost::error_info<struct tag_error_code, boost::system::error_code>;
     }
 }
 
@@ -829,7 +838,7 @@ command_mode string_to_command_mode(std::string_view str)
     {
         return iter->second;
     }
-    throw command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ str } };
+    BOOST_THROW_EXCEPTION(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ str } });
 }
 
 context::context()
@@ -879,7 +888,7 @@ sd_mode string_to_sd_mode(std::string_view str)
     {
         return iter->second;
     }
-    throw command_line_exception{} << error_info::description{ "Unknown sd_mode string " + std::string{ str } };
+    BOOST_THROW_EXCEPTION(command_line_exception{} << error_info::description{ "Unknown sd_mode string " + std::string{ str } });
 }
 
 std::string sd_mode_to_target(sd_mode mode, const config& config)
@@ -892,7 +901,7 @@ std::string sd_mode_to_target(sd_mode mode, const config& config)
     {
         return config.sd.img2img.target;
     }
-    throw logic_error{} << error_info::description{ "Unknown sd_mode" };
+    BOOST_THROW_EXCEPTION(logic_error{} << error_info::description{ "Unknown sd_mode" });
 }
 
 template<typename Value>
@@ -900,7 +909,7 @@ const Value& throwable_get(const picojson::value& value)
 {
     if (!value.is<Value>())
     {
-        throw json_parse_exception{};
+        BOOST_THROW_EXCEPTION(json_parse_exception{});
     }
     return value.get<Value>();
 }
@@ -910,12 +919,12 @@ const Value& throwable_at(const picojson::array& array, std::size_t index)
 {
     if (index >= array.size())
     {
-        throw json_parse_exception{};
+        BOOST_THROW_EXCEPTION(json_parse_exception{});
     }
     const picojson::value& element{ array[index] };
     if (!element.is<Value>())
     {
-        throw json_parse_exception{};
+        BOOST_THROW_EXCEPTION(json_parse_exception{});
     }
     return element.get<Value>();
 }
@@ -926,7 +935,7 @@ const Value& throwable_find(const picojson::object& object, std::string_view key
     picojson::object::const_iterator iter{ object.find(std::string{ key }) };
     if (iter == object.end() || !iter->second.is<Value>())
     {
-        throw json_parse_exception{};
+        BOOST_THROW_EXCEPTION(json_parse_exception{});
     }
     return iter->second.get<Value>();
 }
@@ -1103,6 +1112,7 @@ namespace builtin
     std::string let(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string random(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string command(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
@@ -1115,7 +1125,8 @@ namespace builtin
         {"generated", generated},
         {"let", let},
         {"random", random},
-        {"choice", choice}
+        {"choice", choice},
+        {"command", command}
     };
 
     std::string date();
@@ -1190,9 +1201,9 @@ std::string parser::evaluate_expression(const expression& expr, const config& co
                         BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << evaluated << ")";
                         return evaluated;
                     }
-                    catch (const runtime_exception&)
+                    catch (const runtime_exception& e)
                     {
-                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ")";
+                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ") " << boost::diagnostic_information(e);
                     }
 
                     return std::string{};
@@ -1248,7 +1259,7 @@ std::string parser::evaluate_document(std::string_view document, const config& c
     {
         std::ostringstream description;
         description << "Parse failed at: " << std::string{ iter, end };
-        throw macro_exception{} << error_info::description{ description.str() };
+        BOOST_THROW_EXCEPTION(macro_exception{} << error_info::description{ description.str() });
     }
 }
 
@@ -1278,7 +1289,7 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
 
     if (depth >= max_depth)
     {
-        throw macro_exception{} << error_info::description{ "Maximum recursion depth reached." };
+        BOOST_THROW_EXCEPTION(macro_exception{} << error_info::description{ "Maximum recursion depth reached." });
     }
 
     return input;
@@ -1288,7 +1299,7 @@ std::string builtin::include(const std::vector<std::string>& arguments, const co
 {
     if (arguments.size() < 1)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
@@ -1299,7 +1310,7 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
 {
     if (arguments.size() < 2)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::string_view filename{ arguments[0] };
@@ -1311,7 +1322,7 @@ std::string head_tail_impl(const std::vector<std::string>& arguments, const conf
     }
     catch (const boost::bad_lexical_cast&)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(filename, ".txt"), config) };
@@ -1339,7 +1350,7 @@ std::string builtin::head_tail(const std::vector<std::string>& arguments, const 
 {
     if (arguments.size() < 3)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::string_view filename{ arguments[0] };
@@ -1352,7 +1363,7 @@ std::string builtin::head_tail(const std::vector<std::string>& arguments, const 
     }
     catch (const boost::bad_lexical_cast&)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::string_view ellipsis{ "..." };
@@ -1381,7 +1392,7 @@ std::string builtin::json_literal(const std::vector<std::string>& arguments, con
 {
     if (arguments.size() < 1)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     return json_escape_string(arguments[0]);
@@ -1391,7 +1402,7 @@ std::string builtin::env(const std::vector<std::string>& arguments, const config
 {
     if (arguments.size() < 1)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const char* env{ boost::nowide::getenv(arguments[0].c_str()) };
@@ -1408,7 +1419,7 @@ std::string builtin::generated(const std::vector<std::string>& arguments, const 
 {
     if (arguments.size() < 1)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
@@ -1427,7 +1438,7 @@ std::string builtin::let(const std::vector<std::string>& arguments, const config
 {
     if (arguments.size() < 2)
     {
-        throw macro_exception{};
+        BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::string_view key{ arguments[0] };
@@ -1454,6 +1465,54 @@ std::string builtin::choice(const std::vector<std::string>& arguments, const con
     }
 
     return arguments[::random<std::size_t>(0, arguments.size() - 1)];
+}
+
+std::string builtin::command(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    namespace process = boost::process::v2;
+    namespace asio = boost::asio;
+
+    if (arguments.size() < 1)
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{});
+    }
+
+    const std::string_view exe_name{ arguments[0] };
+    std::vector<std::string> args;
+    if (arguments.size() > 1)
+    {
+        args.reserve(arguments.size() - 1);
+        args.assign(arguments.begin() + 1, arguments.end());
+    }
+
+    const auto exe_path{ process::environment::find_executable(exe_name) };
+    if (exe_path.empty())
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{});
+    }
+
+    asio::io_context ioctx;
+    asio::readable_pipe pipe{ ioctx };
+    int exit_code{};
+
+    process::process_stdio pstdio{ nullptr, pipe, {} };
+    process::process child{ ioctx, exe_path, args,  pstdio };
+    exit_code = child.wait();
+
+    std::string output;
+    boost::system::error_code error_code;
+    asio::async_read(pipe, asio::dynamic_buffer(output), [&](const boost::system::error_code& ec, std::size_t) { error_code = ec; });
+
+    ioctx.run();
+
+    if (error_code && error_code != asio::error::eof)
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{} << error_info::system::error_code{ error_code });
+    }
+
+    ctx.set("exit_code", std::to_string(exit_code));
+
+    return output;
 }
 
 std::string builtin::date()
@@ -1656,12 +1715,12 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     std::string result;
     if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
     {
-        throw file_open_exception{} << error_info::path{ file };
+        BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ file });
     }
     boost::nowide::ifstream ifs{ file, openmode };
     if (!ifs.is_open())
     {
-        throw file_open_exception{} << error_info::path{ file };
+        BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ file });
     }
     const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
     result = file_content;
@@ -1782,7 +1841,7 @@ namespace tEXt
         constexpr std::size_t ihdr_end_offset{ 8 + 25 };
         if (image.size() < ihdr_end_offset)
         {
-            throw png_exception{};
+            BOOST_THROW_EXCEPTION(png_exception{});
         }
 
         const std::vector<unsigned char> text_chunk{ create_tEXt_chunk(key, metadata) };
@@ -1803,7 +1862,7 @@ void if_error_throw(const boost::beast::error_code& error_code)
 {
     if (error_code)
     {
-        throw BoostException{} << error_info::beast::error_code{ error_code };
+        BOOST_THROW_EXCEPTION(BoostException{} << error_info::beast::error_code{ error_code });
     }
 }
 
@@ -2066,7 +2125,7 @@ std::string send_automatic1111_txt2img_request(
 
     if (base64_image_data.empty())
     {
-        throw image_generation_exception{} << error_info::description{ "No image data found in the response." };
+        BOOST_THROW_EXCEPTION(image_generation_exception{} << error_info::description{ "No image data found in the response." });
     }
 
     const std::string decoded_image{ base64_decode(base64_image_data) };
@@ -2166,10 +2225,10 @@ std::string send_style_bert_voice_request(
 
     if (response.result() != http::status::ok)
     {
-        throw http_status_exception{}
+        BOOST_THROW_EXCEPTION(http_status_exception{}
             << error_info::http::response::status{ response.result() }
             << error_info::http::response::reason{ std::to_string(response.result_int()) }
-        ;
+        );
     }
 
     return response.body();
@@ -2249,7 +2308,7 @@ std::string upload_image_to_comfy_ui(
 
     if (response.result() != http::status::ok)
     {
-        throw comfy_ui_generation_exception{} << error_info::description{ "Failed to upload image: " + response.body() };
+        BOOST_THROW_EXCEPTION(comfy_ui_generation_exception{} << error_info::description{ "Failed to upload image: " + response.body() });
     }
 
     picojson::value response_json;
@@ -2381,7 +2440,7 @@ void send_comfy_ui_prompt(
                 const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
                 if (status_str == "error")
                 {
-                    throw comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." };
+                    BOOST_THROW_EXCEPTION(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." });
                 }
             }
             catch (const json_parse_exception&) {
@@ -2575,10 +2634,10 @@ std::string send_completions_request(
 
     if (response.result() != http::status::ok)
     {
-        throw http_status_exception{}
+        BOOST_THROW_EXCEPTION(http_status_exception{}
             << error_info::http::response::status{ response.result() }
             << error_info::http::response::reason{ std::to_string(response.result_int()) }
-        ;
+        );
     }
 
     return params.parse_response_for_text_completions(response);
@@ -2806,10 +2865,10 @@ int send_token_count_request(const config& config, std::string_view prompt)
 
     if (response.result() != http::status::ok)
     {
-        throw http_status_exception{}
+        BOOST_THROW_EXCEPTION(http_status_exception{}
             << error_info::http::response::status{ response.result() }
             << error_info::http::response::reason{ std::to_string(response.result_int()) }
-        ;
+        );
     }
 
     return config.llm.backend->parse_response_for_token_count(response);
@@ -2901,7 +2960,7 @@ void read_cache(const config& config)
     catch (const boost::exception& exception)
     {
         BOOST_LOG_TRIVIAL(error) << boost::diagnostic_information(exception);
-        throw syntax_exception{};
+        BOOST_THROW_EXCEPTION(syntax_exception{});
     }
 }
 
@@ -3113,7 +3172,7 @@ void init_logging_with_nowide_file_log(const std::filesystem::path& log)
     boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
     if (!ofs->is_open())
     {
-        throw file_open_exception{} << error_info::path{ log };
+        BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ log });
     }
     backend->add_stream(ofs);
     backend->auto_flush(true);
@@ -3200,7 +3259,7 @@ void set_phase_variables(
 {
     if (phase_index >= phases.size())
     {
-        throw array_index_out_of_bounds_exception{};
+        BOOST_THROW_EXCEPTION(array_index_out_of_bounds_exception{});
     }
 
     if (phase_index > 0)
@@ -3321,7 +3380,7 @@ bool wait_for_port(const std::string& host, const std::string& port, unsigned in
     const boost::asio::ip::tcp::resolver::results_type results{ resolver.resolve(host, port, error_code) };
     if (error_code || results.empty())
     {
-        throw dns_resolve_exception{} << error_info::asio::error_code{ error_code };
+        BOOST_THROW_EXCEPTION(dns_resolve_exception{} << error_info::asio::error_code{ error_code });
     }
 
     boost::asio::ip::tcp::endpoint endpoint{ *results.begin() };
@@ -3756,7 +3815,7 @@ int parse_command_line(
                 boost::nowide::ifstream ifs{ config_file_path };
                 if (!ifs.is_open())
                 {
-                    throw file_open_exception{} << error_info::path{ config_file_path };
+                    BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ config_file_path });
                 }
                 po::store(po::parse_config_file(ifs, allowed_options), vm, true);
                 po::notify(vm);
@@ -3803,7 +3862,7 @@ int parse_command_line(
     }
     catch (const po::error& e)
     {
-        throw command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() };
+        BOOST_THROW_EXCEPTION(command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() });
     }
 
     return 0;
@@ -3857,7 +3916,7 @@ void write_file(const config& config, std::string_view response, std::string_vie
     boost::nowide::ofstream ofs{ file_path, mode };
     if (!ofs.is_open())
     {
-        throw file_open_exception{} << error_info::path{ file_path };
+        BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ file_path });
     }
     ofs << response;
 
