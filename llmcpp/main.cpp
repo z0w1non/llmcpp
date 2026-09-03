@@ -4051,7 +4051,8 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
 void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
     const bool is_binary{ (mode & std::ios_base::binary) != 0 };
-    const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complement_extension(filepath, ".txt"), config) };
+    const std::string complemented{ complement_extension(filepath, ".txt") };
+    const std::filesystem::path file_path{ string_to_path_by_config(complemented, config) };
     create_parent_directories(file_path);
     boost::nowide::ofstream ofs{ file_path, mode };
     if (!ofs.is_open())
