@@ -289,17 +289,17 @@ Summarize the following text in {{max_token}} tokens or fewer. Output only the s
 `{{target}}`, `{{max_token}}` は `prompt` の実行中のみ設定される。展開語の文字列のトークン数は `max_token` に切り詰められる。
 
 
-### `{{random(min, max)}}`
+### `random(min, max)`
 ランダムな整数値の10進数表記に展開される。引数は後ろ側から省略可能。`min` のデフォルト値は `0`、`max` のデフォルト値は `2147483647` である。`{{random()}}` で 32bit 整数値の表現範囲のうち正の値のみに展開される。例えば seed 値を実行単位で変更することができる。
 
-### `{{choice(args ...)}}`
+### `choice(args ...)`
 任意の数の文字列からランダムにひとつ選択して展開する。
 
 ```
 {{choice("foo", "bar")}}
 ```
 
-### `{{phase}}`
+### `phase`
 1回の処理は1個以上の phase から構成され、それらは順番に実行される。
 phase は `--phases "MyPhase1" "MyPhase2" "MyPhase3"` オプションで任意の数だけ指定可能である。 
 現在実行中の phase は、プロンプトの内容に `{{phase}}` マクロを記述することにより、実行時に参照できる。
