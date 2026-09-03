@@ -91,8 +91,8 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 
 | オプション | 概要 | デフォルト値 |
 | --- | --- | --- |
-| --llm-prompt-file | プロンプトファイル | prompt.txt |
-| --llm-output-file | 出力ファイル | output.txt |
+| --llm-prompt-file | プロンプトファイル | prompt |
+| --llm-output-file | 出力ファイル | output |
 
 必要に応じて下記のオプションで通信先を指定する。oobabooga をデフォルトの設定で運用している場合、明示的に指定する必要はない。
 プロンプトとは、例えば以下のようなテキストである。
