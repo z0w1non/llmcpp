@@ -782,7 +782,6 @@ void read_cache(const config& config);
 std::string generate_text(
     const config& config,
     std::string_view prompt,
-    std::string_view prefix,
     const context& ctx
 );
 
@@ -1496,13 +1495,12 @@ std::string builtin::generated(const std::vector<std::string>& arguments, const 
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::string prompt{ arguments[1] };
-    const std::string prefix{ arguments.size() >= 2 ? arguments[1] : std::string{} };
+    const std::string prompt{ arguments[0] };
 
     std::string result;
     {
         context pushed{ ctx.make_pushed() };
-        result = generate_text(config, prompt, prefix, pushed);
+        result = generate_text(config, prompt, pushed);
     }
     return result;
 }
@@ -1610,18 +1608,17 @@ std::string builtin::code_block(const std::vector<std::string>& arguments, const
 
 std::string builtin::summary(const std::vector<std::string>& arguments, const config& config, context& ctx)
 {
-    if (arguments.size() < 4)
+    if (arguments.size() < 3)
     {
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
     const std::string_view prompt{ arguments[0] };
-    const std::string_view prefix{ arguments[1] };
-    const std::string_view target{ arguments[2] };
+    const std::string_view target{ arguments[1] };
     int max_token{};
     try
     {
-        max_token = boost::lexical_cast<int>(arguments[3]);
+        max_token = boost::lexical_cast<int>(arguments[2]);
     }
     catch (const boost::bad_lexical_cast&)
     {
@@ -1635,7 +1632,8 @@ std::string builtin::summary(const std::vector<std::string>& arguments, const co
         context pushed{ ctx.make_pushed() };
         pushed.set("target", target);
         pushed.set("max_token", std::to_string(max_token));
-        output = generate_text(config, prompt, prefix, pushed);
+        output = generate_text(config, prompt, pushed);
+        output = remove_reasoning(output, config.llm.reasoning_prefix, config.llm.reasoning_suffix);
     }
 
     std::string truncated;
@@ -2720,7 +2718,7 @@ void write_item_list(const config& config, std::string_view task)
         {
             descriptions.append(description);
         }
-        write_file(config, descriptions, complement_extension(item.head, ".txt"), std::ios_base::binary);
+        write_file(config, descriptions, item.head, std::ios_base::binary);
     }
 }
 
@@ -3107,12 +3105,11 @@ void read_cache(const config& config)
 std::string generate_text(
     const config& config,
     std::string_view prompt,
-    std::string_view prefix,
     const context& ctx
 )
 {
     std::string expanded_prompt{ expand_macro(prompt, config, ctx) };
-    const std::string expanded_prefix{ expand_macro(prefix, config, ctx) };
+    const std::string expanded_prefix{ expand_macro(config.llm.generation_prefix, config, ctx) };
     const std::size_t initial_prompt_size{ expanded_prompt.size() };
     expanded_prompt += expanded_prefix;
 
@@ -3159,7 +3156,10 @@ std::string generate_text(
         current_tokens = send_token_count_request(config, current_prompt);
     }
 
-    return current_prompt.substr(initial_prompt_size);
+    std::string generated{ current_prompt.substr(initial_prompt_size) };
+    generated.append(config.llm.generation_suffix);
+
+    return generated;
 }
 
 std::string unescape_string(std::string_view str)
@@ -3372,7 +3372,7 @@ void init_logging(const config& config)
 
     if (!config.log_file.empty())
     {
-        const std::filesystem::path log_file_path{ string_to_path_by_config(config.log_file, config) };
+        const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(config.log_file, ".txt"), config)};
         init_logging_with_nowide_file_log(log_file_path);
     }
 
@@ -3453,8 +3453,7 @@ void init_llm_mode(config& config)
     if (!config.llm.paragraphs_file.empty())
     {
         config.phases.clear();
-        const std::filesystem::path plot_file_path{ string_to_path_by_config(config.llm.paragraphs_file, config) };
-        const std::string content{ read_file_to_string(plot_file_path) };
+        const std::string content{ read_text_file_to_string(config.llm.paragraphs_file, config) };
         std::vector<item> paragraphs{ parse_item_list(content) };
         set_paragraphs_to_phases(paragraphs, config.phases);
     }
@@ -3684,7 +3683,7 @@ int parse_command_line(
             ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg|kc|sd|sb|cu)")
             ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
             ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
-            ("log-file", po::value<std::string>(&config.log_file)->default_value("log.txt"), "log file path")
+            ("log-file", po::value<std::string>(&config.log_file)->default_value("log"), "log file path")
             ("config-file,c", po::value<std::string>(&config.config_file)->default_value("config.ini"), "config file path")
             ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
             ("expires-after", po::value<unsigned int>(&config.expires_after)->default_value(30), "connection timeout")
@@ -3703,8 +3702,8 @@ int parse_command_line(
             ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
 
             ("llm-prompt", po::value<std::string>(&config.llm.prompt)->default_value(""), "LLM prompt")
-            ("llm-prompt-file", po::value<std::string>(&config.llm.prompt_file)->default_value("prompt.txt"), "LLM prompt file path")
-            ("llm-output-file", po::value<std::string>(&config.llm.output_file)->default_value("output.txt"), "LLM output file path")
+            ("llm-prompt-file", po::value<std::string>(&config.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
+            ("llm-output-file", po::value<std::string>(&config.llm.output_file)->default_value("output"), "LLM output file path")
             ("llm-generation-prefix", po::value<std::string>(&config.llm.generation_prefix)->default_value(""), "LLM generation prefix")
             ("llm-generation-suffix", po::value<std::string>(&config.llm.generation_suffix)->default_value(""), "LLM generation suffix")
             ("llm-paragraphs-file", po::value<std::string>(&config.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
@@ -3820,8 +3819,8 @@ int parse_command_line(
 
             ("sd-host", po::value<std::string>(&config.sd.host)->default_value("localhost"), "SD host")
             ("sd-port", po::value<std::string>(&config.sd.port)->default_value("7860"), "SD port")
-            ("sd-prompt-file", po::value<std::string>(&config.sd.prompt_file)->default_value("prompt.txt"), "SD prompt file")
-            ("sd-negative-prompt-file", po::value<std::string>(&config.sd.negative_prompt_file)->default_value("negative_prompt.txt"), "SD negative prompt file")
+            ("sd-prompt-file", po::value<std::string>(&config.sd.prompt_file)->default_value("prompt"), "SD prompt file")
+            ("sd-negative-prompt-file", po::value<std::string>(&config.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
             ("sd-output-file", po::value<std::string>(&config.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
             ("sd-prompt", po::value<std::string>(&config.sd.prompt)->default_value(""), "SD prompt")
             ("sd-negative-prompt", po::value<std::string>(&config.sd.negative_prompt)->default_value(""), "SD negative prompt")
@@ -3906,7 +3905,7 @@ int parse_command_line(
             ("sb-host", po::value<std::string>(&config.sb.host)->default_value("localhost"), "SB host")
             ("sb-port", po::value<std::string>(&config.sb.port)->default_value("5001"), "SB port")
             ("sb-target", po::value<std::string>(&config.sb.target)->default_value("/voice"), "SB voide target")
-            ("sb-text-file", po::value<std::string>(&config.sb.text_file)->default_value("text.txt"), "SB text file")
+            ("sb-text-file", po::value<std::string>(&config.sb.text_file)->default_value("text"), "SB text file")
             ("sb-output-file", po::value<std::string>(&config.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
             ("sb-text", po::value<std::string>(&config.sb.text)->default_value(""), "SB text")
             ("sb-model-name", po::value<std::string>(&config.sb.model_name)->default_value(""), "SB model name")
@@ -4051,7 +4050,8 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
 
 void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
-    const std::filesystem::path file_path{ string_to_path_by_config(filepath, config) };
+    const bool is_binary{ (mode & std::ios_base::binary) != 0 };
+    const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complement_extension(filepath, ".txt"), config)};
     create_parent_directories(file_path);
     boost::nowide::ofstream ofs{ file_path, mode };
     if (!ofs.is_open())
@@ -4060,7 +4060,7 @@ void write_file(const config& config, std::string_view response, std::string_vie
     }
     ofs << response;
 
-    const std::string_view file_type{ (mode & std::ios_base::binary) ? "binary" : "text" };
+    const std::string_view file_type{ is_binary ? "binary" : "text" };
     BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
 }
 
@@ -4077,7 +4077,7 @@ void write_code_block(const config& config, std::string_view markdown)
             }
             else
             {
-                write_file(config, code, complement_extension(name, ".txt"), 0);
+                write_file(config, code, name, 0);
             }
         }
     }
@@ -4087,7 +4087,7 @@ void generate_text_and_write(const config& config, std::string_view prompt, cons
 {
     const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
 
-    std::string response{ generate_text(config, truncated_prompt, config.llm.generation_prefix, ctx) };
+    std::string response{ generate_text(config, truncated_prompt, ctx) };
     response = remove_reasoning(response, config.llm.reasoning_prefix, config.llm.reasoning_suffix);
     response += config.llm.generation_suffix;
 
@@ -4107,7 +4107,7 @@ std::string prompt_from_string_or_file_path(
     const config& config
 )
 {
-    return string.empty() ? read_file_to_string(string_to_path_by_config(file_path, config)) : std::string{ string };
+    return string.empty() ? read_text_file_to_string(file_path, config) : std::string{ string };
 }
 
 void generate_and_output(const config& config)

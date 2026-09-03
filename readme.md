@@ -77,6 +77,8 @@ llm-reasoning-suffix = <channel|>
 * sd: Stable-Diffusion-webui
 * sb: Style-Bert-VITS2
 
+パスの区切り文字は `/` でなければならない。ファイル名の拡張子は省略することができる。テキストファイルのパスが期待される文脈でパスに拡張子が含まれない場合、 `.txt` を補完する。相対パスは `--base-path` オプションで指定したパスを基準として解釈される。
+
 ## oobabooga/text-generation-webui の使用法
 oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-webui) を導入し、下記の準備をする。
 1. `text-generation-webui/user_data/CMD_FLAGS.txt` にて ` --api` オプションを指定する。
@@ -194,8 +196,6 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ただし上記のようにマクロの展開後の文字列が展開前の文字列と完全に一致した場合、再帰的なマクロの展開は中断される。
 このような冗長なマクロの定義は、マクロを含むプロンプトを LLM を使用して生成する際に、マクロの展開を抑止するために役立つ。
 
-パスの区切り文字は `/` でなければならない。ファイル名は拡張子を省略して記述し、実行時に `.txt` を補完して解釈される。相対パスは `--base-path` オプションで指定したパスを基準として解釈される。
-
 ### `{{file(path)}}`
 指定されたテキストファイルの内容に展開される。
 これによりプロンプトを複数のファイルに分割して管理することができる。
@@ -266,11 +266,11 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 exit_code={{exit_code}}
 ```
 
-### `{{summary(prompt, generation_prefix, target, max_token)}}`
+### `{{summary(prompt, target, max_token)}}`
 文字列を最大トークン数以下に要約する。
 
 ```
-{{summary(file("summary"), "<|channel>thought\n", {{stdin}}, 1024)}}
+{{summary(file("summary"), file("long_file"), 1024)}}
 ```
 
 `summary.txt` とは下記のようなファイルである。
@@ -278,7 +278,7 @@ exit_code={{exit_code}}
 ```
 <|turn>system
 <|think|>
-Summarize the following text in {{max_tokens}} tokens or fewer. Output only the summary with no introductory text, markdown formatting, or additional commentary.
+Summarize the following text in {{max_token}} tokens or fewer. Output only the summary with no introductory text, markdown formatting, or additional commentary.
 <turn|>
 <|turn>user
 {{target}}
