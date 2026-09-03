@@ -3372,7 +3372,7 @@ void init_logging(const config& config)
 
     if (!config.log_file.empty())
     {
-        const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(config.log_file, ".txt"), config)};
+        const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(config.log_file, ".txt"), config) };
         init_logging_with_nowide_file_log(log_file_path);
     }
 
@@ -4051,7 +4051,7 @@ std::string remove_reasoning(std::string_view response, std::string_view prefix,
 void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
 {
     const bool is_binary{ (mode & std::ios_base::binary) != 0 };
-    const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complement_extension(filepath, ".txt"), config)};
+    const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complement_extension(filepath, ".txt"), config) };
     create_parent_directories(file_path);
     boost::nowide::ofstream ofs{ file_path, mode };
     if (!ofs.is_open())
