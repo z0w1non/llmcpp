@@ -286,7 +286,7 @@ Summarize the following text in {{max_tokens}} tokens or fewer. Output only the 
 <|turn>model
 ```
 
-`{{target}}`, `{{max_token}}` は `prompt` の実行中のみ設定される。
+`{{target}}`, `{{max_token}}` は `prompt` の実行中のみ設定される。展開語の文字列のトークン数は `max_token` に切り詰められる。
 
 
 ### `{{random(min, max)}}`
