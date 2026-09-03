@@ -2327,8 +2327,10 @@ std::string send_style_bert_voice_request(
 std::string generate_boundary()
 {
     std::ostringstream oss;
-    oss << "----UniqueBoundary_" << std::hex << std::setfill('0');
+    oss << std::hex << std::setfill('0');
     oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+        << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+        << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
         << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
     return oss.str();
 }
@@ -2378,7 +2380,7 @@ std::string upload_image_to_comfy_ui(
     http::request<http::string_body> request{ http::verb::post, config.cu.upload_image_target, 11 };
     request.set(http::field::host, config.cu.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    request.set(http::field::content_type, "multipart/form-data; boundary=" + std::string{ boundary });
+    request.set(http::field::content_type, "multipart/form-data; boundary=" + boundary );
     request.body() = body.str();
     request.prepare_payload();
 
