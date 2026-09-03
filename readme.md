@@ -105,7 +105,7 @@ oobabooga/text-generation-webui(https://github.com/oobabooga/text-generation-web
 ## (中略)
 
 # 直近の内容
-{{include_tail:output,1024}}
+{{tail(file("output"), 1024)}}
 <turn|>
 <|turn>user
 <turn|>
