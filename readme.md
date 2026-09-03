@@ -16,9 +16,9 @@
 
 ## 機能
 * 再帰下降構文解析により実装された堅牢なマクロ機能による、プログラミング可能なプロンプト生成を提供する。
-* プロンプトや生成されたテキストを任意の複数のファイルに分割して管理する。(コードブロックによるファイル分割、 `{{include("filename"}}` マクロ)
-* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する。(`{{tail("filename", max_tokens)}}` マクロ)
-* テキストを生成する工程を自然言語による記述で構造化する。(`{{phase}}` マクロ)
+* プロンプトや生成されたテキストを任意の複数のファイルに分割して管理する。(コードブロックによるファイル分割、 `file` マクロ)
+* 小説の執筆のように、過去に生成されたテキストが蓄積し肥大化する作業において、有限で貧弱なコンテキストに収まるようプロンプトを構成する。(`head`, `tail`, `head_tail` マクロ)
+* テキストを生成する工程を自然言語による記述で構造化する。(`phase` マクロ)
 * LLM のトークナイザーが通信により返したトークン数の情報をローカルにキャッシュし高速に再利用する。
 * スタックトレースを含むデバッグに有益な情報を、重要度に応じてフィルタリング可能な形態でログ出力する。
 * 主に Windows 環境のように UTF-8 をターミナルの標準のコードページとして採用していない OS 環境に対して、文字コードを UTF-8 に統一して扱う。
@@ -196,7 +196,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 ただし上記のようにマクロの展開後の文字列が展開前の文字列と完全に一致した場合、再帰的なマクロの展開は中断される。
 このような冗長なマクロの定義は、マクロを含むプロンプトを LLM を使用して生成する際に、マクロの展開を抑止するために役立つ。
 
-### `{{file(path)}}`
+### `file(path)`
 指定されたテキストファイルの内容に展開される。
 これによりプロンプトを複数のファイルに分割して管理することができる。
 
@@ -206,7 +206,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 {{file("parent_dir/output.txt")}}
 ```
 
-### `{{head(str, max_token}}`
+### `head(str, max_token)`
 指定された文字列のうち、先頭から指定されたトークン数分の文字列に展開される。
 例えば最古の出力をプロンプトに含めることができる。
 
@@ -214,7 +214,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 {{head(file("output"), 1024)}}
 ```
 
-### `{{tail(str, max_token}}`
+### `tail(str, max_token)`
 指定された文字列のうち、末尾から指定されたトークン数分の文字列に展開される。
 例えば最新の出力をプロンプトに含めることができる。
 
@@ -222,7 +222,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 {{tail(file("output"), 1024)}}
 ```
 
-### `{{head_tail(str, head_max_token, tail_max_token}}`
+### `head_tail(str, head_max_token, tail_max_token)`
 指定されたテキストファイルの内容のうち、先頭と末尾それぞれから指定されたトークン数分の文字列に展開される。
 先頭と末尾の間は `...` で表現される。
 例えば最古と最新の出力をプロンプトに含めることができる。
@@ -230,35 +230,35 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 {{head_tail(file("output"), 512, 512)}}
 ```
 
-### `{{json_literal(str)}}`
+### `json_literal(str)`
 生改行を `\n` に置換するなど、JSON の文字列リテラルとして正しくなるようエスケープする。
 
 ```
 { "key": "{{json_literal(file("filename"))}}" }
 ```
 
-### `{{env(var)}}`
+### `env(var)`
 環境変数 `var` の値に展開される。
 ```
 {{env("path")}}
 ```
 
-### `{{datetime}}`
+### `datetime`
 `yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。主に生成したテキストを生成単位で出力する目的で使用する。
 
-### `{{N}}`
+### `N`
 1から開始する現在の反復回数に展開される。主に生成したテキストを反復単位で出力する目的で使用する。
 
-### `{{stdin}}`
+### `stdin`
 標準入力から渡された文字列に展開される。
 
-### `{{generated(subprompt)}}`
+### `generated(subprompt)`
 サブプロンプトを実行した結果に展開される。
 
-### `{{let(name, value)}}`
+### `let(name, value)`
 マクロ変数を定義する。定義されたマクロは同ファイル、および同ファイルから `generated` マクロで呼び出されたサブプロンプト内でのみ有効である。
 
-### `{{exec(exe, args ...)}}`
+### `exec(exe, args ...)`
 子プロセスとして実行ファイルを実行した結果に展開される。終了コードはマクロ変数 `{{exit_code}}` に設定される。
 
 ```
@@ -266,7 +266,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 exit_code={{exit_code}}
 ```
 
-### `{{summary(prompt, target, max_token)}}`
+### `summary(prompt, target, max_token)`
 文字列を最大トークン数以下に要約する。
 
 ```
