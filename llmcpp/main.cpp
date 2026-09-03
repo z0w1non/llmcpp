@@ -1135,7 +1135,7 @@ namespace parser
             placeholder = "{{" >> qi::skip(qi::space)[expr] >> "}}";
 
             expr = macro | variable;
-            name = lexeme[+(char_("a-zA-Z0-9_"))];
+            name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
             string_literal = lexeme['"' >> *(("\\" >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
             variable = name;
             macro = name >> arg_list;
@@ -1621,8 +1621,7 @@ std::string builtin::summary(const std::vector<std::string>& arguments, const co
     int max_token{};
     try
     {
-        max_token = boost::lexical_cast<unsigned int>(arguments[2]);
-
+        max_token = boost::lexical_cast<int>(arguments[3]);
     }
     catch (const boost::bad_lexical_cast&)
     {
