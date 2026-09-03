@@ -608,7 +608,7 @@ class context
     : private boost::noncopyable
 {
 public:
-    using variable_map_type = std::unordered_map<std::string, std::string>;
+    using variable_map_type = string_unordered_map<std::string>;
 
     context();
     context make_pushed() const;
@@ -723,6 +723,8 @@ void truncate_prompt(std::string_view string, const config& config, bool reverse
 void create_parent_directories(const std::filesystem::path& path);
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
+
+std::string read_text_file_to_string(std::string_view path, const config& config);
 
 std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config);
 
@@ -1190,6 +1192,7 @@ namespace builtin
     std::string choice(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string exec(const std::vector<std::string>& arguments, const config& config, context& ctx);
     std::string code_block(const std::vector<std::string>& arguments, const config& config, context& ctx);
+    std::string summary(const std::vector<std::string>& arguments, const config& config, context& ctx);
 
     static const std::unordered_map<std::string, std::function<std::string(const std::vector<std::string>&, const config&, context&)>> macros
     {
@@ -1204,7 +1207,8 @@ namespace builtin
         {"random", random},
         {"choice", choice},
         {"exec", exec},
-        {"code_block", code_block}
+        {"code_block", code_block},
+        {"summary", summary}
     };
 
     std::string date();
@@ -1380,8 +1384,7 @@ std::string builtin::file(const std::vector<std::string>& arguments, const confi
         BOOST_THROW_EXCEPTION(macro_exception{});
     }
 
-    const std::filesystem::path file_path{ string_to_path_by_config(complement_extension(arguments[0], ".txt"), config) };
-    return read_file_to_string(file_path);
+    return read_text_file_to_string(arguments[0], config);
 }
 
 std::string head_tail_impl(const std::vector<std::string>& arguments, const config& config, context& ctx, bool reverse)
@@ -1605,6 +1608,44 @@ std::string builtin::code_block(const std::vector<std::string>& arguments, const
     return std::string{};
 }
 
+std::string builtin::summary(const std::vector<std::string>& arguments, const config& config, context& ctx)
+{
+    if (arguments.size() < 4)
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{});
+    }
+
+    const std::string_view prompt{ arguments[0] };
+    const std::string_view prefix{ arguments[1] };
+    const std::string_view target{ arguments[2] };
+    int max_token{};
+    try
+    {
+        max_token = boost::lexical_cast<unsigned int>(arguments[2]);
+
+    }
+    catch (const boost::bad_lexical_cast&)
+    {
+        BOOST_THROW_EXCEPTION(macro_exception{});
+    }
+
+
+    std::string output;
+
+    {
+        context pushed{ ctx.make_pushed() };
+        pushed.set("target", target);
+        pushed.set("max_token", std::to_string(max_token));
+        output = generate_text(config, prompt, prefix, pushed);
+    }
+
+    std::string truncated;
+    int tokens{};
+    truncate_by_tokens(output, max_token, config, false, truncated, tokens);
+
+    return truncated;
+}
+
 std::string builtin::date()
 {
     const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
@@ -1816,6 +1857,11 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     result = file_content;
     return result;
 }
+
+std::string read_text_file_to_string(std::string_view path, const config& config)
+{
+    return read_file_to_string(string_to_path_by_config(complement_extension(path, ".txt"), config));
+};
 
 std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config)
 {
@@ -2380,7 +2426,7 @@ std::string upload_image_to_comfy_ui(
     http::request<http::string_body> request{ http::verb::post, config.cu.upload_image_target, 11 };
     request.set(http::field::host, config.cu.host);
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-    request.set(http::field::content_type, "multipart/form-data; boundary=" + boundary );
+    request.set(http::field::content_type, "multipart/form-data; boundary=" + boundary);
     request.body() = body.str();
     request.prepare_payload();
 
@@ -2601,10 +2647,13 @@ void send_comfy_ui_prompt(
         }
         relative_file_path /= file_info.filename;
 
-        const std::string view_target
-            = "/view?filename=" + file_info.filename
-            + "&subfolder=" + file_info.subfolder
-            + "&type=" + file_info.type;
+        std::string view_target;
+        view_target.append("/view?filename=");
+        view_target.append(file_info.filename);
+        view_target.append("&subfolder=");
+        view_target.append(file_info.subfolder);
+        view_target.append("&type=");
+        view_target.append(file_info.type);
 
         const http::response<http::string_body> view_response{ send_http_get(
             config.cu.host,

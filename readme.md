@@ -266,6 +266,29 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 exit_code={{exit_code}}
 ```
 
+### `{{summary(prompt, generation_prefix, target, max_token)}}`
+文字列を最大トークン数以下に要約する。
+
+```
+{{summary(file("summary"), "<|channel>thought\n", {{stdin}}, 1024)}}
+```
+
+`summary.txt` とは下記のようなファイルである。
+
+```
+<|turn>system
+<|think|>
+Summarize the following text in {{max_tokens}} tokens or fewer. Output only the summary with no introductory text, markdown formatting, or additional commentary.
+<turn|>
+<|turn>user
+{{target}}
+<turn|>
+<|turn>model
+```
+
+`{{target}}`, `{{max_token}}` は `prompt` の実行中のみ設定される。
+
+
 ### `{{random(min, max)}}`
 ランダムな整数値の10進数表記に展開される。引数は後ろ側から省略可能。`min` のデフォルト値は `0`、`max` のデフォルト値は `2147483647` である。`{{random()}}` で 32bit 整数値の表現範囲のうち正の値のみに展開される。例えば seed 値を実行単位で変更することができる。
 
