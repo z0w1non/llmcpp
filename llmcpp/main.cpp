@@ -1527,7 +1527,7 @@ primitive_type parser::evaluate_symbol(const symbol_type& symbol, const config& 
                 evaluated_args.push_back(evaluate_expression(arg, config, ctx));
             }
 
-            if (std::optional<builtin::macro_type> macro{ builtin::get_macro(value.name) }; macro)
+            if (const std::optional<builtin::macro_type> macro{ builtin::get_macro(value.name) }; macro)
             {
                 try
                 {
