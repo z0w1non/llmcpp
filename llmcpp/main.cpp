@@ -1454,11 +1454,11 @@ namespace parser
             {
                 if (const std::optional<primitive_type> variable_value{ ctx.get(value.name) }; variable_value)
                 {
-                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << primitive_to_string(*variable_value) << ")";
+                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << primitive_to_string(*variable_value) << ").";
                     return *variable_value;
                 }
 
-                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ")";
+                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ").";
 
                 return std::string{};
             }
@@ -1475,17 +1475,17 @@ namespace parser
                     try
                     {
                         const primitive_type evaluated{ (*macro)(evaluated_args, config, ctx) };
-                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << primitive_to_string(evaluated) << ")";
+                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << primitive_to_string(evaluated) << ").";
                         return evaluated;
                     }
                     catch (const boost::exception&)
                     {
-                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ") ";
+                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ").";
                         throw;
                     }
                 }
 
-                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ")";
+                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ").";
             }
             throw macro_exception{};
         }
@@ -1516,12 +1516,12 @@ namespace parser
                 try
                 {
                     const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, config, ctx)) };
-                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ")";
+                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
                     return evaluated;
                 }
                 catch (const macro_exception&)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed";
+                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed.";
                 }
             }
 
@@ -1664,15 +1664,14 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
     grammar grammar;
 
     unsigned int depth{};
-
-    while (depth < max_depth)
+    for (; depth < max_depth; ++depth)
     {
         if (input.find("{{") == std::string_view::npos)
         {
             return input;
         }
 
-        const std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
+        std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
 
         if (evaluated == input)
         {
@@ -1680,7 +1679,6 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
         }
 
         input = std::move(evaluated);
-        depth += 1;
     }
 
     if (depth >= max_depth)
