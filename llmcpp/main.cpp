@@ -211,6 +211,9 @@ struct string_hash
 template<typename T>
 using string_unordered_map = std::unordered_map<std::string, T, string_hash, std::equal_to<>>;
 
+template<typename ... Fanctors> struct overloaded : Fanctors ... { using Fanctors::operator() ...; };
+template<typename ... Fanctors> overloaded(Fanctors ...) -> overloaded<Fanctors ...>;
+
 struct config;
 
 struct text_generation_parameters
@@ -1382,156 +1385,6 @@ namespace parser
         boost::apply_visitor(primitive_visitor<divides_assign>{}, lhs, rhs);
         return lhs;
     }
-
-    struct factor_visitor
-        : public boost::static_visitor<primitive_type>
-    {
-        factor_visitor(const config& config, context& ctx)
-            : config{ config }
-            , ctx{ ctx }
-        {
-        }
-
-        template<typename Value>
-        primitive_type operator ()(const Value& value) const
-        {
-            if constexpr (std::is_same_v<Value, expression_type>)
-            {
-                return evaluate_expression(value, config, ctx);
-            }
-            else if constexpr (std::is_same_v<Value, primary_type>)
-            {
-                return evaluate_primary(value, config, ctx);
-            }
-            throw macro_exception{};
-        }
-
-        const config& config;
-        context& ctx;
-    };
-
-    struct primary_visitor
-        : public boost::static_visitor<primitive_type>
-    {
-        primary_visitor(const config& config, context& ctx)
-            : config{ config }
-            , ctx{ ctx }
-        {
-        }
-
-        template<typename Value>
-        primitive_type operator ()(const Value& value) const
-        {
-            if constexpr (std::is_same_v<Value, symbol_type>)
-            {
-                return evaluate_symbol(value, config, ctx);
-            }
-            else if constexpr (std::is_same_v<Value, primitive_type>)
-            {
-                return value;
-            }
-
-            throw macro_exception{};
-        }
-
-        const config& config;
-        context& ctx;
-    };
-
-    struct symbol_visitor
-        : public boost::static_visitor<primitive_type>
-    {
-        symbol_visitor(const config& config, context& ctx)
-            : config{ config }
-            , ctx{ ctx }
-        {
-        }
-
-        template<typename Value>
-        primitive_type operator ()(const Value& value) const
-        {
-            if constexpr (std::is_same_v<Value, variable_type>)
-            {
-                if (const std::optional<primitive_type> variable_value{ ctx.get(value.name) }; variable_value)
-                {
-                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << primitive_to_string(*variable_value) << ").";
-                    return *variable_value;
-                }
-
-                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ").";
-
-                return std::string{};
-            }
-            else if constexpr (std::is_same_v<Value, macro_call_type>)
-            {
-                std::vector<primitive_type> evaluated_args;
-                for (const expression_type& arg : value.arguments)
-                {
-                    evaluated_args.push_back(evaluate_expression(arg, config, ctx));
-                }
-
-                if (std::optional<builtin::macro_type> macro{ builtin::get_macro(value.name) }; macro)
-                {
-                    try
-                    {
-                        const primitive_type evaluated{ (*macro)(evaluated_args, config, ctx) };
-                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << primitive_to_string(evaluated) << ").";
-                        return evaluated;
-                    }
-                    catch (const boost::exception&)
-                    {
-                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ").";
-                        throw;
-                    }
-                }
-
-                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ").";
-            }
-            throw macro_exception{};
-        }
-
-        const config& config;
-        context& ctx;
-    };
-
-    struct node_visitor
-        : public boost::static_visitor<std::string>
-    {
-        node_visitor(const config& config, const grammar& grammar, context& ctx)
-            : config{ config }
-            , grammar{ grammar }
-            , ctx{ ctx }
-        {
-        }
-
-        template<typename Value>
-        std::string operator ()(const Value& value) const
-        {
-            if constexpr (std::is_same_v<Value, std::string>)
-            {
-                return value;
-            }
-            else if constexpr (std::is_same_v<Value, placeholder_type>)
-            {
-                try
-                {
-                    const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, config, ctx)) };
-                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
-                    return evaluated;
-                }
-                catch (const macro_exception&)
-                {
-                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed.";
-                }
-            }
-
-            throw macro_exception{};
-        }
-
-        const config& config;
-        const grammar& grammar;
-        context& ctx;
-    };
 }
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -1615,25 +1468,120 @@ primitive_type parser::evaluate_term(const term_type& term, const config& config
 
 primitive_type parser::evaluate_factor(const factor_type& factor, const config& config, context& ctx)
 {
-    return boost::apply_visitor(factor_visitor{ config, ctx }, factor);
+    overloaded visitor{
+        [&](const expression_type& value) -> primitive_type
+        {
+            return evaluate_expression(value, config, ctx);
+        },
+        [&](const primary_type& value) -> primitive_type
+        {
+            return evaluate_primary(value, config, ctx);
+        },
+        [](const auto&) -> primitive_type
+        {
+            throw macro_exception{};
+        }
+    };
+    return boost::apply_visitor(visitor, factor);
 }
 
 primitive_type parser::evaluate_primary(const primary_type& primary, const config& config, context& ctx)
 {
-    return boost::apply_visitor(primary_visitor{ config, ctx }, primary);
+    overloaded visitor{
+        [&](const symbol_type& value) -> primitive_type
+        {
+            return evaluate_symbol(value, config, ctx);
+        },
+        [&](const primitive_type& value) -> primitive_type
+        {
+            return value;
+        },
+        [](const auto&) -> primitive_type
+        {
+            throw macro_exception{};
+        }
+    };
+    return boost::apply_visitor(visitor, primary);
 }
 
 primitive_type parser::evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx)
 {
-    return boost::apply_visitor(symbol_visitor{ config, ctx }, symbol);
+    overloaded visitor{
+        [&](const variable_type& value) -> primitive_type
+        {
+            if (const std::optional<primitive_type> variable_value{ ctx.get(value.name) }; variable_value)
+            {
+                BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << primitive_to_string(*variable_value) << ").";
+                return *variable_value;
+            }
+
+            BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ").";
+
+            return std::string{};
+        },
+        [&](const macro_call_type& value) -> primitive_type
+        {
+            std::vector<primitive_type> evaluated_args;
+            for (const expression_type& arg : value.arguments)
+            {
+                evaluated_args.push_back(evaluate_expression(arg, config, ctx));
+            }
+
+            if (std::optional<builtin::macro_type> macro{ builtin::get_macro(value.name) }; macro)
+            {
+                try
+                {
+                    const primitive_type evaluated{ (*macro)(evaluated_args, config, ctx) };
+                    BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << primitive_to_string(evaluated) << ").";
+                    return evaluated;
+                }
+                catch (const boost::exception&)
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ").";
+                    throw;
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ").";
+        },
+        [](const auto&) -> primitive_type
+        {
+            throw macro_exception{};
+        }
+    };
+    return boost::apply_visitor(visitor, symbol);
 }
 
 std::string parser::evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx)
 {
+    overloaded visitor{
+        [&](const std::string& value) -> std::string
+        {
+            return value;
+        },
+        [&](const placeholder_type& value) -> std::string
+        {
+            try
+            {
+                const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, config, ctx)) };
+                BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
+                return evaluated;
+            }
+            catch (const macro_exception&)
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed.";
+            }
+        },
+        [](const auto&) -> std::string
+        {
+            throw macro_exception{};
+        }
+    };
+
     std::string result;
     for (const node_type& node : ast)
     {
-        result.append(boost::apply_visitor(node_visitor{ config, grammar, ctx }, node));
+        result.append(boost::apply_visitor(visitor, node));
     }
     return result;
 }
