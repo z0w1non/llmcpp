@@ -1113,6 +1113,9 @@ Integer random(Integer min, Integer max)
 
 namespace builtin
 {
+    using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
+    static std::optional<macro_type> get_macro(std::string_view name);
+
     primitive_type file(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
     primitive_type head(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
     primitive_type tail(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
@@ -1126,36 +1129,6 @@ namespace builtin
     primitive_type exec(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
     primitive_type code_block(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
     primitive_type summary(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-
-    using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
-
-    static std::optional<macro_type> get_macro(std::string_view name)
-    {
-        static const string_unordered_map<macro_type> macros
-        {
-            {"file", file},
-            {"head", head},
-            {"tail", tail},
-            {"head_tail", head_tail},
-            {"json_literal", json_literal},
-            {"env", env},
-            {"generated", generated},
-            {"let", let},
-            {"random", random},
-            {"choice", choice},
-            {"exec", exec},
-            {"code_block", code_block},
-            {"summary", summary}
-        };
-
-        if (const auto iter{ macros.find(name) }; iter != macros.end())
-        {
-            return iter->second;
-        }
-
-        return std::nullopt;
-    }
-
 
     std::string date();
     std::string time();
@@ -1717,6 +1690,34 @@ std::string parser::evaluate_document_recursive(std::string input, const config&
 
     return input;
 }
+
+std::optional<builtin::macro_type> builtin::get_macro(std::string_view name)
+{
+    static const string_unordered_map<macro_type> macros
+    {
+        {"file", file},
+        {"head", head},
+        {"tail", tail},
+        {"head_tail", head_tail},
+        {"json_literal", json_literal},
+        {"env", env},
+        {"generated", generated},
+        {"let", let},
+        {"random", random},
+        {"choice", choice},
+        {"exec", exec},
+        {"code_block", code_block},
+        {"summary", summary}
+    };
+
+    if (const auto iter{ macros.find(name) }; iter != macros.end())
+    {
+        return iter->second;
+    }
+
+    return std::nullopt;
+}
+
 
 primitive_type builtin::file(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
 {
