@@ -1114,7 +1114,7 @@ Integer random(Integer min, Integer max)
 namespace builtin
 {
     using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
-    static std::optional<macro_type> get_macro(std::string_view name);
+    std::optional<macro_type> get_macro(std::string_view name);
 
     primitive_type file(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
     primitive_type head(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
