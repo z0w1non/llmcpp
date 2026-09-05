@@ -226,9 +226,9 @@ namespace llmcpp
     {
         virtual ~text_generation_parameters() {}
         virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
-        virtual std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+        virtual std::string parse_response_for_text_completions(const std::string& response) const = 0;
         virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
-        virtual int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const = 0;
+        virtual int parse_response_for_token_count(const std::string& response) const = 0;
         virtual int get_max_tokens() const = 0;
         virtual int get_truncation_length() const = 0;
     };
@@ -324,9 +324,9 @@ namespace llmcpp
         std::string grammar_string;
 
         std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
-        std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+        std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
-        int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+        int parse_response_for_token_count(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -386,9 +386,9 @@ namespace llmcpp
         bool replace_instruct_placeholders{};
 
         std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
-        std::string parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+        std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
-        int parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const override;
+        int parse_response_for_token_count(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -903,7 +903,7 @@ namespace llmcpp
 
     void create_process(const config& config);
 
-    void terminate(const config& config);
+    void terminate_process(const config& config);
 
     void create_process_or_terminate(const config& config);
 
@@ -1556,7 +1556,7 @@ namespace llmcpp
                     catch (const boost::exception&)
                     {
                         BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ").";
-                        throw;
+                        throw_nested_exception(macro_exception{});
                     }
                 }
 
@@ -2584,6 +2584,8 @@ namespace llmcpp
 
         tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
 
+        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
         picojson::value response_json;
         picojson::parse(response_json, response.body());
 
@@ -3113,7 +3115,9 @@ namespace llmcpp
             );
         }
 
-        return params.parse_response_for_text_completions(response);
+        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
+        return params.parse_response_for_text_completions(response.body());
     }
 
     std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
@@ -3189,10 +3193,10 @@ namespace llmcpp
         return picojson::value{ json }.serialize();
     }
 
-    std::string tg_completions_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+    std::string tg_completions_parameters::parse_response_for_text_completions(const std::string& response) const
     {
         picojson::value response_json;
-        picojson::parse(response_json, response.body());
+        picojson::parse(response_json, response);
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
         const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
@@ -3206,11 +3210,10 @@ namespace llmcpp
         return picojson::value{ json }.serialize();
     }
 
-    int tg_completions_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+    int tg_completions_parameters::parse_response_for_token_count(const std::string& response) const
     {
         picojson::value response_json;
-        BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << response.body() << "\n```";
-        picojson::parse(response_json, response.body());
+        picojson::parse(response_json, response);
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         return static_cast<int>(throwable_find<double>(object, "length"));
     }
@@ -3268,10 +3271,10 @@ namespace llmcpp
         return picojson::value{ json }.serialize();
     }
 
-    std::string kc_generation_parameters::parse_response_for_text_completions(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+    std::string kc_generation_parameters::parse_response_for_text_completions(const std::string& response) const
     {
         picojson::value response_json;
-        picojson::parse(response_json, response.body());
+        picojson::parse(response_json, response);
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
         const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
@@ -3285,11 +3288,10 @@ namespace llmcpp
         return picojson::value{ json }.serialize();
     }
 
-    int kc_generation_parameters::parse_response_for_token_count(const boost::beast::http::response<boost::beast::http::string_body>& response) const
+    int kc_generation_parameters::parse_response_for_token_count(const std::string& response) const
     {
         picojson::value response_json;
-        BOOST_LOG_TRIVIAL(trace) << "Recieve JSON\n```\n" << response.body() << "\n```";
-        picojson::parse(response_json, response.body());
+        picojson::parse(response_json, response);
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         return static_cast<int>(throwable_find<double>(object, "value"));
     }
@@ -3344,7 +3346,7 @@ namespace llmcpp
             );
         }
 
-        return config.llm.backend->parse_response_for_token_count(response);
+        return config.llm.backend->parse_response_for_token_count(response.body());
     }
 
     int get_tokens_from_cache(const config& config, std::string_view str)
@@ -4494,7 +4496,7 @@ namespace llmcpp
         }
     }
 
-    void terminate(const config& config)
+    void terminate_process(const config& config)
     {
         if (!config.server_executable_file.empty())
         {
@@ -4509,11 +4511,11 @@ namespace llmcpp
     {
         if (config.create_process)
         {
-
+            create_process(config);
         }
         else if (config.terminate_process)
         {
-
+            terminate_process(config);
         }
     }
 
