@@ -901,7 +901,11 @@ namespace llmcpp
 
     void set_seed(config& config);
 
-    void process_create_or_terminate(const config& config);
+    void create_process(const config& config);
+
+    void terminate(const config& config);
+
+    void create_process_or_terminate(const config& config);
 
     void iterate(config& config);
 
@@ -4477,29 +4481,39 @@ namespace llmcpp
         }
     }
 
-    void process_create_or_terminate(const config& config)
+    void create_process(const config& config)
+    {
+        if (!config.server_executable_file.empty())
+        {
+            const std::vector<std::string> arguments{ parse_command_line_args(config.server_arguments) };
+            create_process_async(config.server_executable_file, arguments);
+            if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
+            }
+        }
+    }
+
+    void terminate(const config& config)
+    {
+        if (!config.server_executable_file.empty())
+        {
+            if (terminate_process_by_path(config.server_executable_file) == 0)
+            {
+                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << config.server_executable_file << ").";
+            }
+        }
+    }
+
+    void create_process_or_terminate(const config& config)
     {
         if (config.create_process)
         {
-            if (!config.server_executable_file.empty())
-            {
-                const std::vector<std::string> arguments{ parse_command_line_args(config.server_arguments) };
-                create_process_async(config.server_executable_file, arguments);
-                if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
-                {
-                    BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
-                }
-            }
+
         }
         else if (config.terminate_process)
         {
-            if (!config.server_executable_file.empty())
-            {
-                if (terminate_process_by_path(config.server_executable_file) == 0)
-                {
-                    BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << config.server_executable_file << ").";
-                }
-            }
+
         }
     }
 
@@ -4540,7 +4554,7 @@ namespace llmcpp
 
             if (config.create_process || config.terminate_process)
             {
-                process_create_or_terminate(config);
+                create_process_or_terminate(config);
                 return 0;
             }
 
