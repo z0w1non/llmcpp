@@ -762,7 +762,7 @@ void create_parent_directories(const std::filesystem::path& path);
 
 std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
-std::string read_text_file_to_string(std::string_view path, const config& config);
+std::string read_text_file_to_string(std::string_view path, const config& config, std::string_view extension = ".txt");
 
 std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config);
 
@@ -2123,9 +2123,9 @@ std::string read_file_to_string(const std::filesystem::path& file, std::ios::ope
     return result;
 }
 
-std::string read_text_file_to_string(std::string_view path, const config& config)
+std::string read_text_file_to_string(std::string_view path, const config& config, std::string_view extension)
 {
-    return read_file_to_string(string_to_path_by_config(complement_extension(path, ".txt"), config));
+    return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), config));
 };
 
 std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config)
@@ -4214,19 +4214,11 @@ int parse_command_line(
         config.command_mode = string_to_command_mode(command_mode_string);
         config.sd.mode = string_to_sd_mode(sd_mode_string);
 
-        if (vm.count("config-file"))
+        if (!config.config_file.empty())
         {
-            const std::filesystem::path config_file_path{ string_to_path_by_config(config.config_file, config) };
-            if (std::filesystem::exists(config_file_path) && std::filesystem::is_regular_file(config_file_path))
-            {
-                boost::nowide::ifstream ifs{ config_file_path };
-                if (!ifs.is_open())
-                {
-                    BOOST_THROW_EXCEPTION(file_open_exception{} << error_info::path{ config_file_path });
-                }
-                po::store(po::parse_config_file(ifs, allowed_options), vm, true);
-                po::notify(vm);
-            }
+            std::istringstream config_file{ read_text_file_to_string(config.config_file, config, ".ini") };
+            po::store(po::parse_config_file(config_file, allowed_options), vm, true);
+            po::notify(vm);
         }
 
         if (vm.find("help") != vm.end())
