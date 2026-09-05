@@ -700,7 +700,8 @@ namespace llmcpp
         kc,
         sd,
         sb,
-        cu
+        cu,
+        extract_png_parameters
     };
 
     command_mode string_to_command_mode(std::string_view str);
@@ -722,6 +723,8 @@ namespace llmcpp
 
         bool create_process{};
         bool terminate_process{};
+
+        std::string png_file;
 
         std::string server_executable_file;
         std::string server_arguments;
@@ -919,7 +922,8 @@ namespace llmcpp
             { "kc", command_mode::kc },
             { "sd", command_mode::sd },
             { "sb", command_mode::sb },
-            { "cu", command_mode::cu }
+            { "cu", command_mode::cu },
+            { "extract-png-parameters", command_mode::extract_png_parameters }
         };
         if (const auto iter{ map.find(str) }; iter != map.end())
         {
@@ -2323,6 +2327,71 @@ namespace llmcpp
 
             return result;
         }
+
+        std::uint32_t read_uint32_be(const unsigned char* p)
+        {
+            return (static_cast<std::uint32_t>(p[0]) << 24)
+                | (static_cast<std::uint32_t>(p[1]) << 16)
+                | (static_cast<std::uint32_t>(p[2]) << 8)
+                | static_cast<std::uint32_t>(p[3]);
+        }
+
+        std::string extract_parameters(std::string_view image, std::string_view target_key = "parameters")
+        {
+            const unsigned char* data{ reinterpret_cast<const unsigned char*>(image.data()) };
+            const std::size_t size{ image.size() };
+
+            constexpr std::size_t png_header_size = 8;
+            if (size < png_header_size || data[0] != 0x89 || data[1] != 'P' || data[2] != 'N' || data[3] != 'G')
+            {
+                llmcpp::throw_exception(png_exception{});
+            }
+
+            std::size_t offset = png_header_size;
+
+            while (offset + 12 <= size)
+            {
+                const std::uint32_t length{ read_uint32_be(data + offset) };
+                const std::string_view type{ reinterpret_cast<const char*>(data + offset + 4), 4 };
+
+                const std::size_t data_offset = offset + 8;
+                if (data_offset + length + 4 > size)
+                {
+                    break;
+                }
+
+                if (type == "tEXt")
+                {
+                    const unsigned char* chunk_data{ data + data_offset };
+
+                    std::size_t key_length{};
+                    while (key_length < length && chunk_data[key_length] != '\0')
+                    {
+                        ++key_length;
+                    }
+
+                    if (key_length < length)
+                    {
+                        const std::string_view key(reinterpret_cast<const char*>(chunk_data), key_length);
+
+                        if (key == target_key)
+                        {
+                            const std::size_t text_offset{ key_length + 1 };
+                            const std::size_t text_length{ length - text_offset };
+                            return std::string(reinterpret_cast<const char*>(chunk_data + text_offset), text_length);
+                        }
+                    }
+                }
+                else if (type == "IEND")
+                {
+                    break;
+                }
+
+                offset += 12 + length;
+            }
+
+            llmcpp::throw_exception(png_exception{});
+        }
     }
 
     template<typename BoostException>
@@ -2996,7 +3065,7 @@ namespace llmcpp
                 config.expires_after
             ) };
 
-            write_file(config, view_response.body(), relative_file_path.string(), std::ios_base::binary);
+            write_file(config, view_response.body(), relative_file_path.string(), std::ios::binary);
         }
 
         tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
@@ -3055,7 +3124,7 @@ namespace llmcpp
             {
                 descriptions.append(description);
             }
-            write_file(config, descriptions, item.head, std::ios_base::binary);
+            write_file(config, descriptions, item.head, std::ios::binary);
         }
     }
 
@@ -4017,7 +4086,7 @@ namespace llmcpp
             po::options_description allowed_options("Allowed options");
             allowed_options.add_options()
                 ("help,h", "produce help message")
-                ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg|kc|sd|sb|cu)")
+                ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
                 ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
                 ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
                 ("log-file", po::value<std::string>(&config.log_file)->default_value("log"), "log file path")
@@ -4031,6 +4100,7 @@ namespace llmcpp
 
                 ("create-process", po::bool_switch(&config.create_process)->default_value(false), "create process switch")
                 ("terminate-process", po::bool_switch(&config.terminate_process)->default_value(false), "terminate process switch")
+                ("png-file", po::value<std::string>(&config.png_file)->default_value(""), "for extract-png-parametesrs")
                 ("server-executable-file", po::value<std::string>(&config.server_executable_file)->default_value(""), "server executable file")
                 ("server-arguments", po::value<std::string>(&config.server_arguments), "server arguments")
                 ("server-host", po::value<std::string>(&config.server_host)->default_value("localhost"), "server ip")
@@ -4280,7 +4350,16 @@ namespace llmcpp
             po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
             po::notify(vm);
 
-            config.command_mode = string_to_command_mode(command_mode_string);
+            try
+            {
+                config.command_mode = string_to_command_mode(command_mode_string);
+            }
+            catch (const command_line_exception&)
+            {
+                BOOST_LOG_TRIVIAL(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
+                return 1;
+            }
+
             config.sd.mode = string_to_sd_mode(sd_mode_string);
 
             if (!config.config_file.empty())
@@ -4301,23 +4380,6 @@ namespace llmcpp
             if (config.command_mode == command_mode::tg || config.command_mode == command_mode::kc)
             {
                 init_llm_mode(config);
-            }
-            else if (config.command_mode == command_mode::sd)
-            {
-                ;
-            }
-            else if (config.command_mode == command_mode::sb)
-            {
-                ;
-            }
-            else if (config.command_mode == command_mode::cu)
-            {
-                ;
-            }
-            else
-            {
-                BOOST_LOG_TRIVIAL(error) << "mode options must be (tg | kc | sd | sb | cu).";
-                return 1;
             }
 
             if (config.phases.empty())
@@ -4379,7 +4441,7 @@ namespace llmcpp
 
     void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
     {
-        const bool is_binary{ (mode & std::ios_base::binary) != 0 };
+        const bool is_binary{ (mode & std::ios::binary) != 0 };
         const std::string complemented{ complement_extension(filepath, ".txt") };
         const std::filesystem::path file_path{ string_to_path_by_config(complemented, config) };
         create_parent_directories(file_path);
@@ -4452,13 +4514,13 @@ namespace llmcpp
             const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
             const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
             const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
-            write_file(config, image, config.sd.output_file, std::ios_base::binary);
+            write_file(config, image, config.sd.output_file, std::ios::binary);
         }
         else if (config.command_mode == command_mode::sb)
         {
             const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb.text, config.sb.text_file, config), config, config.context) };
             const std::string voice{ send_style_bert_voice_request(config, text) };
-            write_file(config, voice, config.sb.output_file, std::ios_base::binary);
+            write_file(config, voice, config.sb.output_file, std::ios::binary);
         }
         else if (config.command_mode == command_mode::cu)
         {
@@ -4558,6 +4620,12 @@ namespace llmcpp
             {
                 create_process_or_terminate(config);
                 return 0;
+            }
+
+            if (config.command_mode == command_mode::extract_png_parameters)
+            {
+                const std::string parameters{ tEXt::extract_parameters(read_file_to_string(string_to_path_by_config(config.png_file, config), std::ios::binary)) };
+                boost::nowide::cout << parameters << std::flush;
             }
 
             set_static_builtin_variables(config);
