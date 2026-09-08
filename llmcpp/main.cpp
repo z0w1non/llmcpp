@@ -1505,42 +1505,48 @@ namespace llmcpp
                 string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
             }
 
-            boost::spirit::qi::rule<Iterator, std::vector<node_type>()> document;
-            boost::spirit::qi::rule<Iterator, node_type()> node;
-            boost::spirit::qi::rule<Iterator, std::string()> plain_text;
-            boost::spirit::qi::rule<Iterator, placeholder_type()> placeholder;
+            template<typename ... Args>
+            using rule = boost::spirit::qi::rule<Iterator, Args ...>;
 
-            boost::spirit::qi::rule<Iterator, expression_type(), boost::spirit::qi::space_type> expression;
-            boost::spirit::qi::rule<Iterator, assignment_expression_type(), boost::spirit::qi::space_type> assignment_expression;
-            boost::spirit::qi::rule<Iterator, assignment_expression_node_type(), boost::spirit::qi::space_type> assignment_expression_node;
-            boost::spirit::qi::rule<Iterator, conditional_expression_type(), boost::spirit::qi::space_type> conditional_expression;
-            boost::spirit::qi::rule<Iterator, conditional_expression_node_type(), boost::spirit::qi::space_type> conditional_expression_node;
-            boost::spirit::qi::rule<Iterator, logical_or_expression_type(), boost::spirit::qi::space_type> logical_or_expression;
-            boost::spirit::qi::rule<Iterator, logical_and_expression_type(), boost::spirit::qi::space_type> logical_and_expression;
-            boost::spirit::qi::rule<Iterator, or_expression_type(), boost::spirit::qi::space_type> or_expression;
-            boost::spirit::qi::rule<Iterator, xor_expression_type(), boost::spirit::qi::space_type> xor_expression;
-            boost::spirit::qi::rule<Iterator, and_expression_type(), boost::spirit::qi::space_type> and_expression;
-            boost::spirit::qi::rule<Iterator, equality_expression_type(), boost::spirit::qi::space_type> equality_expression;
-            boost::spirit::qi::rule<Iterator, relational_expression_type(), boost::spirit::qi::space_type> relational_expression;
-            boost::spirit::qi::rule<Iterator, shift_expression_type(), boost::spirit::qi::space_type> shift_expression;
-            boost::spirit::qi::rule<Iterator, additive_expression_type(), boost::spirit::qi::space_type> additive_expression;
-            boost::spirit::qi::rule<Iterator, multiplicative_expression_type(), boost::spirit::qi::space_type> multiplicative_expression;
-            boost::spirit::qi::rule<Iterator, prefix_expression_type(), boost::spirit::qi::space_type> prefix_expression;
-            boost::spirit::qi::rule<Iterator, prefix_expression_node_type(), boost::spirit::qi::space_type> prefix_expression_node;
-            boost::spirit::qi::rule<Iterator, suffix_expression_type(), boost::spirit::qi::space_type> suffix_expression;
-            boost::spirit::qi::rule<Iterator, parentheses_expression_type(), boost::spirit::qi::space_type> parentheses_expression;
+            template<typename ... Args>
+            using skipped_rule = boost::spirit::qi::rule<Iterator, boost::spirit::qi::space_type, Args ...>;
 
-            boost::spirit::qi::rule<Iterator, primary_type(), boost::spirit::qi::space_type> primary;
-            boost::spirit::qi::rule<Iterator, symbol_type(), boost::spirit::qi::space_type> symbol;
-            boost::spirit::qi::rule<Iterator, primitive_type(), boost::spirit::qi::space_type> primitive;
+            rule<std::vector<node_type>()> document;
+            rule<node_type()> node;
+            rule<std::string()> plain_text;
+            rule<placeholder_type()> placeholder;
 
-            boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> name;
-            boost::spirit::qi::rule<Iterator, variable_type(), boost::spirit::qi::space_type> variable;
-            boost::spirit::qi::rule<Iterator, macro_call_type(), boost::spirit::qi::space_type> macro_call;
-            boost::spirit::qi::rule<Iterator, std::vector<assignment_expression_type>(), boost::spirit::qi::space_type> arguments;
+            skipped_rule<expression_type()> expression;
+            skipped_rule<assignment_expression_type()> assignment_expression;
+            skipped_rule<assignment_expression_node_type()> assignment_expression_node;
+            skipped_rule<conditional_expression_type()> conditional_expression;
+            skipped_rule<conditional_expression_node_type()> conditional_expression_node;
+            skipped_rule<logical_or_expression_type()> logical_or_expression;
+            skipped_rule<logical_and_expression_type()> logical_and_expression;
+            skipped_rule<or_expression_type()> or_expression;
+            skipped_rule<xor_expression_type()> xor_expression;
+            skipped_rule<and_expression_type()> and_expression;
+            skipped_rule<equality_expression_type()> equality_expression;
+            skipped_rule<relational_expression_type()> relational_expression;
+            skipped_rule<shift_expression_type()> shift_expression;
+            skipped_rule<additive_expression_type()> additive_expression;
+            skipped_rule<multiplicative_expression_type()> multiplicative_expression;
+            skipped_rule<prefix_expression_type()> prefix_expression;
+            skipped_rule<prefix_expression_node_type()> prefix_expression_node;
+            skipped_rule<suffix_expression_type()> suffix_expression;
+            skipped_rule<parentheses_expression_type()> parentheses_expression;
 
-            boost::spirit::qi::rule<Iterator, char(), boost::spirit::qi::space_type> character;
-            boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> string;
+            skipped_rule<primary_type()> primary;
+            skipped_rule<symbol_type()> symbol;
+            skipped_rule<primitive_type()> primitive;
+
+            skipped_rule<std::string()> name;
+            skipped_rule<variable_type()> variable;
+            skipped_rule<macro_call_type()> macro_call;
+            skipped_rule<std::vector<assignment_expression_type>()> arguments;
+
+            skipped_rule<char()> character;
+            skipped_rule<std::string()> string;
         };
 
         using grammar = document_grammar<std::string_view::const_iterator>;
