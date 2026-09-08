@@ -1214,7 +1214,7 @@ namespace llmcpp
             prefix_plus,      // +a
             prefix_minus,     // -a
             logical_not,      // !
-            bitwise_not       // ~expression_type
+            bitwise_not       // ~
         };
 
         enum class suffix_operator
