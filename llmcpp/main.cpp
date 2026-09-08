@@ -2385,52 +2385,42 @@ namespace llmcpp
             primitive_type lhs{ evaluate_conditional_expression(expr.lhs, config, ctx) };
             primitive_type rhs{ evaluate_assignment_expression(expr.rhs, config, ctx) };
 
-            //if (expr.operator_ == assignment_operator::assign)
+            //switch (expr.operator_)
             //{
+            //case assignment_operator::assign:
             //    assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::plus_assign)
-            //{
+            //    break;
+            //case assignment_operator::plus_assign:
             //    plus_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::minus_assign)
-            //{
+            //    break;
+            //case assignment_operator::minus_assign:
             //    minus_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::multiplies_assign)
-            //{
+            //    break;
+            //case assignment_operator::multiplies_assign:
             //    multiplies_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::divides_assign)
-            //{
+            //    break;
+            //case assignment_operator::divides_assign:
             //    divides_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::modulus_assign)
-            //{
+            //    break;
+            //case assignment_operator::modulus_assign:
             //    modulus_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::shift_left_assign)
-            //{
+            //    break;
+            //case assignment_operator::shift_left_assign:
             //    shift_left_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::shift_right_assign)
-            //{
+            //    break;
+            //case assignment_operator::shift_right_assign:
             //    shift_right_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::and_assign)
-            //{
+            //    break;
+            //case assignment_operator::and_assign:
             //    and_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::xor_assign)
-            //{
+            //    break;
+            //case assignment_operator::xor_assign:
             //    xor_assign{}(lhs, rhs);
-            //}
-            //else if (expr.operator_ == assignment_operator::or_assign)
-            //{
+            //    break;
+            //case assignment_operator::or_assign:
             //    or_assign{}(lhs, rhs);
-            //}
-            //else
-            //{
+            //    break;
+            //default:
             //    llmcpp::throw_exception(logic_error{});
             //}
 
@@ -2517,16 +2507,15 @@ namespace llmcpp
             for (const auto& [operator_, operand] : expr.rest)
             {
                 const primitive_type rhs{ evaluate_relational_expression(operand, config, ctx) };
-                if (operator_ == equality_operator::equal)
+                switch (operator_)
                 {
+                case equality_operator::equal:
                     result = equal{}(result, rhs);
-                }
-                else if (operator_ == equality_operator::not_equal)
-                {
+                    break;
+                case equality_operator::not_equal:
                     result = not_equal{}(result, rhs);
-                }
-                else
-                {
+                    break;
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
@@ -2539,24 +2528,21 @@ namespace llmcpp
             for (const auto& [operator_, operand] : expr.rest)
             {
                 const primitive_type rhs{ evaluate_shift_expression(operand, config, ctx) };
-                if (operator_ == relational_operator::less)
+                switch (operator_)
                 {
+                case relational_operator::less:
                     result = less{}(result, rhs);
-                }
-                else if (operator_ == relational_operator::greater)
-                {
+                    break;
+                case relational_operator::greater:
                     result = greater{}(result, rhs);
-                }
-                else if (operator_ == relational_operator::less_equal)
-                {
+                    break;
+                case relational_operator::less_equal:
                     result = less_equal{}(result, rhs);
-                }
-                else if (operator_ == relational_operator::greater_equal)
-                {
+                    break;
+                case relational_operator::greater_equal:
                     result = greater_equal{}(result, rhs);
-                }
-                else
-                {
+                    break;
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
@@ -2569,16 +2555,15 @@ namespace llmcpp
             for (const auto& [operator_, operand] : expr.rest)
             {
                 const primitive_type rhs{ evaluate_additive_expression(operand, config, ctx) };
-                if (operator_ == shift_operator::shift_left)
+                switch (operator_)
                 {
+                case shift_operator::shift_left:
                     result = shift_left{}(result, rhs);
-                }
-                else if (operator_ == shift_operator::shift_right)
-                {
+                    break;
+                case shift_operator::shift_right:
                     result = shift_right{}(result, rhs);
-                }
-                else
-                {
+                    break;
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
@@ -2591,16 +2576,15 @@ namespace llmcpp
             for (const auto& [operator_, operand] : expr.rest)
             {
                 const primitive_type rhs{ evaluate_multiplicative_expression(operand, config, ctx) };
-                if (operator_ == additive_operator::plus)
+                switch (operator_)
                 {
+                case additive_operator::plus:
                     result = plus{}(result, rhs);
-                }
-                else if (operator_ == additive_operator::minus)
-                {
+                    break;
+                case additive_operator::minus:
                     result = minus{}(result, rhs);
-                }
-                else
-                {
+                    break;
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
@@ -2613,20 +2597,18 @@ namespace llmcpp
             for (const auto& [operator_, operand] : expr.rest)
             {
                 const primitive_type rhs{ evaluate_prefix_expression(operand, config, ctx) };
-                if (operator_ == multiplicative_operator::multiplies)
+                switch (operator_)
                 {
+                case multiplicative_operator::multiplies:
                     result = multiplies{}(result, rhs);
-                }
-                else if (operator_ == multiplicative_operator::divides)
-                {
+                    break;
+                case multiplicative_operator::divides:
                     result = divides{}(result, rhs);
-                }
-                else if (operator_ == multiplicative_operator::modulus)
-                {
+                    break;
+                case multiplicative_operator::modulus:
                     result = modulus{}(result, rhs);
-                }
-                else
-                {
+                    break;
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
@@ -2641,31 +2623,23 @@ namespace llmcpp
         primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx)
         {
             primitive_type evaluated{ evaluate_prefix_expression(expr.operand.get(), config, ctx) };
-            if (expr.operator_ == prefix_operator::prefix_increment)
+            switch (expr.operator_)
             {
+            case prefix_operator::prefix_increment:
                 return prefix_increment{}(evaluated);
-            }
-            else if (expr.operator_ == prefix_operator::prefix_decrement)
-            {
+            case prefix_operator::prefix_decrement:
                 return prefix_decrement{}(evaluated);
-            }
-            else if (expr.operator_ == prefix_operator::prefix_plus)
-            {
+            case prefix_operator::prefix_plus:
                 return prefix_plus{}(evaluated);
-            }
-            else if (expr.operator_ == prefix_operator::prefix_minus)
-            {
+            case prefix_operator::prefix_minus:
                 return prefix_minus{}(evaluated);
-            }
-            else if (expr.operator_ == prefix_operator::logical_not)
-            {
+            case prefix_operator::logical_not:
                 return logical_not{}(evaluated);
-            }
-            else if (expr.operator_ == prefix_operator::bitwise_not)
-            {
+            case prefix_operator::bitwise_not:
                 return bitwise_not{}(evaluated);
+            default:
+                llmcpp::throw_exception(logic_error{});
             }
-            llmcpp::throw_exception(logic_error{});
         }
 
         primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx)
@@ -2673,16 +2647,13 @@ namespace llmcpp
             primitive_type evaluated{ evaluate_parentheses_expression(expr.operand, config, ctx) };
             for (const auto& operator_ : expr.operators)
             {
-                if (operator_ == suffix_operator::suffix_increment)
+                switch (operator_)
                 {
+                case suffix_operator::suffix_increment:
                     return prefix_increment{}(evaluated);
-                }
-                else if (operator_ == suffix_operator::suffix_decrement)
-                {
+                case suffix_operator::suffix_decrement:
                     return prefix_decrement{}(evaluated);
-                }
-                else
-                {
+                default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
