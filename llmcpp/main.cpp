@@ -1465,8 +1465,6 @@ namespace llmcpp
                 using qi::skip;
                 using qi::space;
 
-                auto debug_action = [](std::string str) { return[=] { BOOST_LOG_TRIVIAL(info) << str; }; };
-
                 document = *node;
                 node = placeholder | plain_text;
                 plain_text = +(!lit("{{") >> char_);
