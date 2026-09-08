@@ -17,7 +17,7 @@
 #include <thread>
 #include <type_traits>
 #include <cstdint>
-#include <variant>
+#include <concepts>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
@@ -63,10 +63,12 @@
 #include <boost/process/v2/execute.hpp>
 #include <boost/process/v2/stdio.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/spirit/include/qi.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/range/algorithm.hpp>
+#include <boost/variant.hpp>
+#include <boost/optional.hpp>
+#include <boost/spirit/include/qi.hpp>
 
 #include "picojson.h"
 
@@ -216,9 +218,6 @@ namespace llmcpp
 
     template<typename T>
     using string_unordered_map = std::unordered_map<std::string, T, string_hash, std::equal_to<>>;
-
-    template<typename ... Fanctors> struct overloaded : Fanctors ... { using Fanctors::operator() ...; };
-    template<typename ... Fanctors> overloaded(Fanctors ...) -> overloaded<Fanctors ...>;
 
     struct config;
 
@@ -613,7 +612,7 @@ namespace llmcpp
         bool preserve_subdirectories{};
     };
 
-    using primitive_type = boost::variant<bool, char, int, double, std::string>;
+    using primitive_type = boost::variant<int, bool, char, double, std::string>;
 
     std::string primitive_to_string(const primitive_type& primitive)
     {
@@ -1156,52 +1155,158 @@ namespace llmcpp
         std::string time();
         std::string datetime();
         std::string stdin_(const config& config);
-    }
+    } // namespace builtin
 
     namespace parser
     {
-        struct expression_rest;
-        struct expression_type;
-        struct term_rest;
-        struct term_type;
-
-        struct macro_call_type
+        enum class assignment_operator
         {
-            std::string name;
-            std::vector<expression_type> arguments;
+            assign,             // =
+            plus_assign,        // +=
+            minus_assign,       // -=
+            multiplies_assign,  // *=
+            divides_assign,     // /=
+            modulus_assign,     // %=
+            shift_left_assign,  // <<=
+            shift_right_assign, // >>=
+            and_assign,         // &=
+            xor_assign,         // ^=
+            or_assign           // |=
         };
+
+        enum class equality_operator
+        {
+            equal,    // ==
+            not_equal // !=
+        };
+
+        enum class relational_operator
+        {
+            less,         // <
+            greater,      // >
+            less_equal,   // <=
+            greater_equal // >=
+        };
+
+        enum class shift_operator
+        {
+            shift_left, // <<
+            shift_right // >>
+        };
+
+        enum class additive_operator
+        {
+            plus, // +
+            minus // -
+        };
+
+        enum class multiplicative_operator
+        {
+            multiplies, // *
+            divides,    // /
+            modulus     // %
+        };
+
+        enum class prefix_operator
+        {
+            prefix_increment, // ++a
+            prefix_decrement, // --a
+            prefix_plus,      // +a
+            prefix_minus,     // -a
+            logical_not,      // !
+            bitwise_not       // ~expression_type
+        };
+
+        enum class suffix_operator
+        {
+            suffix_increment, // ++
+            suffix_decrement  // --
+        };
+
+        struct macro_call_type;
 
         struct variable_type
         {
             std::string name;
         };
 
-        using symbol_type = boost::variant<macro_call_type, variable_type>;
-        using primary_type = boost::variant<symbol_type, primitive_type>;
-        using factor_type = boost::variant<primary_type, boost::recursive_wrapper<expression_type>>;
+        using symbol_type = boost::variant<variable_type, boost::recursive_wrapper<macro_call_type>>;
+        using primary_type = boost::variant<primitive_type, symbol_type>;
 
-        struct term_rest_type
+        template<typename Operand, typename Operator>
+        struct operator_operand_pair
         {
-            char operator_;
-            factor_type operand;
+            using operand_type = Operand;
+            using operator_type = Operator;
+            operator_type operator_;
+            operand_type operand;
         };
 
-        struct term_type
+        template<typename LowerExpression, typename Operator>
+        struct basic_variadic_binary_expression
         {
-            factor_type first;
-            std::vector<term_rest_type> rest;
+            using lower_expression_type = LowerExpression;
+            using operator_type = Operator;
+            lower_expression_type first;
+            std::vector<operator_operand_pair<lower_expression_type, operator_type>> rest;
         };
 
-        struct expression_rest_type
+        struct expression_type;
+        using parentheses_expression_type = boost::variant<primary_type, boost::recursive_wrapper<expression_type>>;
+
+        struct suffix_expression_type
         {
-            char operator_;
-            term_type operand;
+            parentheses_expression_type operand;
+            std::vector<suffix_operator> operators;
+        };
+
+        struct prefix_expression_node_type;
+        using prefix_expression_type = boost::make_recursive_variant<suffix_expression_type, prefix_expression_node_type, boost::recursive_variant_>::type;
+        struct prefix_expression_node_type
+        {
+            prefix_operator operator_;
+            boost::recursive_wrapper<prefix_expression_type> operand;
+        };
+
+        using multiplicative_expression_type = basic_variadic_binary_expression<prefix_expression_type, multiplicative_operator>;
+        using additive_expression_type = basic_variadic_binary_expression<multiplicative_expression_type, additive_operator>;
+        using shift_expression_type = basic_variadic_binary_expression<additive_expression_type, shift_operator>;
+        using relational_expression_type = basic_variadic_binary_expression<shift_expression_type, relational_operator>;
+        using equality_expression_type = basic_variadic_binary_expression<relational_expression_type, equality_operator>;
+        using and_expression_type = std::vector<equality_expression_type>;
+        using xor_expression_type = std::vector<and_expression_type>;
+        using or_expression_type = std::vector<xor_expression_type>;
+        using logical_and_expression_type = std::vector<or_expression_type>;
+        using logical_or_expression_type = std::vector<logical_and_expression_type>;
+
+        struct conditional_expression_node_type;
+        using conditional_expression_type = boost::variant<logical_or_expression_type, boost::recursive_wrapper<conditional_expression_node_type>>;
+        struct conditional_expression_node_type
+        {
+            logical_or_expression_type condition;
+            boost::recursive_wrapper<expression_type> then_expr;
+            conditional_expression_type else_expr;
+        };
+
+        struct assignment_expression_node_type;
+        using assignment_expression_type = boost::variant<conditional_expression_type, boost::recursive_wrapper<assignment_expression_node_type>>;
+        struct assignment_expression_node_type
+        {
+            conditional_expression_type lhs;
+            assignment_operator operator_;
+            assignment_expression_type rhs;
+        };
+
+        struct macro_call_type
+        {
+            std::string name;
+            std::vector<assignment_expression_type> arguments;
         };
 
         struct expression_type
+            : public std::vector<assignment_expression_type>
         {
-            term_type first;
-            std::vector<expression_rest_type> rest;
+            using std::vector<assignment_expression_type>::vector;
         };
 
         struct placeholder_type
@@ -1211,10 +1316,122 @@ namespace llmcpp
 
         using node_type = boost::variant<std::string, placeholder_type>;
 
-        struct escaped_symbols
+        struct assignment_symbols
+            : boost::spirit::qi::symbols<char, assignment_operator>
+        {
+            assignment_symbols()
+            {
+                add
+                ("=", assignment_operator::assign)
+                    ("+=", assignment_operator::plus_assign)
+                    ("-=", assignment_operator::minus_assign)
+                    ("*=", assignment_operator::multiplies_assign)
+                    ("/=", assignment_operator::divides_assign)
+                    ("%=", assignment_operator::modulus_assign)
+                    ("<<=", assignment_operator::shift_left_assign)
+                    (">>=", assignment_operator::shift_right_assign)
+                    ("&=", assignment_operator::and_assign)
+                    ("^=", assignment_operator::xor_assign)
+                    ("|=", assignment_operator::or_assign)
+                    ;
+            }
+        } assignment_operator_;
+
+        struct equality_symbols
+            : boost::spirit::qi::symbols<char, equality_operator>
+        {
+            equality_symbols()
+            {
+                add
+                ("==", equality_operator::equal)
+                    ("!=", equality_operator::not_equal)
+                    ;
+            }
+        } equality_operator_;
+
+        struct relational_symbols
+            : boost::spirit::qi::symbols<char, relational_operator>
+        {
+            relational_symbols()
+            {
+                add
+                ("<", relational_operator::less)
+                    (">", relational_operator::greater)
+                    ("<=", relational_operator::less_equal)
+                    (">=", relational_operator::greater_equal)
+                    ;
+            }
+        } relational_operator_;
+
+        struct shift_symbols
+            : boost::spirit::qi::symbols<char, shift_operator>
+        {
+            shift_symbols()
+            {
+                add
+                ("<<", shift_operator::shift_left)
+                    (">>", shift_operator::shift_right)
+                    ;
+            }
+        } shift_operator_;
+
+        struct additive_symbols
+            : boost::spirit::qi::symbols<char, additive_operator>
+        {
+            additive_symbols()
+            {
+                add
+                ("+", additive_operator::plus)
+                    ("-", additive_operator::minus)
+                    ;
+            }
+        } additive_operator_;
+
+        struct multiplicative_symbols
+            : boost::spirit::qi::symbols<char, multiplicative_operator>
+        {
+            multiplicative_symbols()
+            {
+                add
+                ("*", multiplicative_operator::multiplies)
+                    ("/", multiplicative_operator::divides)
+                    ("%", multiplicative_operator::modulus)
+                    ;
+            }
+        } multiplicative_operator_;
+
+        struct prefix_symbols
+            : boost::spirit::qi::symbols<char, prefix_operator>
+        {
+            prefix_symbols()
+            {
+                add
+                ("++", prefix_operator::prefix_increment)
+                    ("--", prefix_operator::prefix_decrement)
+                    ("+", prefix_operator::prefix_plus)
+                    ("-", prefix_operator::prefix_minus)
+                    ("!", prefix_operator::logical_not)
+                    ("~", prefix_operator::bitwise_not)
+                    ;
+            }
+        } prefix_operator_;
+
+        struct suffix_symbols
+            : boost::spirit::qi::symbols<char, suffix_operator>
+        {
+            suffix_symbols()
+            {
+                add
+                ("++", suffix_operator::suffix_increment)
+                    ("--", suffix_operator::suffix_decrement)
+                    ;
+            }
+        } suffix_operator_;
+
+        struct escaped_chars
             : boost::spirit::qi::symbols<char, char>
         {
-            escaped_symbols()
+            escaped_chars()
             {
                 add
                 ("\"", '\"')
@@ -1248,21 +1465,40 @@ namespace llmcpp
                 using qi::skip;
                 using qi::space;
 
+                auto debug_action = [](std::string str) { return[=] { BOOST_LOG_TRIVIAL(info) << str; }; };
+
                 document = *node;
                 node = placeholder | plain_text;
                 plain_text = +(!lit("{{") >> char_);
                 placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
 
-                expression = term >> *(char_("+-") >> term);
-                term = factor >> *(char_("*/") >> factor);
-                factor = lit('(') >> expression >> lit(')') | primary;
+                expression = assignment_expression % lit(',');
+                assignment_expression = assignment_expression_node | conditional_expression;
+                assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
+                conditional_expression = conditional_expression_node | logical_or_expression;
+                conditional_expression_node = logical_or_expression >> lit('?') >> expression >> lit(':') >> conditional_expression;
+                logical_or_expression = logical_and_expression % lit("||");
+                logical_and_expression = or_expression % lit("&&");
+                or_expression = xor_expression % lit('|');
+                xor_expression = and_expression % lit('^');
+                and_expression = equality_expression % lit('&');
+                equality_expression = relational_expression >> *(equality_operator_ >> relational_expression);
+                relational_expression = shift_expression >> *(relational_operator_ >> shift_expression);
+                shift_expression = additive_expression >> *(shift_operator_ >> additive_expression);
+                additive_expression = multiplicative_expression >> *(additive_operator_ >> multiplicative_expression);
+                multiplicative_expression = prefix_expression >> *(multiplicative_operator_ >> prefix_expression);
+                prefix_expression = prefix_expression_node | suffix_expression;
+                prefix_expression_node = prefix_operator_ >> prefix_expression;
+                suffix_expression = parentheses_expression >> *suffix_operator_;
+                parentheses_expression = (lit('(') >> expression >> lit(')')) | primary;
+
                 primary = symbol | primitive;
                 symbol = macro_call | variable;
                 primitive = bool_ | character | int_ | double_ | string;
 
                 name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
                 macro_call = name >> arguments;
-                arguments = lit('(') >> -(expression % ',') >> lit(')');
+                arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
                 variable = name;
 
                 character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
@@ -1275,8 +1511,25 @@ namespace llmcpp
             boost::spirit::qi::rule<Iterator, placeholder_type()> placeholder;
 
             boost::spirit::qi::rule<Iterator, expression_type(), boost::spirit::qi::space_type> expression;
-            boost::spirit::qi::rule<Iterator, term_type(), boost::spirit::qi::space_type> term;
-            boost::spirit::qi::rule<Iterator, factor_type(), boost::spirit::qi::space_type> factor;
+            boost::spirit::qi::rule<Iterator, assignment_expression_type(), boost::spirit::qi::space_type> assignment_expression;
+            boost::spirit::qi::rule<Iterator, assignment_expression_node_type(), boost::spirit::qi::space_type> assignment_expression_node;
+            boost::spirit::qi::rule<Iterator, conditional_expression_type(), boost::spirit::qi::space_type> conditional_expression;
+            boost::spirit::qi::rule<Iterator, conditional_expression_node_type(), boost::spirit::qi::space_type> conditional_expression_node;
+            boost::spirit::qi::rule<Iterator, logical_or_expression_type(), boost::spirit::qi::space_type> logical_or_expression;
+            boost::spirit::qi::rule<Iterator, logical_and_expression_type(), boost::spirit::qi::space_type> logical_and_expression;
+            boost::spirit::qi::rule<Iterator, or_expression_type(), boost::spirit::qi::space_type> or_expression;
+            boost::spirit::qi::rule<Iterator, xor_expression_type(), boost::spirit::qi::space_type> xor_expression;
+            boost::spirit::qi::rule<Iterator, and_expression_type(), boost::spirit::qi::space_type> and_expression;
+            boost::spirit::qi::rule<Iterator, equality_expression_type(), boost::spirit::qi::space_type> equality_expression;
+            boost::spirit::qi::rule<Iterator, relational_expression_type(), boost::spirit::qi::space_type> relational_expression;
+            boost::spirit::qi::rule<Iterator, shift_expression_type(), boost::spirit::qi::space_type> shift_expression;
+            boost::spirit::qi::rule<Iterator, additive_expression_type(), boost::spirit::qi::space_type> additive_expression;
+            boost::spirit::qi::rule<Iterator, multiplicative_expression_type(), boost::spirit::qi::space_type> multiplicative_expression;
+            boost::spirit::qi::rule<Iterator, prefix_expression_type(), boost::spirit::qi::space_type> prefix_expression;
+            boost::spirit::qi::rule<Iterator, prefix_expression_node_type(), boost::spirit::qi::space_type> prefix_expression_node;
+            boost::spirit::qi::rule<Iterator, suffix_expression_type(), boost::spirit::qi::space_type> suffix_expression;
+            boost::spirit::qi::rule<Iterator, parentheses_expression_type(), boost::spirit::qi::space_type> parentheses_expression;
+
             boost::spirit::qi::rule<Iterator, primary_type(), boost::spirit::qi::space_type> primary;
             boost::spirit::qi::rule<Iterator, symbol_type(), boost::spirit::qi::space_type> symbol;
             boost::spirit::qi::rule<Iterator, primitive_type(), boost::spirit::qi::space_type> primitive;
@@ -1284,7 +1537,7 @@ namespace llmcpp
             boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> name;
             boost::spirit::qi::rule<Iterator, variable_type(), boost::spirit::qi::space_type> variable;
             boost::spirit::qi::rule<Iterator, macro_call_type(), boost::spirit::qi::space_type> macro_call;
-            boost::spirit::qi::rule<Iterator, std::vector<expression_type>(), boost::spirit::qi::space_type> arguments;
+            boost::spirit::qi::rule<Iterator, std::vector<assignment_expression_type>(), boost::spirit::qi::space_type> arguments;
 
             boost::spirit::qi::rule<Iterator, char(), boost::spirit::qi::space_type> character;
             boost::spirit::qi::rule<Iterator, std::string(), boost::spirit::qi::space_type> string;
@@ -1292,301 +1545,524 @@ namespace llmcpp
 
         using grammar = document_grammar<std::string_view::const_iterator>;
 
+        std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx);
+        std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx);
+        std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx);
+
         primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_term(const term_type& term, const config& config, context& ctx);
-        primitive_type evaluate_factor(const factor_type& factor, const config& config, context& ctx);
+        primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx);
+        primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx);
+
         primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx);
         primitive_type evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx);
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx);
-        std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx);
-        std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx);
 
-        struct plus_assign
+        namespace detail
         {
-            template<typename A, typename B>
-                requires requires(A& a, const B& b) { a += b; }
-            decltype(auto) operator ()(A& a, const B& b) const
+            struct unary_fallback_visitor
             {
-                return a += b;
-            }
-        };
-
-        struct minus_assign
-        {
-            template<typename A, typename B>
-                requires requires(A& a, const B& b) { a -= b; }
-            decltype(auto) operator ()(A& a, const B& b) const
-            {
-                return a -= b;
-            }
-        };
-
-        struct multiplies_assign
-        {
-            template<typename A, typename B>
-                requires requires(A& a, const B& b) { a *= b; }
-            decltype(auto) operator ()(A& a, const B& b) const
-            {
-                return a *= b;
-            }
-        };
-
-        struct divides_assign
-        {
-            template<typename A, typename B>
-                requires requires(A& a, const B& b) { a /= b; }
-            decltype(auto) operator ()(A& a, const B& b) const
-            {
-                if constexpr (std::is_arithmetic_v<B>)
+                template<typename A>
+                primitive_type operator()(A&&) const
                 {
-                    if (b == B{})
+                    llmcpp::throw_exception(macro_exception{});
+                }
+            };
+
+            struct binary_fallback_visitor
+            {
+                template<typename A, typename B>
+                primitive_type operator()(A&&, B&&) const
+                {
+                    llmcpp::throw_exception(macro_exception{});
+                }
+            };
+
+            struct divides_assign
+                : binary_fallback_visitor
+            {
+                using binary_fallback_visitor::operator();
+
+                template<typename A, typename B>
+                    requires requires(A&& a, B&& b) { std::forward<A>(a) /= std::forward<B>(b); }
+                decltype(auto) operator ()(A&& a, B&& b) const
+                {
+                    if constexpr (std::is_arithmetic_v<B>)
                     {
-                        throw macro_exception{};
+                        if (std::forward<B>(b) == B{})
+                        {
+                            llmcpp::throw_exception(macro_exception{});
+                        }
                     }
+                    return std::forward<A>(a) /= std::forward<B>(b);
                 }
-                return a /= b;
-            }
-        };
+            };
 
-        template<typename CompoundAssignmentOperator>
-        struct primitive_visitor
-            : public boost::static_visitor<void>
-        {
-            primitive_visitor() = default;
-
-            template<typename A, typename B>
-            void operator ()(A& a, const B& b) const
+            struct modulus_assign
+                : binary_fallback_visitor
             {
-                if constexpr (std::is_same_v<A, B> && !std::is_same_v<A, bool>)
+                using binary_fallback_visitor::operator();
+
+                template<typename A, typename B>
+                    requires requires(A&& a, B&& b) { std::forward<A>(a) %= std::forward<B>(b); }
+                decltype(auto) operator ()(A&& a, B&& b) const
                 {
-                    if constexpr (requires { CompoundAssignmentOperator{}(a, b); })
+                    if constexpr (std::is_arithmetic_v<B>)
                     {
-                        CompoundAssignmentOperator{}(a, b);
-                        return;
+                        if (std::forward<B>(b) == B{})
+                        {
+                            llmcpp::throw_exception(macro_exception{});
+                        }
                     }
+                    return std::forward<A>(a) %= std::forward<B>(b);
                 }
-                else if constexpr (
-                    std::is_arithmetic_v<A>
-                    && std::is_arithmetic_v<B>
-                    && !std::is_same_v<A, bool>
-                    && !std::is_same_v<B, bool>)
+            };
+
+            struct divides
+                : binary_fallback_visitor
+            {
+                using binary_fallback_visitor::operator();
+
+                template<typename A, typename B>
+                    requires requires(const A& a, const B& b) { a / b; }
+                decltype(auto) operator ()(const A& a, const B& b) const
                 {
-                    if constexpr (requires { CompoundAssignmentOperator{}(a, static_cast<A>(b)); })
+                    if constexpr (std::is_arithmetic_v<B>)
                     {
-                        CompoundAssignmentOperator{}(a, static_cast<A>(b));
-                        return;
+                        if (b == B{})
+                        {
+                            llmcpp::throw_exception(macro_exception{});
+                        }
                     }
+                    return a / b;
                 }
-                throw macro_exception{};
-            }
-        };
+            };
 
-        primitive_type& operator +=(primitive_type& lhs, const primitive_type& rhs)
-        {
-            boost::apply_visitor(primitive_visitor<plus_assign>{}, lhs, rhs);
-            return lhs;
-        }
-
-        primitive_type& operator -=(primitive_type& lhs, const primitive_type& rhs)
-        {
-            boost::apply_visitor(primitive_visitor<minus_assign>{}, lhs, rhs);
-            return lhs;
-        }
-
-        primitive_type& operator *=(primitive_type& lhs, const primitive_type& rhs)
-        {
-            boost::apply_visitor(primitive_visitor<multiplies_assign>{}, lhs, rhs);
-            return lhs;
-        }
-
-        primitive_type& operator /=(primitive_type& lhs, const primitive_type& rhs)
-        {
-            boost::apply_visitor(primitive_visitor<divides_assign>{}, lhs, rhs);
-            return lhs;
-        }
-    }
-}
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::placeholder_type,
-    (llmcpp::parser::expression_type, expression)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::expression_rest_type,
-    (char, operator_)
-    (llmcpp::parser::term_type, operand)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::expression_type,
-    (llmcpp::parser::term_type, first)
-    (std::vector<llmcpp::parser::expression_rest_type>, rest)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::term_rest_type,
-    (char, operator_)
-    (llmcpp::parser::factor_type, operand)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::term_type,
-    (llmcpp::parser::factor_type, first)
-    (std::vector<llmcpp::parser::term_rest_type>, rest)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::macro_call_type,
-    (std::string, name)
-    (std::vector<llmcpp::parser::expression_type>, arguments)
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::variable_type,
-    (std::string, name)
-);
-
-namespace llmcpp
-{
-
-    std::string expand_macro(std::string_view input, const config& config, const context& ctx);
-
-    primitive_type parser::evaluate_expression(const expression_type& expr, const config& config, context& ctx)
-    {
-        primitive_type lhs{ evaluate_term(expr.first, config, ctx) };
-        for (const expression_rest_type& rest_element : expr.rest)
-        {
-            const primitive_type rhs{ evaluate_term(rest_element.operand, config, ctx) };
-            if (rest_element.operator_ == '+')
+            struct modulus
+                : binary_fallback_visitor
             {
-                lhs += rhs;
-            }
-            else if (rest_element.operator_ == '-')
-            {
-                lhs -= rhs;
-            }
-        }
-        return lhs;
-    }
+                using binary_fallback_visitor::operator();
 
-    primitive_type parser::evaluate_term(const term_type& term, const config& config, context& ctx)
-    {
-        primitive_type lhs{ evaluate_factor(term.first, config, ctx) };
-        for (const term_rest_type& rest_element : term.rest)
-        {
-            const primitive_type rhs{ evaluate_factor(rest_element.operand, config, ctx) };
-            if (rest_element.operator_ == '*')
-            {
-                lhs *= rhs;
-            }
-            else if (rest_element.operator_ == '/')
-            {
-                lhs /= rhs;
-            }
-        }
-        return lhs;
-    }
-
-    primitive_type parser::evaluate_factor(const factor_type& factor, const config& config, context& ctx)
-    {
-        overloaded visitor{
-            [&](const expression_type& value) -> primitive_type
-            {
-                return evaluate_expression(value, config, ctx);
-            },
-            [&](const primary_type& value) -> primitive_type
-            {
-                return evaluate_primary(value, config, ctx);
-            },
-            [](const auto&) -> primitive_type
-            {
-                throw macro_exception{};
-            }
-        };
-        return boost::apply_visitor(visitor, factor);
-    }
-
-    primitive_type parser::evaluate_primary(const primary_type& primary, const config& config, context& ctx)
-    {
-        overloaded visitor{
-            [&](const symbol_type& value) -> primitive_type
-            {
-                return evaluate_symbol(value, config, ctx);
-            },
-            [&](const primitive_type& value) -> primitive_type
-            {
-                return value;
-            },
-            [](const auto&) -> primitive_type
-            {
-                throw macro_exception{};
-            }
-        };
-        return boost::apply_visitor(visitor, primary);
-    }
-
-    primitive_type parser::evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx)
-    {
-        overloaded visitor{
-            [&](const variable_type& value) -> primitive_type
-            {
-                if (const std::optional<primitive_type> variable_value{ ctx.get(value.name) }; variable_value)
+                template<typename A, typename B>
+                    requires requires(const A& a, const B& b) { a% b; }
+                decltype(auto) operator ()(const A& a, const B& b) const
                 {
-                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << value.name << "=" << primitive_to_string(*variable_value) << ").";
-                    return *variable_value;
-                }
-
-                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << value.name << ").";
-
-                return std::string{};
-            },
-            [&](const macro_call_type& value) -> primitive_type
-            {
-                std::vector<primitive_type> evaluated_args;
-                for (const expression_type& arg : value.arguments)
-                {
-                    evaluated_args.push_back(evaluate_expression(arg, config, ctx));
-                }
-
-                if (const std::optional<builtin::macro_type> macro{ builtin::get_macro(value.name) }; macro)
-                {
-                    try
+                    if constexpr (std::is_arithmetic_v<B>)
                     {
-                        const primitive_type evaluated{ (*macro)(evaluated_args, config, ctx) };
-                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << value.name << " => " << primitive_to_string(evaluated) << ").";
-                        return evaluated;
+                        if (b == B{})
+                        {
+                            llmcpp::throw_exception(macro_exception{});
+                        }
                     }
-                    catch (const boost::exception&)
-                    {
-                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << value.name << ").";
-                        throw_nested_exception(macro_exception{});
-                    }
+                    return a % b;
                 }
+            };
 
-                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << value.name << ").";
-                llmcpp::throw_exception(macro_exception{});
-            },
-            [](const auto&) -> primitive_type
+            template<typename Result>
+            struct static_cast_impl
             {
-                throw macro_exception{};
+                template<typename A>
+                    requires requires(const A& a) { static_cast<Result>(a); }
+                Result operator ()(const A& a) const
+                {
+                    return static_cast<Result>(a);
+                }
+            };
+
+            template<typename Result>
+            struct static_cast_
+                : static_cast_impl<Result>
+            {
+            };
+
+            template<>
+            struct static_cast_<bool>
+                : static_cast_impl<bool>
+            {
+                using static_cast_impl<bool>::operator();
+
+                bool operator()(const std::string& s) const
+                {
+                    return !s.empty();
+                }
+            };
+        } // namespace detail
+
+        template<typename T>
+        concept bitwise_operable = !std::same_as<T, bool>&& requires(T a, T b, int shift)
+        {
+            { ~a } -> std::same_as<T>;
+            { a& b } -> std::same_as<T>;
+            { a | b } -> std::same_as<T>;
+            { a^ b } -> std::same_as<T>;
+            { a << shift } -> std::same_as<T>;
+            { a >> shift } -> std::same_as<T>;
+        };
+
+        template<typename A, typename B>
+        concept safe_equality_comparable_with = requires(const A & a, const B & b)
+        {
+            { a == b } -> std::convertible_to<bool>;
+        } && !(std::same_as<std::decay_t<A>, bool>^ std::same_as<std::decay_t<B>, bool>);
+
+        template<typename A, typename B>
+        concept safe_totally_ordered_with
+            = std::totally_ordered_with<A, B>
+            && !(std::same_as<std::decay_t<A>, bool>^ std::same_as<std::decay_t<B>, bool>);
+
+        template<typename A>
+        concept has_safe_unary_plus_minus = requires(const A & a)
+        {
+            { +a };
+            { -a };
+        } && !std::same_as<std::decay_t<A>, bool>;
+
+        template<typename A>
+        concept has_safe_logical_not = requires(const A & a)
+        {
+            { !a };
+        };
+
+        template<typename A>
+        concept has_safe_bitwise_not = requires(const A & a)
+        {
+            { ~a };
+        } && !std::same_as<std::decay_t<A>, bool>;
+
+
+#define LLMCPP_DEFINE_FUNCTION(opecode)                                                       \
+        struct opecode                                                                        \
+        {                                                                                     \
+            template<typename ... Args>                                                       \
+            decltype(auto) operator()(Args&& ... args) const                                  \
+            {                                                                                 \
+                return boost::apply_visitor(detail::opecode{}, std::forward<Args>(args) ...); \
+            }                                                                                 \
+        };
+
+        LLMCPP_DEFINE_FUNCTION(divides_assign);
+        LLMCPP_DEFINE_FUNCTION(modulus_assign);
+        LLMCPP_DEFINE_FUNCTION(divides);
+        LLMCPP_DEFINE_FUNCTION(modulus);
+
+        //#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                   \
+        //        namespace detail                                                                                    \
+        //        {                                                                                                   \
+        //            struct opecode                                                                                  \
+        //                : binary_fallback_visitor                                                                   \
+        //            {                                                                                               \
+        //                using binary_fallback_visitor::operator();                                                  \
+        //                                                                                                            \
+        //                template<typename A, typename B>                                                            \
+        //                primitive_type operator ()(A& a, const B& b) const                                          \
+        //                {                                                                                           \
+        //                    using decayed_a = std::decay_t<A>;                                                      \
+        //                    using decayed_b = std::decay_t<B>;                                                      \
+        //                    if constexpr (std::is_same_v<decayed_a, decayed_b> && !std::is_same_v<decayed_a, bool>) \
+        //                    {                                                                                       \
+        //                        if constexpr (requires { a operator_ b; })                                          \
+        //                        {                                                                                   \
+        //                            return a operator_ b;                                                           \
+        //                        }                                                                                   \
+        //                    }                                                                                       \
+        //                    else if constexpr (                                                                     \
+        //                        std::is_arithmetic_v<decayed_a>                                                     \
+        //                        && std::is_arithmetic_v<decayed_b>                                                  \
+        //                        && !std::is_same_v<decayed_a, bool>                                                 \
+        //                        && !std::is_same_v<decayed_b, bool>)                                                \
+        //                    {                                                                                       \
+        //                        if constexpr (requires { a operator_ static_cast<decayed_a>(b); })                  \
+        //                        {                                                                                   \
+        //                            return a operator_ static_cast<decayed_a>(b);                                   \
+        //                        }                                                                                   \
+        //                    }                                                                                       \
+        //                }                                                                                           \
+        //            };                                                                                              \
+        //        }                                                                                                   \
+        //                                                                                                            \
+        //        LLMCPP_DEFINE_FUNCTION(opecode);
+        //
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(=, assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign);
+        //        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign);
+        //
+        //#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
+        namespace detail                                                        \
+        {                                                                       \
+            struct opecode                                                      \
+            {                                                                   \
+                template<typename A, typename B>                                \
+                    requires (bitwise_operable<A> && bitwise_operable<B>)       \
+                primitive_type operator ()(const A& a, const B& b) const        \
+                {                                                               \
+                    return a operator_ b;                                       \
+                }                                                               \
+                template<typename A, typename B>                                \
+                    requires (!(bitwise_operable<A> && bitwise_operable<B>))    \
+                primitive_type operator ()(const A& a, const B& b) const        \
+                {                                                               \
+                    llmcpp::throw_exception(macro_exception{});                 \
+                }                                                               \
+            };                                                                  \
+        }                                                                       \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        //LLMCPP_DEFINE_FUNCTION_OBJECT(|| , logical_or);
+        //LLMCPP_DEFINE_FUNCTION_OBJECT(&&, logical_and);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(| , or_);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(^, xor_);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(&, and_);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(<< , shift_left);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(>> , shift_right);
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                   \
+        namespace detail                                                    \
+        {                                                                   \
+            struct opecode                                                  \
+            {                                                               \
+                template<typename A, typename B>                            \
+                    requires (safe_equality_comparable_with<A, B>)          \
+                primitive_type operator ()(const A& a, const B& b) const    \
+                {                                                           \
+                    return a operator_ b;                                   \
+                }                                                           \
+                template<typename A, typename B>                            \
+                    requires (!(safe_equality_comparable_with<A, B>))       \
+                primitive_type operator ()(const A& a, const B& b) const    \
+                {                                                           \
+                    llmcpp::throw_exception(macro_exception{});             \
+                }                                                           \
+            };                                                              \
+        }                                                                   \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(== , equal);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(!= , not_equal);
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                   \
+        namespace detail                                                    \
+        {                                                                   \
+            struct opecode                                                  \
+            {                                                               \
+                template<typename A, typename B>                            \
+                    requires (safe_totally_ordered_with<A, B>)              \
+                primitive_type operator ()(const A& a, const B& b) const    \
+                {                                                           \
+                    return a operator_ b;                                   \
+                }                                                           \
+                template<typename A, typename B>                            \
+                    requires (!(safe_totally_ordered_with<A, B>))           \
+                primitive_type operator ()(const A& a, const B& b) const    \
+                {                                                           \
+                    llmcpp::throw_exception(macro_exception{});             \
+                }                                                           \
+            };                                                              \
+        }                                                                   \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(< , less);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(> , greater);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(<= , less_equal);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(>= , greater_equal);
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                               \
+        namespace detail                                                                \
+        {                                                                               \
+            struct opecode                                                              \
+            {                                                                           \
+                template<typename A, typename B>                                        \
+                    requires requires(const A& a, const B& b) { a operator_ b; }        \
+                primitive_type operator ()(const A& a, const B& b) const                \
+                {                                                                       \
+                    return a operator_ b;                                               \
+                }                                                                       \
+                template<typename A, typename B>                                        \
+                    requires (!requires(const A& a, const B& b) { a operator_ b; })     \
+                primitive_type operator ()(const A& a, const B& b) const                \
+                {                                                                       \
+                    llmcpp::throw_exception(macro_exception{});                         \
+                }                                                                       \
+            };                                                                          \
+        }                                                                               \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(+, plus);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(-, minus);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(*, multiplies);
+
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
+        namespace detail                                                        \
+        {                                                                       \
+            struct opecode                                                      \
+            {                                                                   \
+                template<typename A>                                            \
+                    requires requires(A& a) { operator_ a; }                    \
+                primitive_type operator ()(A& a) const                          \
+                {                                                               \
+                    return operator_ a;                                         \
+                }                                                               \
+                template<typename A>                                            \
+                    requires (!requires(A& a) { operator_ a; })                 \
+                primitive_type operator ()(A& a) const                          \
+                {                                                               \
+                    llmcpp::throw_exception(macro_exception{});                 \
+                }                                                               \
+            };                                                                  \
+        }                                                                       \
+                                                                                \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(++, prefix_increment);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(--, prefix_decrement);
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, concept_name)         \
+        namespace detail                                                        \
+        {                                                                       \
+            struct opecode                                                      \
+            {                                                                   \
+                template<typename A>                                            \
+                    requires (concept_name<A>)                                  \
+                primitive_type operator ()(const A& a) const                    \
+                {                                                               \
+                    return operator_ a;                                         \
+                }                                                               \
+                template<typename A>                                            \
+                    requires (!(concept_name<A>))                               \
+                primitive_type operator ()(const A& a) const                    \
+                {                                                               \
+                    llmcpp::throw_exception(macro_exception{});                 \
+                }                                                               \
+            };                                                                  \
+        }                                                                       \
+                                                                                \
+        LLMCPP_DEFINE_FUNCTION(opecode);
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(+, prefix_plus, has_safe_unary_plus_minus);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(-, prefix_minus, has_safe_unary_plus_minus);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(!, logical_not, has_safe_logical_not);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(~, bitwise_not, has_safe_bitwise_not);
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
+        namespace detail                                                        \
+        {                                                                       \
+            struct opecode                                                      \
+            {                                                                   \
+                template<typename A>                                            \
+                    requires requires(A & a) { a operator_; }                   \
+                primitive_type operator ()(A& a) const                          \
+                {                                                               \
+                    return a operator_;                                         \
+                }                                                               \
+                template<typename A>                                            \
+                    requires (!requires(A & a) { a operator_; })                \
+                primitive_type operator ()(A& a) const                          \
+                {                                                               \
+                    llmcpp::throw_exception(macro_exception{});                 \
+                }                                                               \
+            };                                                                  \
+        }                                                                       \
+                                                                                \
+        LLMCPP_DEFINE_FUNCTION(opecode);                                        \
+
+        LLMCPP_DEFINE_FUNCTION_OBJECT(++, suffix_increment);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(--, suffix_decrement);
+
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+#undef LLMCPP_DEFINE_FUNCTION
+
+        template<typename Result>
+        struct static_cast_
+        {
+            template<typename A>
+            Result operator ()(const A& a) const
+            {
+                return boost::apply_visitor(detail::static_cast_<Result>{}, a);
             }
         };
-        return boost::apply_visitor(visitor, symbol);
-    }
 
-    std::string parser::evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx)
-    {
-        overloaded visitor{
-            [&](const std::string& value) -> std::string
+        template<typename ForwardIterator, typename Evaluator, typename BinaryOperator, typename ... Args>
+        decltype(auto) accumulate_expression(ForwardIterator first, ForwardIterator last, Evaluator evaluator, BinaryOperator binary_operator, Args && ... args)
+        {
+            if (first == last)
             {
-                return value;
-            },
-            [&](const placeholder_type& value) -> std::string
+                llmcpp::throw_exception(logic_error{});
+            }
+            auto accumulated{ evaluator(*first, std::forward<Args>(args) ...) };
+            ++first;
+            if (first == last)
+            {
+                return accumulated;
+            }
+            for (; first != last; ++first)
+            {
+                accumulated = binary_operator(accumulated, evaluator(*first, std::forward<Args>(args) ...));
+            }
+            return accumulated;
+        }
+
+        struct evaluation_visitor
+        {
+            evaluation_visitor(const config& config, context& ctx)
+                : cfg{ cfg }
+                , ctx{ ctx }
+            {
+            }
+
+            evaluation_visitor(const evaluation_visitor&) = default;
+            evaluation_visitor(evaluation_visitor&&) = default;
+
+            const config& cfg;
+            context& ctx;
+        };
+
+        struct node_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<std::string>
+        {
+            node_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<std::string>{}
+            {
+            }
+
+            std::string operator()(const std::string& str) const
+            {
+                return str;
+            }
+
+            std::string operator()(const placeholder_type& value) const
             {
                 try
                 {
-                    const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, config, ctx)) };
+                    const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
                     BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
                     return evaluated;
                 }
@@ -1595,70 +2071,638 @@ namespace llmcpp
                     BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed.";
                     return std::string{};
                 }
-            },
-            [](const auto&) -> std::string
-            {
-                throw macro_exception{};
             }
         };
 
-        std::string result;
-        for (const node_type& node : ast)
+        struct assignment_expression_visitor
+            : public boost::static_visitor<primitive_type>
         {
-            result.append(boost::apply_visitor(visitor, node));
-        }
-        return result;
-    }
+            const config& cfg; context& ctx;
+            assignment_expression_visitor(const config& cfg, context& ctx) : cfg{ cfg }, ctx{ ctx } {}
 
-    std::string parser::evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx)
-    {
-        namespace qi = boost::spirit::qi;
-
-        std::vector<node_type> ast;
-
-        grammar::iterator_type iter{ document.begin() };
-        grammar::iterator_type end{ document.end() };
-
-        if (qi::parse(iter, end, grammar, ast) && iter == end)
-        {
-            return evaluate_node(ast, config, grammar, ctx);
-        }
-        else
-        {
-            std::ostringstream description;
-            description << "Parse failed at: " << std::string{ iter, end };
-            llmcpp::throw_exception(macro_exception{} << error_info::description{ description.str() });
-        }
-    }
-
-    std::string parser::evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx)
-    {
-        grammar grammar;
-
-        unsigned int depth{};
-        for (; depth < max_depth; ++depth)
-        {
-            if (input.find("{{") == std::string_view::npos)
+            primitive_type operator()(const assignment_expression_node_type& expr) const
             {
-                return input;
+                return evaluate_assignment_expression_node(expr, cfg, ctx);
             }
 
-            std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
-
-            if (evaluated == input)
+            primitive_type operator()(const conditional_expression_type& expr) const
             {
-                break;
+                return evaluate_conditional_expression(expr, cfg, ctx);
             }
 
-            input = std::move(evaluated);
-        }
+            primitive_type operator()(const assignment_expression_type& expr) const
+            {
+                return evaluate_assignment_expression(expr, cfg, ctx);
+            }
+        };
 
-        if (depth >= max_depth)
+        struct conditional_expression_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<primitive_type>
         {
-            llmcpp::throw_exception(macro_exception{} << error_info::description{ "Maximum recursion depth reached." });
+            conditional_expression_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<primitive_type>{}
+            {
+            }
+
+            primitive_type operator()(const conditional_expression_node_type& value) const
+            {
+                const primitive_type evaluated_condition{ evaluate_logical_or_expression(value.condition, cfg, ctx) };
+                if (static_cast_<bool>{}(evaluated_condition))
+                {
+                    return evaluate_expression(value.then_expr.get(), cfg, ctx);
+                }
+                return evaluate_conditional_expression(value.else_expr, cfg, ctx);
+            }
+
+            primitive_type operator()(const logical_or_expression_type& value) const
+            {
+                return evaluate_logical_or_expression(value, cfg, ctx);
+            }
+        };
+
+        struct prefix_expression_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<primitive_type>
+        {
+            prefix_expression_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<primitive_type>{}
+            {
+            }
+
+            primitive_type operator()(const prefix_expression_node_type& expr) const
+            {
+                return evaluate_prefix_expression_node(expr, cfg, ctx);
+            }
+
+            primitive_type operator()(const suffix_expression_type& expr) const
+            {
+                return evaluate_suffix_expression(expr, cfg, ctx);
+            }
+
+            primitive_type operator()(const prefix_expression_type& expr) const
+            {
+                return evaluate_prefix_expression(expr, cfg, ctx);
+            }
+        };
+
+        struct parentheses_expression_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<primitive_type>
+        {
+            parentheses_expression_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<primitive_type>{}
+            {
+            }
+
+            primitive_type operator()(const primary_type& expr) const
+            {
+                return evaluate_primary(expr, cfg, ctx);
+            }
+
+            primitive_type operator()(const expression_type& expr) const
+            {
+                return evaluate_expression(expr, cfg, ctx);
+            }
+        };
+
+        struct primary_expression_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<primitive_type>
+        {
+            primary_expression_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<primitive_type>{}
+            {
+            }
+
+            primitive_type operator()(const symbol_type& expr) const
+            {
+                return evaluate_symbol(expr, cfg, ctx);
+            }
+
+            primitive_type operator()(const primitive_type& expr) const
+            {
+                return expr;
+            }
+        };
+
+        struct symbol_visitor
+            : evaluation_visitor
+            , public boost::static_visitor<primitive_type>
+        {
+            symbol_visitor(const config& cfg, context& ctx)
+                : evaluation_visitor{ cfg, ctx }
+                , boost::static_visitor<primitive_type>{}
+            {
+            }
+
+            primitive_type operator()(const variable_type& variable) const
+            {
+                if (const std::optional<primitive_type> variable_value{ ctx.get(variable.name) }; variable_value)
+                {
+                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value) << ").";
+                    return *variable_value;
+                }
+
+                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << variable.name << ").";
+
+                return std::string{};
+            }
+
+            primitive_type operator()(const macro_call_type& macro_call) const
+            {
+                std::vector<primitive_type> evaluated_args;
+                for (const assignment_expression_type& arg : macro_call.arguments)
+                {
+                    evaluated_args.push_back(evaluate_assignment_expression(arg, cfg, ctx));
+                }
+
+                if (const std::optional<builtin::macro_type> macro{ builtin::get_macro(macro_call.name) }; macro)
+                {
+                    try
+                    {
+                        const primitive_type evaluated{ (*macro)(evaluated_args, cfg, ctx) };
+                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << macro_call.name << " => " << primitive_to_string(evaluated) << ").";
+                        return evaluated;
+                    }
+                    catch (const boost::exception&)
+                    {
+                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << macro_call.name << ").";
+                        throw_nested_exception(macro_exception{});
+                    }
+                }
+
+                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << macro_call.name << ").";
+                llmcpp::throw_exception(macro_exception{});
+            }
+        };
+    } // namespace paraser
+} // namespace llmcpp
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::suffix_expression_type,
+    operand,
+    operators
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::prefix_expression_node_type,
+    operator_,
+    operand
+)
+
+BOOST_FUSION_ADAPT_TPL_STRUCT(
+    (Operand)(Operator),
+    (llmcpp::parser::operator_operand_pair)(Operand)(Operator),
+    operator_,
+    operand
+)
+
+BOOST_FUSION_ADAPT_TPL_STRUCT(
+    (LowerExpression)(Operator),
+    (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
+    first,
+    rest
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::conditional_expression_node_type,
+    condition,
+    then_expr,
+    else_expr
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::macro_call_type,
+    name,
+    arguments
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::variable_type,
+    name
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::assignment_expression_node_type,
+    lhs,
+    operator_,
+    rhs
+)
+
+namespace llmcpp
+{
+    std::string expand_macro(std::string_view input, const config& config, const context& ctx);
+
+    namespace parser
+    {
+        std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx)
+        {
+            grammar grammar;
+
+            unsigned int depth{};
+            for (; depth < max_depth; ++depth)
+            {
+                if (input.find("{{") == std::string_view::npos)
+                {
+                    return input;
+                }
+
+                std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
+
+                if (evaluated == input)
+                {
+                    break;
+                }
+
+                input = std::move(evaluated);
+            }
+
+            if (depth >= max_depth)
+            {
+                llmcpp::throw_exception(macro_exception{} << error_info::description{ "Maximum recursion depth reached." });
+            }
+
+            return input;
         }
 
-        return input;
+        std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx)
+        {
+            namespace qi = boost::spirit::qi;
+
+            std::vector<node_type> ast;
+
+            grammar::iterator_type iter{ document.begin() };
+            grammar::iterator_type end{ document.end() };
+
+            if (qi::parse(iter, end, grammar, ast) && iter == end)
+            {
+                return evaluate_node(ast, config, grammar, ctx);
+            }
+            else
+            {
+                std::ostringstream description;
+                description << "Parse failed at: " << std::string{ iter, end };
+                llmcpp::throw_exception(macro_exception{} << error_info::description{ description.str() });
+            }
+        }
+
+        std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx)
+        {
+            std::string result;
+            for (const node_type& node : ast)
+            {
+                result.append(boost::apply_visitor(node_visitor{ config, ctx }, node));
+            }
+            return result;
+        }
+
+        primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx)
+        {
+            if (expr.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+            primitive_type last{};
+            for (const auto& assignment_expression : expr)
+            {
+                last = evaluate_assignment_expression(assignment_expression, config, ctx);
+            }
+            return last;
+        }
+
+        primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(assignment_expression_visitor{ config, ctx }, expr);
+        }
+
+        primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx)
+        {
+            primitive_type lhs{ evaluate_conditional_expression(expr.lhs, config, ctx) };
+            primitive_type rhs{ evaluate_assignment_expression(expr.rhs, config, ctx) };
+
+            //if (expr.operator_ == assignment_operator::assign)
+            //{
+            //    assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::plus_assign)
+            //{
+            //    plus_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::minus_assign)
+            //{
+            //    minus_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::multiplies_assign)
+            //{
+            //    multiplies_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::divides_assign)
+            //{
+            //    divides_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::modulus_assign)
+            //{
+            //    modulus_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::shift_left_assign)
+            //{
+            //    shift_left_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::shift_right_assign)
+            //{
+            //    shift_right_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::and_assign)
+            //{
+            //    and_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::xor_assign)
+            //{
+            //    xor_assign{}(lhs, rhs);
+            //}
+            //else if (expr.operator_ == assignment_operator::or_assign)
+            //{
+            //    or_assign{}(lhs, rhs);
+            //}
+            //else
+            //{
+            //    llmcpp::throw_exception(logic_error{});
+            //}
+
+            return lhs;
+        }
+
+        primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(conditional_expression_visitor{ config, ctx }, expr);
+        }
+
+        primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx)
+        {
+            if (expr.empty())
+            {
+                llmcpp::throw_exception(logic_error{});
+            }
+            primitive_type lhs{ evaluate_logical_and_expression(expr.front(), config, ctx) };
+            if (expr.size() == 1)
+            {
+                return lhs;
+            }
+            if (static_cast_<bool>{}(lhs))
+            {
+                return true;
+            }
+            for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
+            {
+                const auto& rhs = *iter;
+                lhs = evaluate_logical_and_expression(rhs, config, ctx);
+                if (static_cast_<bool>{}(lhs))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx)
+        {
+            if (expr.empty())
+            {
+                llmcpp::throw_exception(logic_error{});
+            }
+            primitive_type lhs{ evaluate_or_expression(expr.front(), config, ctx) };
+            if (expr.size() == 1)
+            {
+                return lhs;
+            }
+            if (!static_cast_<bool>{}(lhs))
+            {
+                return false;
+            }
+            for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
+            {
+                const auto& rhs = *iter;
+                lhs = evaluate_or_expression(rhs, config, ctx);
+                if (!static_cast_<bool>{}(lhs))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx)
+        {
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_xor_expression, or_{}, config, ctx);
+        }
+
+        primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx)
+        {
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_and_expression, xor_{}, config, ctx);
+        }
+
+        primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx)
+        {
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_equality_expression, and_{}, config, ctx);
+        }
+
+        primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type result{ evaluate_relational_expression(expr.first, config, ctx) };
+            for (const auto& [operator_, operand] : expr.rest)
+            {
+                const primitive_type rhs{ evaluate_relational_expression(operand, config, ctx) };
+                if (operator_ == equality_operator::equal)
+                {
+                    result = equal{}(result, rhs);
+                }
+                else if (operator_ == equality_operator::not_equal)
+                {
+                    result = not_equal{}(result, rhs);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return result;
+        }
+
+        primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type result{ evaluate_shift_expression(expr.first, config, ctx) };
+            for (const auto& [operator_, operand] : expr.rest)
+            {
+                const primitive_type rhs{ evaluate_shift_expression(operand, config, ctx) };
+                if (operator_ == relational_operator::less)
+                {
+                    result = less{}(result, rhs);
+                }
+                else if (operator_ == relational_operator::greater)
+                {
+                    result = greater{}(result, rhs);
+                }
+                else if (operator_ == relational_operator::less_equal)
+                {
+                    result = less_equal{}(result, rhs);
+                }
+                else if (operator_ == relational_operator::greater_equal)
+                {
+                    result = greater_equal{}(result, rhs);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return result;
+        }
+
+        primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type result{ evaluate_additive_expression(expr.first, config, ctx) };
+            for (const auto& [operator_, operand] : expr.rest)
+            {
+                const primitive_type rhs{ evaluate_additive_expression(operand, config, ctx) };
+                if (operator_ == shift_operator::shift_left)
+                {
+                    result = shift_left{}(result, rhs);
+                }
+                else if (operator_ == shift_operator::shift_right)
+                {
+                    result = shift_right{}(result, rhs);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return result;
+        }
+
+        primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type result{ evaluate_multiplicative_expression(expr.first, config, ctx) };
+            for (const auto& [operator_, operand] : expr.rest)
+            {
+                const primitive_type rhs{ evaluate_multiplicative_expression(operand, config, ctx) };
+                if (operator_ == additive_operator::plus)
+                {
+                    result = plus{}(result, rhs);
+                }
+                else if (operator_ == additive_operator::minus)
+                {
+                    result = minus{}(result, rhs);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return result;
+        }
+
+        primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type result{ evaluate_prefix_expression(expr.first, config, ctx) };
+            for (const auto& [operator_, operand] : expr.rest)
+            {
+                const primitive_type rhs{ evaluate_prefix_expression(operand, config, ctx) };
+                if (operator_ == multiplicative_operator::multiplies)
+                {
+                    result = multiplies{}(result, rhs);
+                }
+                else if (operator_ == multiplicative_operator::divides)
+                {
+                    result = divides{}(result, rhs);
+                }
+                else if (operator_ == multiplicative_operator::modulus)
+                {
+                    result = modulus{}(result, rhs);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return result;
+        }
+
+        primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(prefix_expression_visitor{ config, ctx }, expr);
+        }
+
+        primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx)
+        {
+            primitive_type evaluated{ evaluate_prefix_expression(expr.operand.get(), config, ctx) };
+            if (expr.operator_ == prefix_operator::prefix_increment)
+            {
+                return prefix_increment{}(evaluated);
+            }
+            else if (expr.operator_ == prefix_operator::prefix_decrement)
+            {
+                return prefix_decrement{}(evaluated);
+            }
+            else if (expr.operator_ == prefix_operator::prefix_plus)
+            {
+                return prefix_plus{}(evaluated);
+            }
+            else if (expr.operator_ == prefix_operator::prefix_minus)
+            {
+                return prefix_minus{}(evaluated);
+            }
+            else if (expr.operator_ == prefix_operator::logical_not)
+            {
+                return logical_not{}(evaluated);
+            }
+            else if (expr.operator_ == prefix_operator::bitwise_not)
+            {
+                return bitwise_not{}(evaluated);
+            }
+            llmcpp::throw_exception(logic_error{});
+        }
+
+        primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx)
+        {
+            primitive_type evaluated{ evaluate_parentheses_expression(expr.operand, config, ctx) };
+            for (const auto& operator_ : expr.operators)
+            {
+                if (operator_ == suffix_operator::suffix_increment)
+                {
+                    return prefix_increment{}(evaluated);
+                }
+                else if (operator_ == suffix_operator::suffix_decrement)
+                {
+                    return prefix_decrement{}(evaluated);
+                }
+                else
+                {
+                    llmcpp::throw_exception(logic_error{});
+                }
+            }
+            return evaluated;
+        }
+
+        primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(parentheses_expression_visitor{ config, ctx }, expr);
+        }
+
+        primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(primary_expression_visitor{ config, ctx }, primary);
+        }
+
+        primitive_type evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(symbol_visitor{ config, ctx }, symbol);
+        }
     }
 
     std::optional<builtin::macro_type> builtin::get_macro(std::string_view name)

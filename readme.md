@@ -30,7 +30,7 @@
 * C++20+
 
 ```
-vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static boost-process:x64-windows-static boost-spirit:x64-windows-static boost-fusion:x64-windows-static
+vcpkg install boost-beast:x64-windows-static boost-asio:x64-windows-static boost-program-options:x64-windows-static boost-multi-index:x64-windows-static boost-log:x64-windows-static boost-nowide:x64-windows-static boost-stacktrace:x64-windows-static boost-exception:x64-windows-static boost-algorithm:x64-windows-static boost-date-time:x64-windows-static boost-serialization:x64-windows-static boost-url:x64-windows-static boost-process:x64-windows-static boost-spirit:x64-windows-static boost-fusion:x64-windows-static boost-variant:x64-windows-static boost-optional:x64-windows-static
 vcpkg integrate install
 ```
 
