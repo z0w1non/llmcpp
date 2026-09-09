@@ -614,17 +614,74 @@ namespace llmcpp
 
     using primitive_type = boost::variant<int, bool, char, double, std::string>;
 
+    template<typename ... Args>
+    using value_and_reference_variant = boost::variant<Args ..., std::reference_wrapper<Args> ...>;
+
+    using vr_primitive_type = value_and_reference_variant<int, bool, char, double, std::string>;
+
+    struct unwrap_impl
+    {
+        template<typename T>
+        decltype(auto) operator()(T&& value)
+        {
+            return std::forward<T>(value);
+        }
+
+        template<typename T>
+        T& operator()(std::reference_wrapper<T> ref)
+        {
+            return ref.get();
+        }
+
+        template<typename T>
+        const T& operator()(std::reference_wrapper<const T> ref)
+        {
+            return ref.get();
+        }
+    };
+
+    template<typename T>
+    decltype(auto) unwrap(T&& arg)
+    {
+        return unwrap_impl{}(std::forward<T>(arg));
+    }
+
+    template<typename T>
+    struct unwrap_type_impl
+    {
+        using type = T;
+    };
+
+    template<typename T>
+    struct unwrap_type_impl<std::reference_wrapper<T>>
+    {
+        using type = T;
+    };
+
+    template <typename T>
+    using unwrap_type_t = typename unwrap_type_impl<std::decay_t<T>>::type;
+
+    struct x_primitive_to_string_visitor
+    {
+        template<typename T>
+        std::string operator ()(const T& value) const
+        {
+            if constexpr (std::is_same_v<unwrap_type_t<T>, std::string>)
+            {
+                return unwrap(value);
+            }
+            return boost::lexical_cast<std::string>(unwrap(value));
+        };
+    };
+
     std::string primitive_to_string(const primitive_type& primitive)
     {
-        auto visitor = [](const auto& value)
-            {
-                if constexpr (std::is_same_v<decltype(value), std::string>)
-                {
-                    return value;
-                }
-                return boost::lexical_cast<std::string>(value);
-            };
-        return boost::apply_visitor(visitor, primitive);
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
     }
 
     template<typename Result>
@@ -656,7 +713,8 @@ namespace llmcpp
         context();
         context make_pushed() const;
         void set(std::string_view key, const primitive_type& value);
-        std::optional<primitive_type> get(std::string_view key) const;
+        const primitive_type* get(std::string_view key) const;
+        primitive_type* get(std::string_view key);
 
     private:
         context(const context& ctx);
@@ -950,7 +1008,7 @@ namespace llmcpp
         variable_map[std::string{ key }] = value;
     }
 
-    std::optional<primitive_type> context::get(std::string_view key) const
+    const primitive_type* context::get(std::string_view key) const
     {
         const std::string key_string{ key };
         const context* current{ this };
@@ -960,11 +1018,16 @@ namespace llmcpp
             const context::variable_map_type::const_iterator map_iterator{ current->variable_map.find(key_string) };
             if (map_iterator != current->variable_map.end())
             {
-                return map_iterator->second;
+                return &map_iterator->second;
             }
             current = current->base;
         }
-        return std::nullopt;
+        return nullptr;
+    }
+
+    primitive_type* context::get(std::string_view key)
+    {
+        return const_cast<primitive_type*>(static_cast<const context&>(*this).get(key));
     }
 
     sd_mode string_to_sd_mode(std::string_view str)
@@ -1223,15 +1286,12 @@ namespace llmcpp
             suffix_decrement  // --
         };
 
-        struct macro_call_type;
-
         struct variable_type
         {
             std::string name;
         };
 
-        using symbol_type = boost::variant<variable_type, boost::recursive_wrapper<macro_call_type>>;
-        using primary_type = boost::variant<primitive_type, symbol_type>;
+        using primary_type = boost::variant<primitive_type, variable_type>;
 
         template<typename Operand, typename Operator>
         struct operator_operand_pair
@@ -1251,8 +1311,10 @@ namespace llmcpp
             std::vector<operator_operand_pair<lower_expression_type, operator_type>> rest;
         };
 
+        struct macro_expression_node_type;
+        using macro_expression_type = boost::variant<primary_type, boost::recursive_wrapper<macro_expression_node_type>>;
         struct expression_type;
-        using parentheses_expression_type = boost::variant<primary_type, boost::recursive_wrapper<expression_type>>;
+        using parentheses_expression_type = boost::variant<macro_expression_type, boost::recursive_wrapper<expression_type>>;
 
         struct suffix_expression_type
         {
@@ -1297,14 +1359,14 @@ namespace llmcpp
             assignment_expression_type rhs;
         };
 
-        struct macro_call_type
+        struct macro_expression_node_type
         {
             std::string name;
             std::vector<assignment_expression_type> arguments;
         };
 
         struct expression_type
-            : public std::vector<assignment_expression_type>
+            : std::vector<assignment_expression_type>
         {
             using std::vector<assignment_expression_type>::vector;
         };
@@ -1488,17 +1550,16 @@ namespace llmcpp
                 prefix_expression = prefix_expression_node | suffix_expression;
                 prefix_expression_node = prefix_operator_ >> prefix_expression;
                 suffix_expression = parentheses_expression >> *suffix_operator_;
-                parentheses_expression = (lit('(') >> expression >> lit(')')) | primary;
+                parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
 
-                primary = symbol | primitive;
-                symbol = macro_call | variable;
-                primitive = bool_ | character | int_ | double_ | string;
-
-                name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
-                macro_call = name >> arguments;
+                macro_expression = macro_expression_node | primary;
+                macro_expression_node = name >> arguments;
                 arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
-                variable = name;
 
+                primary = variable | primitive;
+                variable = name;
+                primitive = bool_ | character | int_ | double_ | string;
+                name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
                 character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
                 string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
             }
@@ -1533,16 +1594,15 @@ namespace llmcpp
             skipped_rule<prefix_expression_node_type()> prefix_expression_node;
             skipped_rule<suffix_expression_type()> suffix_expression;
             skipped_rule<parentheses_expression_type()> parentheses_expression;
+            skipped_rule<macro_expression_type()> macro_expression;
+            skipped_rule<macro_expression_node_type()> macro_expression_node;
 
             skipped_rule<primary_type()> primary;
-            skipped_rule<symbol_type()> symbol;
-            skipped_rule<primitive_type()> primitive;
-
-            skipped_rule<std::string()> name;
             skipped_rule<variable_type()> variable;
-            skipped_rule<macro_call_type()> macro_call;
+            skipped_rule<primitive_type()> primitive;
+            skipped_rule<vr_primitive_type()> vr_primitive;
+            skipped_rule<std::string()> name;
             skipped_rule<std::vector<assignment_expression_type>()> arguments;
-
             skipped_rule<char()> character;
             skipped_rule<std::string()> string;
         };
@@ -1553,27 +1613,31 @@ namespace llmcpp
         std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx);
         std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx);
 
-        primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx);
-        primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx);
-
-        primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx);
-        primitive_type evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx);
+        vr_primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& config, context& ctx);
+        vr_primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx);
+        vr_primitive_type evaluate_variable(const variable_type& symbol, const config& config, context& ctx);
+        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive, context& ctx);
+        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive, context& ctx);
+        primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
 
         namespace detail
         {
@@ -1592,86 +1656,6 @@ namespace llmcpp
                 primitive_type operator()(A&&, B&&) const
                 {
                     llmcpp::throw_exception(macro_exception{});
-                }
-            };
-
-            struct divides_assign
-                : binary_fallback_visitor
-            {
-                using binary_fallback_visitor::operator();
-
-                template<typename A, typename B>
-                    requires requires(A&& a, B&& b) { std::forward<A>(a) /= std::forward<B>(b); }
-                decltype(auto) operator ()(A&& a, B&& b) const
-                {
-                    if constexpr (std::is_arithmetic_v<B>)
-                    {
-                        if (std::forward<B>(b) == B{})
-                        {
-                            llmcpp::throw_exception(macro_exception{});
-                        }
-                    }
-                    return std::forward<A>(a) /= std::forward<B>(b);
-                }
-            };
-
-            struct modulus_assign
-                : binary_fallback_visitor
-            {
-                using binary_fallback_visitor::operator();
-
-                template<typename A, typename B>
-                    requires requires(A&& a, B&& b) { std::forward<A>(a) %= std::forward<B>(b); }
-                decltype(auto) operator ()(A&& a, B&& b) const
-                {
-                    if constexpr (std::is_arithmetic_v<B>)
-                    {
-                        if (std::forward<B>(b) == B{})
-                        {
-                            llmcpp::throw_exception(macro_exception{});
-                        }
-                    }
-                    return std::forward<A>(a) %= std::forward<B>(b);
-                }
-            };
-
-            struct divides
-                : binary_fallback_visitor
-            {
-                using binary_fallback_visitor::operator();
-
-                template<typename A, typename B>
-                    requires requires(const A& a, const B& b) { a / b; }
-                decltype(auto) operator ()(const A& a, const B& b) const
-                {
-                    if constexpr (std::is_arithmetic_v<B>)
-                    {
-                        if (b == B{})
-                        {
-                            llmcpp::throw_exception(macro_exception{});
-                        }
-                    }
-                    return a / b;
-                }
-            };
-
-            struct modulus
-                : binary_fallback_visitor
-            {
-                using binary_fallback_visitor::operator();
-
-                template<typename A, typename B>
-                    requires requires(const A& a, const B& b) { a% b; }
-                decltype(auto) operator ()(const A& a, const B& b) const
-                {
-                    if constexpr (std::is_arithmetic_v<B>)
-                    {
-                        if (b == B{})
-                        {
-                            llmcpp::throw_exception(macro_exception{});
-                        }
-                    }
-                    return a % b;
                 }
             };
 
@@ -1722,6 +1706,12 @@ namespace llmcpp
             { a == b } -> std::convertible_to<bool>;
         } && !(std::same_as<std::decay_t<A>, bool>^ std::same_as<std::decay_t<B>, bool>);
 
+        template<typename T>
+        concept safe_equality_comparable = requires(const T & a, const T & b)
+        {
+            { a == b } -> std::convertible_to<bool>;
+        };
+
         template<typename A, typename B>
         concept safe_totally_ordered_with
             = std::totally_ordered_with<A, B>
@@ -1746,7 +1736,6 @@ namespace llmcpp
             { ~a };
         } && !std::same_as<std::decay_t<A>, bool>;
 
-
 #define LLMCPP_DEFINE_FUNCTION(opecode)                                                       \
         struct opecode                                                                        \
         {                                                                                     \
@@ -1757,79 +1746,81 @@ namespace llmcpp
             }                                                                                 \
         };
 
-        LLMCPP_DEFINE_FUNCTION(divides_assign);
-        LLMCPP_DEFINE_FUNCTION(modulus_assign);
-        LLMCPP_DEFINE_FUNCTION(divides);
-        LLMCPP_DEFINE_FUNCTION(modulus);
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                       \
+                namespace detail                                                                            \
+                {                                                                                           \
+                    struct opecode                                                                          \
+                    {                                                                                       \
+                        template<typename A, typename B>                                                    \
+                        vr_primitive_type operator ()(A& a, const B& b) const                               \
+                        {                                                                                   \
+                            using A_ = std::decay_t<unwrap_type_t<A>>;                                      \
+                            using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
+                            if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)              \
+                            {                                                                               \
+                                if constexpr (requires { unwrap(a) operator_ unwrap(b); })                  \
+                                {                                                                           \
+                                    if constexpr (zero_check)                                               \
+                                    {                                                                       \
+                                        if (unwrap(b) == B_{})                                              \
+                                        {                                                                   \
+                                            llmcpp::throw_exception(macro_exception{});                     \
+                                        }                                                                   \
+                                    }                                                                       \
+                                    return unwrap(a) operator_ unwrap(b);                                   \
+                                }                                                                           \
+                            }                                                                               \
+                            else if constexpr (                                                             \
+                                std::is_arithmetic_v<A_>                                                    \
+                                && std::is_arithmetic_v<B_>                                                 \
+                                && !std::is_same_v<A_, bool>                                                \
+                                && !std::is_same_v<B_, bool>)                                               \
+                            {                                                                               \
+                                if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
+                                {                                                                           \
+                                    return unwrap(a) operator_ static_cast<A_>(unwrap(b));                  \
+                                }                                                                           \
+                            }                                                                               \
+                            llmcpp::throw_exception(macro_exception{});                                     \
+                        }                                                                                   \
+                    };                                                                                      \
+                }                                                                                           \
+                                                                                                            \
+                LLMCPP_DEFINE_FUNCTION(opecode);
 
-        //#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                   \
-        //        namespace detail                                                                                    \
-        //        {                                                                                                   \
-        //            struct opecode                                                                                  \
-        //                : binary_fallback_visitor                                                                   \
-        //            {                                                                                               \
-        //                using binary_fallback_visitor::operator();                                                  \
-        //                                                                                                            \
-        //                template<typename A, typename B>                                                            \
-        //                primitive_type operator ()(A& a, const B& b) const                                          \
-        //                {                                                                                           \
-        //                    using decayed_a = std::decay_t<A>;                                                      \
-        //                    using decayed_b = std::decay_t<B>;                                                      \
-        //                    if constexpr (std::is_same_v<decayed_a, decayed_b> && !std::is_same_v<decayed_a, bool>) \
-        //                    {                                                                                       \
-        //                        if constexpr (requires { a operator_ b; })                                          \
-        //                        {                                                                                   \
-        //                            return a operator_ b;                                                           \
-        //                        }                                                                                   \
-        //                    }                                                                                       \
-        //                    else if constexpr (                                                                     \
-        //                        std::is_arithmetic_v<decayed_a>                                                     \
-        //                        && std::is_arithmetic_v<decayed_b>                                                  \
-        //                        && !std::is_same_v<decayed_a, bool>                                                 \
-        //                        && !std::is_same_v<decayed_b, bool>)                                                \
-        //                    {                                                                                       \
-        //                        if constexpr (requires { a operator_ static_cast<decayed_a>(b); })                  \
-        //                        {                                                                                   \
-        //                            return a operator_ static_cast<decayed_a>(b);                                   \
-        //                        }                                                                                   \
-        //                    }                                                                                       \
-        //                }                                                                                           \
-        //            };                                                                                              \
-        //        }                                                                                                   \
-        //                                                                                                            \
-        //        LLMCPP_DEFINE_FUNCTION(opecode);
-        //
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(=, assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign);
-        //        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign);
-        //
-        //#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTION_OBJECT(=, assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(/=, divides_assign, true);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, true);
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
-        namespace detail                                                        \
-        {                                                                       \
-            struct opecode                                                      \
-            {                                                                   \
-                template<typename A, typename B>                                \
-                    requires (bitwise_operable<A> && bitwise_operable<B>)       \
-                primitive_type operator ()(const A& a, const B& b) const        \
-                {                                                               \
-                    return a operator_ b;                                       \
-                }                                                               \
-                template<typename A, typename B>                                \
-                    requires (!(bitwise_operable<A> && bitwise_operable<B>))    \
-                primitive_type operator ()(const A& a, const B& b) const        \
-                {                                                               \
-                    llmcpp::throw_exception(macro_exception{});                 \
-                }                                                               \
-            };                                                                  \
-        }                                                                       \
+#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                   \
+        namespace detail                                                                                    \
+        {                                                                                                   \
+            struct opecode                                                                                  \
+            {                                                                                               \
+                template<typename A, typename B>                                                            \
+                    requires (bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>)     \
+                vr_primitive_type operator ()(const A& a, const B& b) const                                    \
+                {                                                                                           \
+                    return unwrap(a) operator_ unwrap(b);                                                   \
+                }                                                                                           \
+                template<typename A, typename B>                                                            \
+                    requires (!(bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>))  \
+                vr_primitive_type operator ()(const A& a, const B& b) const                                    \
+                {                                                                                           \
+                    llmcpp::throw_exception(macro_exception{});                                             \
+                }                                                                                           \
+            };                                                                                              \
+        }                                                                                                   \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         //LLMCPP_DEFINE_FUNCTION_OBJECT(|| , logical_or);
@@ -1841,50 +1832,50 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(>> , shift_right);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                   \
-        namespace detail                                                    \
-        {                                                                   \
-            struct opecode                                                  \
-            {                                                               \
-                template<typename A, typename B>                            \
-                    requires (safe_equality_comparable_with<A, B>)          \
-                primitive_type operator ()(const A& a, const B& b) const    \
-                {                                                           \
-                    return a operator_ b;                                   \
-                }                                                           \
-                template<typename A, typename B>                            \
-                    requires (!(safe_equality_comparable_with<A, B>))       \
-                primitive_type operator ()(const A& a, const B& b) const    \
-                {                                                           \
-                    llmcpp::throw_exception(macro_exception{});             \
-                }                                                           \
-            };                                                              \
-        }                                                                   \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                           \
+        namespace detail                                                                            \
+        {                                                                                           \
+            struct opecode                                                                          \
+            {                                                                                       \
+                template<typename A, typename B>                                                    \
+                    requires (safe_equality_comparable_with<unwrap_type_t<A>, unwrap_type_t<B>>)    \
+                vr_primitive_type operator ()(const A& a, const B& b) const                         \
+                {                                                                                   \
+                    return unwrap(a) operator_ unwrap(b);                                           \
+                }                                                                                   \
+                template<typename A, typename B>                                                    \
+                    requires (!(safe_equality_comparable_with<unwrap_type_t<A>, unwrap_type_t<B>>)) \
+                vr_primitive_type operator ()(const A& a, const B& b) const                         \
+                {                                                                                   \
+                    llmcpp::throw_exception(macro_exception{});                                     \
+                }                                                                                   \
+            };                                                                                      \
+        }                                                                                           \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(== , equal);
         LLMCPP_DEFINE_FUNCTION_OBJECT(!= , not_equal);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                   \
-        namespace detail                                                    \
-        {                                                                   \
-            struct opecode                                                  \
-            {                                                               \
-                template<typename A, typename B>                            \
-                    requires (safe_totally_ordered_with<A, B>)              \
-                primitive_type operator ()(const A& a, const B& b) const    \
-                {                                                           \
-                    return a operator_ b;                                   \
-                }                                                           \
-                template<typename A, typename B>                            \
-                    requires (!(safe_totally_ordered_with<A, B>))           \
-                primitive_type operator ()(const A& a, const B& b) const    \
-                {                                                           \
-                    llmcpp::throw_exception(macro_exception{});             \
-                }                                                           \
-            };                                                              \
-        }                                                                   \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                       \
+        namespace detail                                                                        \
+        {                                                                                       \
+            struct opecode                                                                      \
+            {                                                                                   \
+                template<typename A, typename B>                                                \
+                    requires (safe_totally_ordered_with<unwrap_type_t<A>, unwrap_type_t<B>>)    \
+                vr_primitive_type operator ()(const A& a, const B& b) const                     \
+                {                                                                               \
+                    return unwrap(a) operator_ unwrap(b);                                       \
+                }                                                                               \
+                template<typename A, typename B>                                                \
+                    requires (!(safe_totally_ordered_with<unwrap_type_t<A>, unwrap_type_t<B>>)) \
+                vr_primitive_type operator ()(const A& a, const B& b) const                     \
+                {                                                                               \
+                    llmcpp::throw_exception(macro_exception{});                                 \
+                }                                                                               \
+            };                                                                                  \
+        }                                                                                       \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(< , less);
@@ -1893,31 +1884,48 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(>= , greater_equal);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                               \
-        namespace detail                                                                \
-        {                                                                               \
-            struct opecode                                                              \
-            {                                                                           \
-                template<typename A, typename B>                                        \
-                    requires requires(const A& a, const B& b) { a operator_ b; }        \
-                primitive_type operator ()(const A& a, const B& b) const                \
-                {                                                                       \
-                    return a operator_ b;                                               \
-                }                                                                       \
-                template<typename A, typename B>                                        \
-                    requires (!requires(const A& a, const B& b) { a operator_ b; })     \
-                primitive_type operator ()(const A& a, const B& b) const                \
-                {                                                                       \
-                    llmcpp::throw_exception(macro_exception{});                         \
-                }                                                                       \
-            };                                                                          \
-        }                                                                               \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
+        namespace detail                                                                                \
+        {                                                                                               \
+            struct opecode                                                                              \
+            {                                                                                           \
+                template<typename A, typename B>                                                        \
+                static constexpr bool operable =                                                        \
+                    requires(const A& a, const B& b) { unwrap(a) operator_ unwrap(b); }                 \
+                    && !std::same_as<std::decay_t<unwrap_type_t<A>>, bool>                              \
+                    && !std::same_as<std::decay_t<unwrap_type_t<B>>, bool>;                             \
+                template<typename A, typename B>                                                        \
+                    requires (operable<A, B>)                                                           \
+                vr_primitive_type operator ()(const A& a, const B& b) const                             \
+                {                                                                                       \
+                    if constexpr (zero_check)                                                           \
+                    {                                                                                   \
+                        using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
+                        if constexpr (safe_equality_comparable<B_>)                                     \
+                        {                                                                               \
+                            if (unwrap(b) == B_{})                                                      \
+                            {                                                                           \
+                                llmcpp::throw_exception(macro_exception{});                             \
+                            }                                                                           \
+                        }                                                                               \
+                    }                                                                                   \
+                    return unwrap(a) operator_ unwrap(b);                                               \
+                }                                                                                       \
+                template<typename A, typename B>                                                        \
+                    requires (!operable<A, B>)                                                          \
+                vr_primitive_type operator ()(const A& a, const B& b) const                             \
+                {                                                                                       \
+                    llmcpp::throw_exception(macro_exception{});                                         \
+                }                                                                                       \
+            };                                                                                          \
+        }                                                                                               \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(+, plus);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(-, minus);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(*, multiplies);
-
+        LLMCPP_DEFINE_FUNCTION_OBJECT(+, plus, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(-, minus, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(*, multiplies, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(/ , divides, true);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(%, modulus, true);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
 #define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
@@ -1926,14 +1934,14 @@ namespace llmcpp
             struct opecode                                                      \
             {                                                                   \
                 template<typename A>                                            \
-                    requires requires(A& a) { operator_ a; }                    \
-                primitive_type operator ()(A& a) const                          \
+                    requires requires(A& a) { operator_ unwrap(a); }            \
+                vr_primitive_type operator ()(A& a) const                       \
                 {                                                               \
-                    return operator_ a;                                         \
+                    return operator_ unwrap(a);                                 \
                 }                                                               \
                 template<typename A>                                            \
-                    requires (!requires(A& a) { operator_ a; })                 \
-                primitive_type operator ()(A& a) const                          \
+                    requires (!requires(A& a) { operator_ unwrap(a); })         \
+                vr_primitive_type operator ()(A& a) const                       \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
@@ -1952,14 +1960,14 @@ namespace llmcpp
             struct opecode                                                      \
             {                                                                   \
                 template<typename A>                                            \
-                    requires (concept_name<A>)                                  \
-                primitive_type operator ()(const A& a) const                    \
+                    requires (concept_name<unwrap_type_t<A>>)                   \
+                vr_primitive_type operator ()(const A& a) const                 \
                 {                                                               \
-                    return operator_ a;                                         \
+                    return operator_ unwrap(a);                                 \
                 }                                                               \
                 template<typename A>                                            \
-                    requires (!(concept_name<A>))                               \
-                primitive_type operator ()(const A& a) const                    \
+                    requires (!(concept_name<unwrap_type_t<A>>))                \
+                vr_primitive_type operator ()(const A& a) const                 \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
@@ -1980,14 +1988,14 @@ namespace llmcpp
             struct opecode                                                      \
             {                                                                   \
                 template<typename A>                                            \
-                    requires requires(A & a) { a operator_; }                   \
-                primitive_type operator ()(A& a) const                          \
+                    requires requires(A & a) { unwrap(a) operator_; }           \
+                vr_primitive_type operator ()(A& a) const                       \
                 {                                                               \
-                    return a operator_;                                         \
+                    return unwrap(a) operator_;                                 \
                 }                                                               \
                 template<typename A>                                            \
-                    requires (!requires(A & a) { a operator_; })                \
-                primitive_type operator ()(A& a) const                          \
+                    requires (!requires(A & a) { unwrap(a) operator_; })        \
+                vr_primitive_type operator ()(A& a) const                       \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
@@ -2049,7 +2057,7 @@ namespace llmcpp
 
         struct node_visitor
             : evaluation_visitor
-            , public boost::static_visitor<std::string>
+            , boost::static_visitor<std::string>
         {
             node_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
@@ -2066,7 +2074,7 @@ namespace llmcpp
             {
                 try
                 {
-                    const std::string evaluated{ primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
+                    const std::string evaluated{ vr_primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
                     BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
                     return evaluated;
                 }
@@ -2079,22 +2087,22 @@ namespace llmcpp
         };
 
         struct assignment_expression_visitor
-            : public boost::static_visitor<primitive_type>
+            : boost::static_visitor<vr_primitive_type>
         {
             const config& cfg; context& ctx;
             assignment_expression_visitor(const config& cfg, context& ctx) : cfg{ cfg }, ctx{ ctx } {}
 
-            primitive_type operator()(const assignment_expression_node_type& expr) const
+            vr_primitive_type operator()(const assignment_expression_node_type& expr) const
             {
                 return evaluate_assignment_expression_node(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const conditional_expression_type& expr) const
+            vr_primitive_type operator()(const conditional_expression_type& expr) const
             {
                 return evaluate_conditional_expression(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const assignment_expression_type& expr) const
+            vr_primitive_type operator()(const assignment_expression_type& expr) const
             {
                 return evaluate_assignment_expression(expr, cfg, ctx);
             }
@@ -2102,17 +2110,17 @@ namespace llmcpp
 
         struct conditional_expression_visitor
             : evaluation_visitor
-            , public boost::static_visitor<primitive_type>
+            , boost::static_visitor<vr_primitive_type>
         {
             conditional_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
-                , boost::static_visitor<primitive_type>{}
+                , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            primitive_type operator()(const conditional_expression_node_type& value) const
+            vr_primitive_type operator()(const conditional_expression_node_type& value) const
             {
-                const primitive_type evaluated_condition{ evaluate_logical_or_expression(value.condition, cfg, ctx) };
+                const vr_primitive_type evaluated_condition{ evaluate_logical_or_expression(value.condition, cfg, ctx) };
                 if (static_cast_<bool>{}(evaluated_condition))
                 {
                     return evaluate_expression(value.then_expr.get(), cfg, ctx);
@@ -2120,7 +2128,7 @@ namespace llmcpp
                 return evaluate_conditional_expression(value.else_expr, cfg, ctx);
             }
 
-            primitive_type operator()(const logical_or_expression_type& value) const
+            vr_primitive_type operator()(const logical_or_expression_type& value) const
             {
                 return evaluate_logical_or_expression(value, cfg, ctx);
             }
@@ -2128,25 +2136,25 @@ namespace llmcpp
 
         struct prefix_expression_visitor
             : evaluation_visitor
-            , public boost::static_visitor<primitive_type>
+            , boost::static_visitor<vr_primitive_type>
         {
             prefix_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
-                , boost::static_visitor<primitive_type>{}
+                , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            primitive_type operator()(const prefix_expression_node_type& expr) const
+            vr_primitive_type operator()(const prefix_expression_node_type& expr) const
             {
                 return evaluate_prefix_expression_node(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const suffix_expression_type& expr) const
+            vr_primitive_type operator()(const suffix_expression_type& expr) const
             {
                 return evaluate_suffix_expression(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const prefix_expression_type& expr) const
+            vr_primitive_type operator()(const prefix_expression_type& expr) const
             {
                 return evaluate_prefix_expression(expr, cfg, ctx);
             }
@@ -2154,96 +2162,137 @@ namespace llmcpp
 
         struct parentheses_expression_visitor
             : evaluation_visitor
-            , public boost::static_visitor<primitive_type>
+            , boost::static_visitor<vr_primitive_type>
         {
             parentheses_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
-                , boost::static_visitor<primitive_type>{}
+                , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            primitive_type operator()(const primary_type& expr) const
+            vr_primitive_type operator()(const macro_expression_type& expr) const
             {
-                return evaluate_primary(expr, cfg, ctx);
+                return evaluate_macro_expression(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const expression_type& expr) const
+            vr_primitive_type operator()(const expression_type& expr) const
             {
                 return evaluate_expression(expr, cfg, ctx);
             }
         };
 
-        struct primary_expression_visitor
+        struct primary_visitor
             : evaluation_visitor
-            , public boost::static_visitor<primitive_type>
+            , boost::static_visitor<vr_primitive_type>
         {
-            primary_expression_visitor(const config& cfg, context& ctx)
+            primary_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
-                , boost::static_visitor<primitive_type>{}
+                , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            primitive_type operator()(const symbol_type& expr) const
+            vr_primitive_type operator()(const variable_type& variable) const
             {
-                return evaluate_symbol(expr, cfg, ctx);
+                return evaluate_variable(variable, cfg, ctx);
             }
 
-            primitive_type operator()(const primitive_type& expr) const
+            vr_primitive_type operator()(const primitive_type& primitive) const
             {
-                return expr;
+                return primitive;
             }
         };
 
-        struct symbol_visitor
+        struct macro_expression_visitor
             : evaluation_visitor
-            , public boost::static_visitor<primitive_type>
+            , boost::static_visitor<vr_primitive_type>
         {
-            symbol_visitor(const config& cfg, context& ctx)
+            macro_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
-                , boost::static_visitor<primitive_type>{}
+                , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            primitive_type operator()(const variable_type& variable) const
+            vr_primitive_type operator()(const macro_expression_node_type& expr) const
             {
-                if (const std::optional<primitive_type> variable_value{ ctx.get(variable.name) }; variable_value)
-                {
-                    BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value) << ").";
-                    return *variable_value;
-                }
-
-                BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << variable.name << ").";
-
-                return std::string{};
+                return evaluate_macro_expression_node(expr, cfg, ctx);
             }
 
-            primitive_type operator()(const macro_call_type& macro_call) const
+            vr_primitive_type operator()(const primary_type& primary) const
             {
-                std::vector<primitive_type> evaluated_args;
-                for (const assignment_expression_type& arg : macro_call.arguments)
-                {
-                    evaluated_args.push_back(evaluate_assignment_expression(arg, cfg, ctx));
-                }
-
-                if (const std::optional<builtin::macro_type> macro{ builtin::get_macro(macro_call.name) }; macro)
-                {
-                    try
-                    {
-                        const primitive_type evaluated{ (*macro)(evaluated_args, cfg, ctx) };
-                        BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << macro_call.name << " => " << primitive_to_string(evaluated) << ").";
-                        return evaluated;
-                    }
-                    catch (const boost::exception&)
-                    {
-                        BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << macro_call.name << ").";
-                        throw_nested_exception(macro_exception{});
-                    }
-                }
-
-                BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << macro_call.name << ").";
-                llmcpp::throw_exception(macro_exception{});
+                return evaluate_primary(primary, cfg, ctx);
             }
         };
+
+        struct primitive_ref_to_vr_primitive_visitor
+            : boost::static_visitor<vr_primitive_type>
+        {
+            context& ctx;
+            primitive_ref_to_vr_primitive_visitor(context& ctx)
+                : ctx{ ctx }
+            {
+            }
+
+            template<typename T>
+            vr_primitive_type operator()(T& value) const
+            {
+                return std::ref(value);
+            }
+        };
+
+        struct primitive_val_to_vr_primitive_visitor
+            : boost::static_visitor<vr_primitive_type>
+        {
+            context& ctx;
+            primitive_val_to_vr_primitive_visitor(context& ctx)
+                : ctx{ ctx }
+            {
+            }
+
+            template<typename T>
+            vr_primitive_type operator()(const T& value) const
+            {
+                return value;
+            }
+        };
+
+        struct vr_primitive_to_primitive_visitor
+            : boost::static_visitor<primitive_type>
+        {
+            template<typename T>
+            primitive_type operator()(const T& value) const
+            {
+                return unwrap(value);
+            }
+        };
+
+        //struct primary_to_vr_primitive_visitor
+        //    : boost::static_visitor<vr_primitive_type>
+        //{
+        //    context& ctx;
+        //    primary_to_vr_primitive_visitor(context& ctx)
+        //        : ctx{ ctx }
+        //    {
+        //    }
+
+        //    vr_primitive_type operator()(variable_type& variable) const
+        //    {
+        //        if (primitive_type* value_ptr{ ctx.get(variable.name) }; value_ptr)
+        //        {
+        //            return primitive_ref_to_vr_primitive(*value_ptr, ctx);
+        //        }
+        //        llmcpp::throw_exception(macro_exception{});
+        //    }
+
+        //    vr_primitive_type operator()(primitive_type& primitive) const
+        //    {
+        //        return primitive_val_to_vr_primitive(primitive, ctx);
+        //    }
+        //};
+
+        //vr_primitive_type primary_to_vr_primitive(primary_type& primary, context& ctx)
+        //{
+        //    boost::apply_visitor(primary_to_vr_primitive_visitor{ ctx }, primary);
+        //}
     } // namespace paraser
 } // namespace llmcpp
 
@@ -2281,7 +2330,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 );
 
 BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::macro_call_type,
+    llmcpp::parser::macro_expression_node_type,
     name,
     arguments
 );
@@ -2365,13 +2414,13 @@ namespace llmcpp
             return result;
         }
 
-        primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx)
         {
             if (expr.empty())
             {
                 llmcpp::throw_exception(macro_exception{});
             }
-            primitive_type last{};
+            vr_primitive_type last{};
             for (const auto& assignment_expression : expr)
             {
                 last = evaluate_assignment_expression(assignment_expression, config, ctx);
@@ -2379,70 +2428,70 @@ namespace llmcpp
             return last;
         }
 
-        primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx)
         {
             return boost::apply_visitor(assignment_expression_visitor{ config, ctx }, expr);
         }
 
-        primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx)
         {
-            primitive_type lhs{ evaluate_conditional_expression(expr.lhs, config, ctx) };
-            primitive_type rhs{ evaluate_assignment_expression(expr.rhs, config, ctx) };
+            vr_primitive_type lhs{ evaluate_conditional_expression(expr.lhs, config, ctx) };
+            vr_primitive_type rhs{ evaluate_assignment_expression(expr.rhs, config, ctx) };
 
-            //switch (expr.operator_)
-            //{
-            //case assignment_operator::assign:
-            //    assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::plus_assign:
-            //    plus_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::minus_assign:
-            //    minus_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::multiplies_assign:
-            //    multiplies_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::divides_assign:
-            //    divides_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::modulus_assign:
-            //    modulus_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::shift_left_assign:
-            //    shift_left_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::shift_right_assign:
-            //    shift_right_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::and_assign:
-            //    and_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::xor_assign:
-            //    xor_assign{}(lhs, rhs);
-            //    break;
-            //case assignment_operator::or_assign:
-            //    or_assign{}(lhs, rhs);
-            //    break;
-            //default:
-            //    llmcpp::throw_exception(logic_error{});
-            //}
+            switch (expr.operator_)
+            {
+            case assignment_operator::assign:
+                assign{}(lhs, rhs);
+                break;
+            case assignment_operator::plus_assign:
+                plus_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::minus_assign:
+                minus_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::multiplies_assign:
+                multiplies_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::divides_assign:
+                divides_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::modulus_assign:
+                modulus_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::shift_left_assign:
+                shift_left_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::shift_right_assign:
+                shift_right_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::and_assign:
+                and_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::xor_assign:
+                xor_assign{}(lhs, rhs);
+                break;
+            case assignment_operator::or_assign:
+                or_assign{}(lhs, rhs);
+                break;
+            default:
+                llmcpp::throw_exception(logic_error{});
+            }
 
             return lhs;
         }
 
-        primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx)
         {
             return boost::apply_visitor(conditional_expression_visitor{ config, ctx }, expr);
         }
 
-        primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx)
         {
             if (expr.empty())
             {
                 llmcpp::throw_exception(logic_error{});
             }
-            primitive_type lhs{ evaluate_logical_and_expression(expr.front(), config, ctx) };
+            vr_primitive_type lhs{ evaluate_logical_and_expression(expr.front(), config, ctx) };
             if (expr.size() == 1)
             {
                 return lhs;
@@ -2463,13 +2512,13 @@ namespace llmcpp
             return false;
         }
 
-        primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx)
         {
             if (expr.empty())
             {
                 llmcpp::throw_exception(logic_error{});
             }
-            primitive_type lhs{ evaluate_or_expression(expr.front(), config, ctx) };
+            vr_primitive_type lhs{ evaluate_or_expression(expr.front(), config, ctx) };
             if (expr.size() == 1)
             {
                 return lhs;
@@ -2490,193 +2539,247 @@ namespace llmcpp
             return true;
         }
 
-        primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx)
         {
             return accumulate_expression(expr.begin(), expr.end(), evaluate_xor_expression, or_{}, config, ctx);
         }
 
-        primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx)
         {
             return accumulate_expression(expr.begin(), expr.end(), evaluate_and_expression, xor_{}, config, ctx);
         }
 
-        primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx)
         {
             return accumulate_expression(expr.begin(), expr.end(), evaluate_equality_expression, and_{}, config, ctx);
         }
 
-        primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type result{ evaluate_relational_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_relational_expression(expr.first, config, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const primitive_type rhs{ evaluate_relational_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_relational_expression(operand, config, ctx) };
                 switch (operator_)
                 {
                 case equality_operator::equal:
-                    result = equal{}(result, rhs);
+                    lhs = equal{}(lhs, rhs);
                     break;
                 case equality_operator::not_equal:
-                    result = not_equal{}(result, rhs);
+                    lhs = not_equal{}(lhs, rhs);
                     break;
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return result;
+            return lhs;
         }
 
-        primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type result{ evaluate_shift_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_shift_expression(expr.first, config, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const primitive_type rhs{ evaluate_shift_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_shift_expression(operand, config, ctx) };
                 switch (operator_)
                 {
                 case relational_operator::less:
-                    result = less{}(result, rhs);
+                    lhs = less{}(lhs, rhs);
                     break;
                 case relational_operator::greater:
-                    result = greater{}(result, rhs);
+                    lhs = greater{}(lhs, rhs);
                     break;
                 case relational_operator::less_equal:
-                    result = less_equal{}(result, rhs);
+                    lhs = less_equal{}(lhs, rhs);
                     break;
                 case relational_operator::greater_equal:
-                    result = greater_equal{}(result, rhs);
+                    lhs = greater_equal{}(lhs, rhs);
                     break;
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return result;
+            return lhs;
         }
 
-        primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type result{ evaluate_additive_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_additive_expression(expr.first, config, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const primitive_type rhs{ evaluate_additive_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_additive_expression(operand, config, ctx) };
                 switch (operator_)
                 {
                 case shift_operator::shift_left:
-                    result = shift_left{}(result, rhs);
+                    lhs = shift_left{}(lhs, rhs);
                     break;
                 case shift_operator::shift_right:
-                    result = shift_right{}(result, rhs);
+                    lhs = shift_right{}(lhs, rhs);
                     break;
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return result;
+            return lhs;
         }
 
-        primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type result{ evaluate_multiplicative_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_multiplicative_expression(expr.first, config, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const primitive_type rhs{ evaluate_multiplicative_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_multiplicative_expression(operand, config, ctx) };
                 switch (operator_)
                 {
                 case additive_operator::plus:
-                    result = plus{}(result, rhs);
+                    lhs = plus{}(lhs, rhs);
                     break;
                 case additive_operator::minus:
-                    result = minus{}(result, rhs);
+                    lhs = minus{}(lhs, rhs);
                     break;
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return result;
+            return lhs;
         }
 
-        primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type result{ evaluate_prefix_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_prefix_expression(expr.first, config, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const primitive_type rhs{ evaluate_prefix_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_prefix_expression(operand, config, ctx) };
                 switch (operator_)
                 {
                 case multiplicative_operator::multiplies:
-                    result = multiplies{}(result, rhs);
+                    lhs = multiplies{}(lhs, rhs);
                     break;
                 case multiplicative_operator::divides:
-                    result = divides{}(result, rhs);
+                    lhs = divides{}(lhs, rhs);
                     break;
                 case multiplicative_operator::modulus:
-                    result = modulus{}(result, rhs);
+                    lhs = modulus{}(lhs, rhs);
                     break;
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return result;
+            return lhs;
         }
 
-        primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx)
         {
             return boost::apply_visitor(prefix_expression_visitor{ config, ctx }, expr);
         }
 
-        primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx)
         {
-            primitive_type evaluated{ evaluate_prefix_expression(expr.operand.get(), config, ctx) };
+            vr_primitive_type operand{ evaluate_prefix_expression(expr.operand.get(), config, ctx) };
             switch (expr.operator_)
             {
             case prefix_operator::prefix_increment:
-                return prefix_increment{}(evaluated);
+                return prefix_increment{}(operand);
             case prefix_operator::prefix_decrement:
-                return prefix_decrement{}(evaluated);
+                return prefix_decrement{}(operand);
             case prefix_operator::prefix_plus:
-                return prefix_plus{}(evaluated);
+                return prefix_plus{}(operand);
             case prefix_operator::prefix_minus:
-                return prefix_minus{}(evaluated);
+                return prefix_minus{}(operand);
             case prefix_operator::logical_not:
-                return logical_not{}(evaluated);
+                return logical_not{}(operand);
             case prefix_operator::bitwise_not:
-                return bitwise_not{}(evaluated);
+                return bitwise_not{}(operand);
             default:
                 llmcpp::throw_exception(logic_error{});
             }
         }
 
-        primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx)
         {
-            primitive_type evaluated{ evaluate_parentheses_expression(expr.operand, config, ctx) };
+            vr_primitive_type operand{ evaluate_parentheses_expression(expr.operand, config, ctx) };
             for (const auto& operator_ : expr.operators)
             {
                 switch (operator_)
                 {
                 case suffix_operator::suffix_increment:
-                    return prefix_increment{}(evaluated);
+                    return prefix_increment{}(operand);
                 case suffix_operator::suffix_decrement:
-                    return prefix_decrement{}(evaluated);
+                    return prefix_decrement{}(operand);
                 default:
                     llmcpp::throw_exception(logic_error{});
                 }
             }
-            return evaluated;
+            return operand;
         }
 
-        primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(parentheses_expression_visitor{ config, ctx }, expr);
+            return boost::apply_visitor(parentheses_expression_visitor{ cfg, ctx }, expr);
         }
 
-        primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx)
+        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(primary_expression_visitor{ config, ctx }, primary);
+            return boost::apply_visitor(macro_expression_visitor{ cfg, ctx }, expr);
         }
 
-        primitive_type evaluate_symbol(const symbol_type& symbol, const config& config, context& ctx)
+        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(symbol_visitor{ config, ctx }, symbol);
+            std::vector<primitive_type> evaluated_args;
+            for (const assignment_expression_type& arg : expr.arguments)
+            {
+                const vr_primitive_type evaluated_arg{ evaluate_assignment_expression(arg, cfg, ctx) };
+                evaluated_args.push_back(vr_primitive_to_primitive(evaluated_arg));
+            }
+
+            if (const std::optional<builtin::macro_type> macro{ builtin::get_macro(expr.name) }; macro)
+            {
+                try
+                {
+                    primitive_type evaluated{ (*macro)(evaluated_args, cfg, ctx) };
+                    BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ").";
+                    return primitive_val_to_vr_primitive(evaluated, ctx);
+                }
+                catch (const boost::exception&)
+                {
+                    BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << expr.name << ").";
+                    throw_nested_exception(macro_exception{});
+                }
+            }
+
+            BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << expr.name << ").";
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        vr_primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx)
+        {
+            return boost::apply_visitor(primary_visitor{ config, ctx }, primary);
+        }
+
+        vr_primitive_type evaluate_variable(const variable_type& variable, const config& config, context& ctx)
+        {
+            if (primitive_type* variable_value_ptr{ ctx.get(variable.name) }; variable_value_ptr)
+            {
+                BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ").";
+                return primitive_ref_to_vr_primitive(*variable_value_ptr, ctx);
+            }
+            BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << variable.name << ").";
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive, context& ctx)
+        {
+            return boost::apply_visitor(primitive_ref_to_vr_primitive_visitor{ ctx }, primitive);
+        }
+
+        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive, context& ctx)
+        {
+            return boost::apply_visitor(primitive_val_to_vr_primitive_visitor{ ctx }, primitive);
+        }
+
+        primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive)
+        {
+            return boost::apply_visitor(vr_primitive_to_primitive_visitor(), primitive);
         }
     }
 
