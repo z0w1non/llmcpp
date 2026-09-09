@@ -30,6 +30,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/program_options.hpp>
 #include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index/member.hpp>
@@ -728,18 +729,18 @@ namespace llmcpp
         int tokens{};
     };
 
-    struct key_tag {};
-    struct lru_tag {};
+    struct by_key {};
+    struct by_lru {};
 
     using lru_cache = boost::multi_index::multi_index_container<
         token_count_string,
         boost::multi_index::indexed_by<
-        boost::multi_index::ordered_unique<
-        boost::multi_index::tag<key_tag>,
+        boost::multi_index::hashed_unique<
+        boost::multi_index::tag<by_key>,
         boost::multi_index::member<token_count_string, std::string, &token_count_string::str>
         >,
         boost::multi_index::sequenced<
-        boost::multi_index::tag<lru_tag>
+        boost::multi_index::tag<by_lru>
         >
         >
     >;
@@ -4516,13 +4517,13 @@ namespace llmcpp
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        lru_cache::const_iterator iter{ config.lru_cache.get<key_tag>().find(std::string{ str }) };
-        if (iter != config.lru_cache.get<key_tag>().end())
+        lru_cache::const_iterator iter{ config.lru_cache.get<by_key>().find(std::string{ str }) };
+        if (iter != config.lru_cache.get<by_key>().end())
         {
             tokens = iter->tokens;
-            config.lru_cache.get<lru_tag>().relocate(
-                config.lru_cache.get<lru_tag>().end(),
-                config.lru_cache.get<lru_tag>().iterator_to(*iter));
+            config.lru_cache.get<by_lru>().relocate(
+                config.lru_cache.get<by_lru>().end(),
+                config.lru_cache.get<by_lru>().iterator_to(*iter));
         }
         else
         {
@@ -4532,7 +4533,7 @@ namespace llmcpp
 
         if (config.lru_cache.size() > capacity)
         {
-            config.lru_cache.get<lru_tag>().pop_front();
+            config.lru_cache.get<by_lru>().pop_front();
         }
 
         return tokens;
@@ -4546,7 +4547,7 @@ namespace llmcpp
         }
 
         picojson::array cache;
-        for (const token_count_string& element : config.lru_cache.get<lru_tag>())
+        for (const token_count_string& element : config.lru_cache.get<by_lru>())
         {
             picojson::object node;
             add_pair_into_json(node, "string", element.str);
