@@ -1809,13 +1809,13 @@ namespace llmcpp
             {                                                                                               \
                 template<typename A, typename B>                                                            \
                     requires (bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>)     \
-                vr_primitive_type operator ()(const A& a, const B& b) const                                    \
+                vr_primitive_type operator ()(const A& a, const B& b) const                                 \
                 {                                                                                           \
                     return unwrap(a) operator_ unwrap(b);                                                   \
                 }                                                                                           \
                 template<typename A, typename B>                                                            \
                     requires (!(bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>))  \
-                vr_primitive_type operator ()(const A& a, const B& b) const                                    \
+                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const                    \
                 {                                                                                           \
                     llmcpp::throw_exception(macro_exception{});                                             \
                 }                                                                                           \
@@ -1845,7 +1845,7 @@ namespace llmcpp
                 }                                                                                   \
                 template<typename A, typename B>                                                    \
                     requires (!(safe_equality_comparable_with<unwrap_type_t<A>, unwrap_type_t<B>>)) \
-                vr_primitive_type operator ()(const A& a, const B& b) const                         \
+                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const            \
                 {                                                                                   \
                     llmcpp::throw_exception(macro_exception{});                                     \
                 }                                                                                   \
@@ -1913,7 +1913,7 @@ namespace llmcpp
                 }                                                                                       \
                 template<typename A, typename B>                                                        \
                     requires (!operable<A, B>)                                                          \
-                vr_primitive_type operator ()(const A& a, const B& b) const                             \
+                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const                \
                 {                                                                                       \
                     llmcpp::throw_exception(macro_exception{});                                         \
                 }                                                                                       \
@@ -1941,7 +1941,7 @@ namespace llmcpp
                 }                                                               \
                 template<typename A>                                            \
                     requires (!requires(A& a) { operator_ unwrap(a); })         \
-                vr_primitive_type operator ()(A& a) const                       \
+                [[noreturn]] vr_primitive_type operator ()(A& a) const          \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
@@ -1967,7 +1967,7 @@ namespace llmcpp
                 }                                                               \
                 template<typename A>                                            \
                     requires (!(concept_name<unwrap_type_t<A>>))                \
-                vr_primitive_type operator ()(const A& a) const                 \
+                [[noreturn]] vr_primitive_type operator ()(const A& a) const    \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
@@ -1995,7 +1995,7 @@ namespace llmcpp
                 }                                                               \
                 template<typename A>                                            \
                     requires (!requires(A & a) { unwrap(a) operator_; })        \
-                vr_primitive_type operator ()(A& a) const                       \
+                [[noreturn]] vr_primitive_type operator ()(A& a) const          \
                 {                                                               \
                     llmcpp::throw_exception(macro_exception{});                 \
                 }                                                               \
