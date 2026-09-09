@@ -2264,35 +2264,6 @@ namespace llmcpp
                 return unwrap(value);
             }
         };
-
-        //struct primary_to_vr_primitive_visitor
-        //    : boost::static_visitor<vr_primitive_type>
-        //{
-        //    context& ctx;
-        //    primary_to_vr_primitive_visitor(context& ctx)
-        //        : ctx{ ctx }
-        //    {
-        //    }
-
-        //    vr_primitive_type operator()(variable_type& variable) const
-        //    {
-        //        if (primitive_type* value_ptr{ ctx.get(variable.name) }; value_ptr)
-        //        {
-        //            return primitive_ref_to_vr_primitive(*value_ptr, ctx);
-        //        }
-        //        llmcpp::throw_exception(macro_exception{});
-        //    }
-
-        //    vr_primitive_type operator()(primitive_type& primitive) const
-        //    {
-        //        return primitive_val_to_vr_primitive(primitive, ctx);
-        //    }
-        //};
-
-        //vr_primitive_type primary_to_vr_primitive(primary_type& primary, context& ctx)
-        //{
-        //    boost::apply_visitor(primary_to_vr_primitive_visitor{ ctx }, primary);
-        //}
     } // namespace paraser
 } // namespace llmcpp
 
