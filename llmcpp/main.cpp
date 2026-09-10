@@ -678,7 +678,7 @@ namespace llmcpp
                 return unwrap(value);
             }
             return boost::lexical_cast<std::string>(unwrap(value));
-        };
+        }
 
         [[noreturn]] std::string operator ()(const undefined_variable_type& undefined_variable) const
         {
