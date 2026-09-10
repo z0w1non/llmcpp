@@ -1779,7 +1779,7 @@ namespace llmcpp
                     using B_ = std::decay_t<unwrap_type_t<B>>;
                     if constexpr (std::is_same_v<A_, undefined_variable_type> && !std::is_same_v<B_, undefined_variable_type>)
                     {
-                        *(a.value) = unwrap(b);
+                        return *(a.value) = unwrap(b);
                     }
                     else if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)
                     {
