@@ -184,7 +184,7 @@ namespace llmcpp
         {
             boost::throw_exception(boost::enable_error_info(e) << error_info::nested_exception{ ptr }, location);
         }
-        boost::throw_exception(logic_error{} << error_info::description{ "throw_nested_exception must be called within a catch block." }, location);
+        boost::throw_exception(logic_error{} << error_info::description{ "throw_nested_exception must be called within catch block" }, location);
     }
 
     template<typename Key, typename T, typename Compare = std::less<>, typename Allocator = std::allocator<std::pair<const Key, T> >>
@@ -2158,12 +2158,12 @@ namespace llmcpp
                 try
                 {
                     const std::string evaluated{ vr_primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
-                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ").";
+                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ")";
                     return evaluated;
                 }
                 catch (const macro_exception&)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed.";
+                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed";
                     return std::string{};
                 }
             }
@@ -2434,7 +2434,7 @@ namespace llmcpp
 
             if (depth >= max_depth)
             {
-                llmcpp::throw_exception(macro_exception{} << error_info::description{ "Maximum recursion depth reached." });
+                llmcpp::throw_exception(macro_exception{} << error_info::description{ "Maximum recursion depth reached" });
             }
 
             return input;
@@ -2798,17 +2798,17 @@ namespace llmcpp
                 try
                 {
                     primitive_type evaluated{ (*macro)(evaluated_args, cfg, ctx) };
-                    BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ").";
+                    BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ")";
                     return primitive_val_to_vr_primitive(evaluated);
                 }
                 catch (const boost::exception&)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << expr.name << ").";
+                    BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << expr.name << ")";
                     throw_nested_exception(macro_exception{});
                 }
             }
 
-            BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << expr.name << ").";
+            BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << expr.name << ")";
             llmcpp::throw_exception(macro_exception{});
         }
 
@@ -2821,10 +2821,10 @@ namespace llmcpp
         {
             if (primitive_type* variable_value_ptr{ ctx.get(variable.name) }; variable_value_ptr)
             {
-                BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ").";
+                BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ")";
                 return primitive_ref_to_vr_primitive(*variable_value_ptr);
             }
-            BOOST_LOG_TRIVIAL(trace) << "Variable not found (" << variable.name << ").";
+            BOOST_LOG_TRIVIAL(trace) << "Variable not found (" << variable.name << ")";
             return undefined_variable_type{ variable.name };
         }
 
@@ -3830,7 +3830,7 @@ namespace llmcpp
 
         if (base64_image_data.empty())
         {
-            llmcpp::throw_exception(image_generation_exception{} << error_info::description{ "No image data found in the response." });
+            llmcpp::throw_exception(image_generation_exception{} << error_info::description{ "No image data found in the response" });
         }
 
         const std::string decoded_image{ base64_decode(base64_image_data) };
@@ -4047,7 +4047,7 @@ namespace llmcpp
             }
             else
             {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path.";
+                BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path";
             }
         }
     }
@@ -4147,7 +4147,7 @@ namespace llmcpp
                     const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
                     if (status_str == "error")
                     {
-                        llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server." });
+                        llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
                     }
                 }
                 catch (const json_parse_exception&) {
@@ -4205,7 +4205,7 @@ namespace llmcpp
             }
         }
 
-        BOOST_LOG_TRIVIAL(info) << "Generation complete.";
+        BOOST_LOG_TRIVIAL(info) << "Generation complete";
 
         for (const generated_file_info& file_info : target_files)
         {
@@ -4703,14 +4703,14 @@ namespace llmcpp
             const int remaining_context{ config.llm.backend->get_truncation_length() - current_tokens };
             if (remaining_context <= 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens.";
+                BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens";
                 break;
             }
 
             int tokens_to_generate = std::min(config.llm.backend->get_max_tokens(), remaining_context);
             if (tokens_to_generate <= 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting.";
+                BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
                 break;
             }
 
@@ -4856,7 +4856,7 @@ namespace llmcpp
             }
             else
             {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value.";
+                BOOST_LOG_TRIVIAL(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value";
             }
         }
     }
@@ -5122,7 +5122,7 @@ namespace llmcpp
         //auto exe = process::environment::find_executable(boost::filesystem::path{ excutable });
         //if (exe.empty())
         //{
-        //    BOOST_LOG_TRIVIAL(warning) << "exe not found.";
+        //    BOOST_LOG_TRIVIAL(warning) << "exe not found";
         //    return;
         //}
         process::process proc{ ctx, excutable_file, arguments, process::windows::create_new_console };
