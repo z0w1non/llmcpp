@@ -1376,9 +1376,15 @@ namespace llmcpp
         };
 
         struct expression_type
-            : std::vector<assignment_expression_type>
         {
-            using std::vector<assignment_expression_type>::vector;
+            std::vector<assignment_expression_type> expressions;
+            bool terminated{};
+        };
+
+        struct statement_type
+            : std::vector<expression_type>
+        {
+            using std::vector<expression_type>::vector;
         };
 
         struct placeholder_type
@@ -1536,13 +1542,14 @@ namespace llmcpp
                 using qi::lit;
                 using qi::skip;
                 using qi::space;
+                using qi::matches;
 
                 document = *node;
                 node = placeholder | plain_text;
                 plain_text = +(!lit("{{") >> char_);
                 placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
 
-                expression = assignment_expression % lit(',');
+                expression = (assignment_expression % lit(';')) >> matches[lit(';')];
                 assignment_expression = assignment_expression_node | conditional_expression;
                 assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
                 conditional_expression = conditional_expression_node | logical_or_expression;
@@ -2374,6 +2381,12 @@ BOOST_FUSION_ADAPT_STRUCT(
     rhs
 )
 
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::expression_type,
+    expressions,
+    terminated
+)
+
 namespace llmcpp
 {
     std::string expand_macro(std::string_view input, const config& config, const context& ctx);
@@ -2443,14 +2456,18 @@ namespace llmcpp
 
         vr_primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx)
         {
-            if (expr.empty())
+            if (expr.expressions.empty())
             {
                 llmcpp::throw_exception(macro_exception{});
             }
             vr_primitive_type last{};
-            for (const auto& assignment_expression : expr)
+            for (const auto& assignment_expression : expr.expressions)
             {
                 last = evaluate_assignment_expression(assignment_expression, config, ctx);
+            }
+            if (expr.terminated)
+            {
+                return std::string{};
             }
             return last;
         }
