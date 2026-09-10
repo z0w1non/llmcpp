@@ -613,10 +613,16 @@ namespace llmcpp
         bool preserve_subdirectories{};
     };
 
+
     using primitive_type = boost::variant<int, bool, char, double, std::string>;
 
+    struct undefined_variable_type
+    {
+        primitive_type* value;
+    };
+
     template<typename ... Args>
-    using value_and_reference_variant = boost::variant<Args ..., std::reference_wrapper<Args> ...>;
+    using value_and_reference_variant = boost::variant<Args ..., std::reference_wrapper<Args> ..., undefined_variable_type>;
 
     using vr_primitive_type = value_and_reference_variant<int, bool, char, double, std::string>;
 
@@ -673,6 +679,11 @@ namespace llmcpp
             }
             return boost::lexical_cast<std::string>(unwrap(value));
         };
+
+        [[noreturn]] std::string operator ()(const undefined_variable_type&) const
+        {
+            llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
+        }
     };
 
     std::string primitive_to_string(const primitive_type& primitive)
@@ -1208,7 +1219,6 @@ namespace llmcpp
         primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
         primitive_type env(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
         primitive_type generated(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type let(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
         primitive_type random(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
         primitive_type choice(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
         primitive_type exec(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
@@ -1291,7 +1301,6 @@ namespace llmcpp
         {
             std::string name;
         };
-
         using primary_type = boost::variant<primitive_type, variable_type>;
 
         template<typename Operand, typename Operator>
@@ -1687,6 +1696,11 @@ namespace llmcpp
                 {
                     return !s.empty();
                 }
+
+                [[noreturn]] bool operator()(const undefined_variable_type&) const
+                {
+                    llmcpp::throw_exception(macro_exception{} << error_info::description{ "Boolean cast of an undefined variable" });
+                }
             };
         } // namespace detail
 
@@ -1747,49 +1761,85 @@ namespace llmcpp
             }                                                                                 \
         };
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                       \
-                namespace detail                                                                            \
-                {                                                                                           \
-                    struct opecode                                                                          \
-                    {                                                                                       \
-                        template<typename A, typename B>                                                    \
-                        vr_primitive_type operator ()(A& a, const B& b) const                               \
-                        {                                                                                   \
-                            using A_ = std::decay_t<unwrap_type_t<A>>;                                      \
-                            using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
-                            if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)              \
-                            {                                                                               \
-                                if constexpr (requires { unwrap(a) operator_ unwrap(b); })                  \
-                                {                                                                           \
-                                    if constexpr (zero_check)                                               \
-                                    {                                                                       \
-                                        if (unwrap(b) == B_{})                                              \
-                                        {                                                                   \
-                                            llmcpp::throw_exception(macro_exception{});                     \
-                                        }                                                                   \
-                                    }                                                                       \
-                                    return unwrap(a) operator_ unwrap(b);                                   \
-                                }                                                                           \
-                            }                                                                               \
-                            else if constexpr (                                                             \
-                                std::is_arithmetic_v<A_>                                                    \
-                                && std::is_arithmetic_v<B_>                                                 \
-                                && !std::is_same_v<A_, bool>                                                \
-                                && !std::is_same_v<B_, bool>)                                               \
-                            {                                                                               \
-                                if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
-                                {                                                                           \
-                                    return unwrap(a) operator_ static_cast<A_>(unwrap(b));                  \
-                                }                                                                           \
-                            }                                                                               \
-                            llmcpp::throw_exception(macro_exception{});                                     \
-                        }                                                                                   \
-                    };                                                                                      \
-                }                                                                                           \
-                                                                                                            \
-                LLMCPP_DEFINE_FUNCTION(opecode);
+        namespace detail
+        {
+            struct assign
+            {
+                template<typename A, typename B>
+                vr_primitive_type operator ()(A& a, const B& b) const
+                {
+                    using A_ = std::decay_t<unwrap_type_t<A>>;
+                    using B_ = std::decay_t<unwrap_type_t<B>>;
+                    if constexpr (std::is_same_v<A_, undefined_variable_type> && !std::is_same_v<B_, undefined_variable_type>)
+                    {
+                        *(a.value) = unwrap(b);
+                    }
+                    else if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)
+                    {
+                        if constexpr (requires { unwrap(a) = unwrap(b); })
+                        {
+                            return unwrap(a) = unwrap(b);
+                        }
+                    }
+                    else if constexpr (
+                        std::is_arithmetic_v<A_>
+                        && std::is_arithmetic_v<B_>
+                        && !std::is_same_v<A_, bool>
+                        && !std::is_same_v<B_, bool>)
+                    {
+                        if constexpr (requires { unwrap(a) = static_cast<A_>(unwrap(b)); })
+                        {
+                            return unwrap(a) = static_cast<A_>(unwrap(b));
+                        }
+                    }
+                    llmcpp::throw_exception(macro_exception{});
+                }
+            };
+        }
+        LLMCPP_DEFINE_FUNCTION(assign);
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(=, assign, false);
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
+            namespace detail                                                                            \
+            {                                                                                           \
+                struct opecode                                                                          \
+                {                                                                                       \
+                    template<typename A, typename B>                                                    \
+                    vr_primitive_type operator ()(A& a, const B& b) const                               \
+                    {                                                                                   \
+                        using A_ = std::decay_t<unwrap_type_t<A>>;                                      \
+                        using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
+                        if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)              \
+                        {                                                                               \
+                            if constexpr (requires { unwrap(a) operator_ unwrap(b); })                  \
+                            {                                                                           \
+                                if constexpr (zero_check)                                               \
+                                {                                                                       \
+                                    if (unwrap(b) == B_{})                                              \
+                                    {                                                                   \
+                                        llmcpp::throw_exception(macro_exception{});                     \
+                                    }                                                                   \
+                                }                                                                       \
+                                return unwrap(a) operator_ unwrap(b);                                   \
+                            }                                                                           \
+                        }                                                                               \
+                        else if constexpr (                                                             \
+                            std::is_arithmetic_v<A_>                                                    \
+                            && std::is_arithmetic_v<B_>                                                 \
+                            && !std::is_same_v<A_, bool>                                                \
+                            && !std::is_same_v<B_, bool>)                                               \
+                        {                                                                               \
+                            if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
+                            {                                                                           \
+                                return unwrap(a) operator_ static_cast<A_>(unwrap(b));                  \
+                            }                                                                           \
+                        }                                                                               \
+                        llmcpp::throw_exception(macro_exception{});                                     \
+                    }                                                                                   \
+                };                                                                                      \
+            }                                                                                           \
+                                                                                                        \
+            LLMCPP_DEFINE_FUNCTION(opecode);
+
         LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign, false);
         LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign, false);
         LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign, false);
@@ -2264,6 +2314,11 @@ namespace llmcpp
             {
                 return unwrap(value);
             }
+
+            [[noreturn]] primitive_type operator()(const undefined_variable_type& undefined_variable) const
+            {
+                llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
+            }
         };
     } // namespace paraser
 } // namespace llmcpp
@@ -2735,8 +2790,13 @@ namespace llmcpp
                 BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ").";
                 return primitive_ref_to_vr_primitive(*variable_value_ptr, ctx);
             }
-            BOOST_LOG_TRIVIAL(warning) << "Variable not found (" << variable.name << ").";
-            llmcpp::throw_exception(macro_exception{});
+            BOOST_LOG_TRIVIAL(trace) << "Variable not found (" << variable.name << ").";
+            ctx.set(variable.name, {});
+            if (primitive_type * undefined_variable{ ctx.get(variable.name) }; undefined_variable)
+            {
+                return undefined_variable_type{ undefined_variable };
+            }
+            llmcpp::throw_exception(logic_error{});
         }
 
         vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive, context& ctx)
@@ -2770,7 +2830,6 @@ namespace llmcpp
             {"json_literal", json_literal},
             {"env", env},
             {"generated", generated},
-            {"let", let},
             {"random", random},
             {"choice", choice},
             {"exec", exec},
@@ -2941,22 +3000,6 @@ namespace llmcpp
             result = generate_text(config, prompt, pushed);
         }
         return result;
-    }
-
-    primitive_type builtin::let(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
-    {
-        if (arguments.size() < 2)
-        {
-            llmcpp::throw_exception(macro_exception{});
-        }
-
-        const std::string_view key{ get_or_throw<std::string>(arguments[0]) };
-        const primitive_type& value{ arguments[1] };
-
-        ctx.set(key, value);
-        BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
-
-        return std::string{};
     }
 
     primitive_type builtin::random(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
