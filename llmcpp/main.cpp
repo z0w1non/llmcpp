@@ -618,7 +618,7 @@ namespace llmcpp
 
     struct undefined_variable_type
     {
-        primitive_type* value;
+        std::string name;
     };
 
     template<typename ... Args>
@@ -680,9 +680,10 @@ namespace llmcpp
             return boost::lexical_cast<std::string>(unwrap(value));
         };
 
-        [[noreturn]] std::string operator ()(const undefined_variable_type&) const
+        [[noreturn]] std::string operator ()(const undefined_variable_type& undefined_variable) const
         {
-            llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
+            BOOST_LOG_TRIVIAL(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
+            llmcpp::throw_exception(macro_exception{});
         }
     };
 
@@ -1652,8 +1653,8 @@ namespace llmcpp
         vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& config, context& ctx);
         vr_primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx);
         vr_primitive_type evaluate_variable(const variable_type& symbol, const config& config, context& ctx);
-        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive, context& ctx);
-        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive, context& ctx);
+        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive);
+        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive);
         primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
 
         namespace detail
@@ -1772,6 +1773,12 @@ namespace llmcpp
         {
             struct assign
             {
+                context& ctx;
+                assign(context& ctx)
+                    :ctx{ ctx }
+                {
+                }
+
                 template<typename A, typename B>
                 vr_primitive_type operator ()(A& a, const B& b) const
                 {
@@ -1779,7 +1786,12 @@ namespace llmcpp
                     using B_ = std::decay_t<unwrap_type_t<B>>;
                     if constexpr (std::is_same_v<A_, undefined_variable_type> && !std::is_same_v<B_, undefined_variable_type>)
                     {
-                        return *(a.value) = unwrap(b);
+                        const primitive_type value{ unwrap(b) };
+                        ctx.set(a.name, value);
+                        if (primitive_type* ptr{ ctx.get(a.name) }; ptr)
+                        {
+                            return primitive_ref_to_vr_primitive(*ptr);
+                        }
                     }
                     else if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)
                     {
@@ -1803,7 +1815,20 @@ namespace llmcpp
                 }
             };
         }
-        LLMCPP_DEFINE_FUNCTION(assign);
+
+        struct assign
+        {
+            context& ctx;
+            assign(context& ctx)
+                :ctx{ ctx }
+            {
+            }
+
+            vr_primitive_type operator()(vr_primitive_type& a, const vr_primitive_type& b) const
+            {
+                return boost::apply_visitor(detail::assign{ ctx }, a, b);
+            }
+        };
 
 #define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
             namespace detail                                                                            \
@@ -2284,11 +2309,7 @@ namespace llmcpp
         struct primitive_ref_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            context& ctx;
-            primitive_ref_to_vr_primitive_visitor(context& ctx)
-                : ctx{ ctx }
-            {
-            }
+            primitive_ref_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(T& value) const
@@ -2300,11 +2321,7 @@ namespace llmcpp
         struct primitive_val_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            context& ctx;
-            primitive_val_to_vr_primitive_visitor(context& ctx)
-                : ctx{ ctx }
-            {
-            }
+            primitive_val_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(const T& value) const
@@ -2485,7 +2502,7 @@ namespace llmcpp
             switch (expr.operator_)
             {
             case assignment_operator::assign:
-                assign{}(lhs, rhs);
+                assign{ ctx }(lhs, rhs);
                 break;
             case assignment_operator::plus_assign:
                 plus_assign{}(lhs, rhs);
@@ -2782,7 +2799,7 @@ namespace llmcpp
                 {
                     primitive_type evaluated{ (*macro)(evaluated_args, cfg, ctx) };
                     BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ").";
-                    return primitive_val_to_vr_primitive(evaluated, ctx);
+                    return primitive_val_to_vr_primitive(evaluated);
                 }
                 catch (const boost::exception&)
                 {
@@ -2805,25 +2822,20 @@ namespace llmcpp
             if (primitive_type* variable_value_ptr{ ctx.get(variable.name) }; variable_value_ptr)
             {
                 BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ").";
-                return primitive_ref_to_vr_primitive(*variable_value_ptr, ctx);
+                return primitive_ref_to_vr_primitive(*variable_value_ptr);
             }
             BOOST_LOG_TRIVIAL(trace) << "Variable not found (" << variable.name << ").";
-            ctx.set(variable.name, {});
-            if (primitive_type * undefined_variable{ ctx.get(variable.name) }; undefined_variable)
-            {
-                return undefined_variable_type{ undefined_variable };
-            }
-            llmcpp::throw_exception(logic_error{});
+            return undefined_variable_type{ variable.name };
         }
 
-        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive, context& ctx)
+        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive)
         {
-            return boost::apply_visitor(primitive_ref_to_vr_primitive_visitor{ ctx }, primitive);
+            return boost::apply_visitor(primitive_ref_to_vr_primitive_visitor{}, primitive);
         }
 
-        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive, context& ctx)
+        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive)
         {
-            return boost::apply_visitor(primitive_val_to_vr_primitive_visitor{ ctx }, primitive);
+            return boost::apply_visitor(primitive_val_to_vr_primitive_visitor{}, primitive);
         }
 
         primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive)
