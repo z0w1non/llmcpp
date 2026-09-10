@@ -467,7 +467,7 @@ namespace llmcpp
 
     sd_mode string_to_sd_mode(std::string_view str);
 
-    std::string sd_mode_to_target(sd_mode mode, const config& config);
+    std::string sd_mode_to_target(sd_mode mode, const config& cfg);
 
     struct sd_txt2img_parameters
     {
@@ -811,10 +811,10 @@ namespace llmcpp
         cu_generation_parameters cu;
 
         mutable lru_cache lru_cache;
-        context context;
+        context ctx;
     };
 
-    std::string truncate_prompt_by_config(std::string_view prompt, const config& config);
+    std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
 
     template<typename Value>
     const Value& throwable_get(const picojson::value& value);
@@ -833,26 +833,26 @@ namespace llmcpp
 
     std::string console_string_to_u8string(std::string_view input);
 
-    void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens);
+    void truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse, std::string& result, int& tokens);
 
-    void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens);
+    void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens);
 
     void create_parent_directories(const std::filesystem::path& path);
 
     std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
-    std::string read_text_file_to_string(std::string_view path, const config& config, std::string_view extension = ".txt");
+    std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension = ".txt");
 
-    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config);
+    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg);
 
-    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& config);
+    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg);
 
     template<typename Integer>
     Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
     std::string complement_extension(std::string_view filepath, std::string_view extension);
 
-    std::filesystem::path string_to_path_by_config(std::string_view path, const config& config);
+    std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
 
     boost::beast::http::response<boost::beast::http::string_body> send_http_get(
         std::string_view host,
@@ -864,40 +864,40 @@ namespace llmcpp
     std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
     std::string send_automatic1111_txt2img_request(
-        const config& config,
+        const config& cfg,
         std::string_view prompt,
         std::string_view negative_prompt
     );
 
     std::string send_style_bert_voice_request(
-        const config& config,
+        const config& cfg,
         std::string_view text
     );
 
     std::string generate_boundary();
 
     std::string upload_image_to_comfy_ui(
-        const config& config,
+        const config& cfg,
         const std::filesystem::path& image_path,
         bool overwrite = true
     );
 
     void send_comfy_ui_prompt(
-        const config& config,
+        const config& cfg,
         std::string_view workflow
     );
 
     std::vector<item> parse_item_list(std::string_view str);
 
-    void write_item_list(const config& config, std::string_view task);
+    void write_item_list(const config& cfg, std::string_view task);
 
-    int send_token_count_request(const config& config, std::string_view prompt);
-    int get_tokens_from_cache(const config& config, std::string_view str);
-    void write_cache(const config& config);
-    void read_cache(const config& config);
+    int send_token_count_request(const config& cfg, std::string_view prompt);
+    int get_tokens_from_cache(const config& cfg, std::string_view str);
+    void write_cache(const config& cfg);
+    void read_cache(const config& cfg);
 
     std::string generate_text(
-        const config& config,
+        const config& cfg,
         std::string_view prompt,
         const context& ctx
     );
@@ -906,27 +906,27 @@ namespace llmcpp
 
     std::string json_escape_string(std::string_view str);
 
-    void unescape_parameters(config& config);
+    void unescape_parameters(config& cfg);
 
-    void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& context);
+    void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& ctx);
 
     void init_logging_with_nowide_cout();
     void init_logging_with_nowide_file_log(const std::filesystem::path& log);
-    void init_logging(const config& config);
-    void init_chat_mode(config& config);
+    void init_logging(const config& cfg);
+    void init_chat_mode(config& cfg);
 
     void set_phase_variables(
         const std::vector<std::string>& phases,
         std::size_t phase_index,
-        const context& context
+        const context& ctx
     );
 
     void set_static_builtin_variables(
-        config& config
+        config& cfg
     );
 
     void set_dynamic_builtin_variables(
-        config& config
+        config& cfg
     );
 
     void set_paragraphs_to_phases(
@@ -934,7 +934,7 @@ namespace llmcpp
         std::vector<std::string>& phases
     );
 
-    void init_llm_mode(config& config);
+    void init_llm_mode(config& cfg);
 
     std::string sanitize_as_filename(std::string_view name);
 
@@ -953,34 +953,34 @@ namespace llmcpp
     int parse_command_line(
         int argc,
         char** argv,
-        config& config
+        config& cfg
     );
 
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
-    void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
+    void write_file(const config& cfg, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
 
-    void write_code_block(const config& config, std::string_view markdown);
+    void write_code_block(const config& cfg, std::string_view markdown);
 
-    void generate_text_and_write(const config& config, std::string_view prompt, const context& ctx);
+    void generate_text_and_write(const config& cfg, std::string_view prompt, const context& ctx);
 
     std::string prompt_from_string_or_file_path(
         std::string_view string,
         std::string_view file_path,
-        const config& config
+        const config& cfg
     );
 
-    void generate_and_output(const config& config);
+    void generate_and_output(const config& cfg);
 
-    void set_seed(config& config);
+    void set_seed(config& cfg);
 
-    void create_process(const config& config);
+    void create_process(const config& cfg);
 
-    void terminate_process(const config& config);
+    void terminate_process(const config& cfg);
 
-    void create_process_or_terminate(const config& config);
+    void create_process_or_terminate(const config& cfg);
 
-    void iterate(config& config);
+    void iterate(config& cfg);
 
     int exception_safe_main(int argc, char** argv);
 
@@ -1057,15 +1057,15 @@ namespace llmcpp
         llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown sd_mode string " + std::string{ str } });
     }
 
-    std::string sd_mode_to_target(sd_mode mode, const config& config)
+    std::string sd_mode_to_target(sd_mode mode, const config& cfg)
     {
         if (mode == sd_mode::txt2img)
         {
-            return config.sd.txt2img.target;
+            return cfg.sd.txt2img.target;
         }
         else if (mode == sd_mode::img2img)
         {
-            return config.sd.img2img.target;
+            return cfg.sd.img2img.target;
         }
         llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd_mode" });
     }
@@ -1208,28 +1208,28 @@ namespace llmcpp
         using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
         std::optional<macro_type> get_macro(std::string_view name);
 
-        primitive_type int_(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type double_(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type char_(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type string_(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
+        primitive_type int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
 
-        primitive_type file(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type head(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type tail(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type env(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type generated(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type random(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type choice(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type exec(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type code_block(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
-        primitive_type summary(const std::vector<primitive_type>& arguments, const config& config, context& ctx);
+        primitive_type file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type head(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type env(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
 
         std::string date();
         std::string time();
         std::string datetime();
-        std::string stdin_(const config& config);
+        std::string stdin_(const config& cfg);
     } // namespace builtin
 
     namespace parser
@@ -1627,32 +1627,32 @@ namespace llmcpp
 
         using grammar = document_grammar<std::string_view::const_iterator>;
 
-        std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx);
-        std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx);
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx);
+        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
+        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
+        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx);
 
-        vr_primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& config, context& ctx);
-        vr_primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx);
-        vr_primitive_type evaluate_variable(const variable_type& symbol, const config& config, context& ctx);
+        vr_primitive_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_primary(const primary_type& primary, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_variable(const variable_type& symbol, const config& cfg, context& ctx);
         vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive);
         vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive);
         primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
@@ -2125,7 +2125,7 @@ namespace llmcpp
 
         struct evaluation_visitor
         {
-            evaluation_visitor(const config& config, context& ctx)
+            evaluation_visitor(const config& cfg, context& ctx)
                 : cfg{ cfg }
                 , ctx{ ctx }
             {
@@ -2406,11 +2406,11 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 namespace llmcpp
 {
-    std::string expand_macro(std::string_view input, const config& config, const context& ctx);
+    std::string expand_macro(std::string_view input, const config& cfg, const context& ctx);
 
     namespace parser
     {
-        std::string evaluate_document_recursive(std::string input, const config& config, unsigned int max_depth, context& ctx)
+        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx)
         {
             grammar grammar;
 
@@ -2422,7 +2422,7 @@ namespace llmcpp
                     return input;
                 }
 
-                std::string evaluated{ evaluate_document(input, config, grammar, ctx) };
+                std::string evaluated{ evaluate_document(input, cfg, grammar, ctx) };
 
                 if (evaluated == input)
                 {
@@ -2440,7 +2440,7 @@ namespace llmcpp
             return input;
         }
 
-        std::string evaluate_document(std::string_view document, const config& config, const grammar& grammar, context& ctx)
+        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
         {
             namespace qi = boost::spirit::qi;
 
@@ -2451,7 +2451,7 @@ namespace llmcpp
 
             if (qi::parse(iter, end, grammar, ast) && iter == end)
             {
-                return evaluate_node(ast, config, grammar, ctx);
+                return evaluate_node(ast, cfg, grammar, ctx);
             }
             else
             {
@@ -2461,17 +2461,17 @@ namespace llmcpp
             }
         }
 
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& config, const grammar& grammar, context& ctx)
+        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx)
         {
             std::string result;
             for (const node_type& node : ast)
             {
-                result.append(boost::apply_visitor(node_visitor{ config, ctx }, node));
+                result.append(boost::apply_visitor(node_visitor{ cfg, ctx }, node));
             }
             return result;
         }
 
-        vr_primitive_type evaluate_expression(const expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx)
         {
             if (expr.expressions.empty())
             {
@@ -2480,7 +2480,7 @@ namespace llmcpp
             vr_primitive_type last{};
             for (const auto& assignment_expression : expr.expressions)
             {
-                last = evaluate_assignment_expression(assignment_expression, config, ctx);
+                last = evaluate_assignment_expression(assignment_expression, cfg, ctx);
             }
             if (expr.terminated)
             {
@@ -2489,15 +2489,15 @@ namespace llmcpp
             return last;
         }
 
-        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(assignment_expression_visitor{ config, ctx }, expr);
+            return boost::apply_visitor(assignment_expression_visitor{ cfg, ctx }, expr);
         }
 
-        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_conditional_expression(expr.lhs, config, ctx) };
-            vr_primitive_type rhs{ evaluate_assignment_expression(expr.rhs, config, ctx) };
+            vr_primitive_type lhs{ evaluate_conditional_expression(expr.lhs, cfg, ctx) };
+            vr_primitive_type rhs{ evaluate_assignment_expression(expr.rhs, cfg, ctx) };
 
             switch (expr.operator_)
             {
@@ -2541,18 +2541,18 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(conditional_expression_visitor{ config, ctx }, expr);
+            return boost::apply_visitor(conditional_expression_visitor{ cfg, ctx }, expr);
         }
 
-        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& cfg, context& ctx)
         {
             if (expr.empty())
             {
                 llmcpp::throw_exception(logic_error{});
             }
-            vr_primitive_type lhs{ evaluate_logical_and_expression(expr.front(), config, ctx) };
+            vr_primitive_type lhs{ evaluate_logical_and_expression(expr.front(), cfg, ctx) };
             if (expr.size() == 1)
             {
                 return lhs;
@@ -2564,7 +2564,7 @@ namespace llmcpp
             for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
             {
                 const auto& rhs = *iter;
-                lhs = evaluate_logical_and_expression(rhs, config, ctx);
+                lhs = evaluate_logical_and_expression(rhs, cfg, ctx);
                 if (static_cast_<bool>{}(lhs))
                 {
                     return true;
@@ -2573,13 +2573,13 @@ namespace llmcpp
             return false;
         }
 
-        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& cfg, context& ctx)
         {
             if (expr.empty())
             {
                 llmcpp::throw_exception(logic_error{});
             }
-            vr_primitive_type lhs{ evaluate_or_expression(expr.front(), config, ctx) };
+            vr_primitive_type lhs{ evaluate_or_expression(expr.front(), cfg, ctx) };
             if (expr.size() == 1)
             {
                 return lhs;
@@ -2591,7 +2591,7 @@ namespace llmcpp
             for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
             {
                 const auto& rhs = *iter;
-                lhs = evaluate_or_expression(rhs, config, ctx);
+                lhs = evaluate_or_expression(rhs, cfg, ctx);
                 if (!static_cast_<bool>{}(lhs))
                 {
                     return false;
@@ -2600,27 +2600,27 @@ namespace llmcpp
             return true;
         }
 
-        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& cfg, context& ctx)
         {
-            return accumulate_expression(expr.begin(), expr.end(), evaluate_xor_expression, or_{}, config, ctx);
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_xor_expression, or_{}, cfg, ctx);
         }
 
-        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& cfg, context& ctx)
         {
-            return accumulate_expression(expr.begin(), expr.end(), evaluate_and_expression, xor_{}, config, ctx);
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_and_expression, xor_{}, cfg, ctx);
         }
 
-        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& cfg, context& ctx)
         {
-            return accumulate_expression(expr.begin(), expr.end(), evaluate_equality_expression, and_{}, config, ctx);
+            return accumulate_expression(expr.begin(), expr.end(), evaluate_equality_expression, and_{}, cfg, ctx);
         }
 
-        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_relational_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_relational_expression(expr.first, cfg, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const vr_primitive_type rhs{ evaluate_relational_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_relational_expression(operand, cfg, ctx) };
                 switch (operator_)
                 {
                 case equality_operator::equal:
@@ -2636,12 +2636,12 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_shift_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_shift_expression(expr.first, cfg, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const vr_primitive_type rhs{ evaluate_shift_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_shift_expression(operand, cfg, ctx) };
                 switch (operator_)
                 {
                 case relational_operator::less:
@@ -2663,12 +2663,12 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_additive_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_additive_expression(expr.first, cfg, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const vr_primitive_type rhs{ evaluate_additive_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_additive_expression(operand, cfg, ctx) };
                 switch (operator_)
                 {
                 case shift_operator::shift_left:
@@ -2684,12 +2684,12 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_multiplicative_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_multiplicative_expression(expr.first, cfg, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const vr_primitive_type rhs{ evaluate_multiplicative_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_multiplicative_expression(operand, cfg, ctx) };
                 switch (operator_)
                 {
                 case additive_operator::plus:
@@ -2705,12 +2705,12 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type lhs{ evaluate_prefix_expression(expr.first, config, ctx) };
+            vr_primitive_type lhs{ evaluate_prefix_expression(expr.first, cfg, ctx) };
             for (const auto& [operator_, operand] : expr.rest)
             {
-                const vr_primitive_type rhs{ evaluate_prefix_expression(operand, config, ctx) };
+                const vr_primitive_type rhs{ evaluate_prefix_expression(operand, cfg, ctx) };
                 switch (operator_)
                 {
                 case multiplicative_operator::multiplies:
@@ -2729,14 +2729,14 @@ namespace llmcpp
             return lhs;
         }
 
-        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(prefix_expression_visitor{ config, ctx }, expr);
+            return boost::apply_visitor(prefix_expression_visitor{ cfg, ctx }, expr);
         }
 
-        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type operand{ evaluate_prefix_expression(expr.operand.get(), config, ctx) };
+            vr_primitive_type operand{ evaluate_prefix_expression(expr.operand.get(), cfg, ctx) };
             switch (expr.operator_)
             {
             case prefix_operator::prefix_increment:
@@ -2756,9 +2756,9 @@ namespace llmcpp
             }
         }
 
-        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& config, context& ctx)
+        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& cfg, context& ctx)
         {
-            vr_primitive_type operand{ evaluate_parentheses_expression(expr.operand, config, ctx) };
+            vr_primitive_type operand{ evaluate_parentheses_expression(expr.operand, cfg, ctx) };
             for (const auto& operator_ : expr.operators)
             {
                 switch (operator_)
@@ -2812,12 +2812,12 @@ namespace llmcpp
             llmcpp::throw_exception(macro_exception{});
         }
 
-        vr_primitive_type evaluate_primary(const primary_type& primary, const config& config, context& ctx)
+        vr_primitive_type evaluate_primary(const primary_type& primary, const config& cfg, context& ctx)
         {
-            return boost::apply_visitor(primary_visitor{ config, ctx }, primary);
+            return boost::apply_visitor(primary_visitor{ cfg, ctx }, primary);
         }
 
-        vr_primitive_type evaluate_variable(const variable_type& variable, const config& config, context& ctx)
+        vr_primitive_type evaluate_variable(const variable_type& variable, const config& cfg, context& ctx)
         {
             if (primitive_type* variable_value_ptr{ ctx.get(variable.name) }; variable_value_ptr)
             {
@@ -2898,27 +2898,27 @@ namespace llmcpp
         return cast_to<T>(arguments[0]);
     }
 
-    primitive_type builtin::int_(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         return cast_to<int>(arguments);
     }
 
-    primitive_type builtin::double_(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         return cast_to<double>(arguments);
     }
 
-    primitive_type builtin::char_(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         return cast_to<char>(arguments);
     }
 
-    primitive_type builtin::string_(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         return cast_to<std::string>(arguments);
     }
 
-    primitive_type builtin::file(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.empty())
         {
@@ -2927,10 +2927,10 @@ namespace llmcpp
 
         const std::string_view filename{ get_or_throw<std::string>(arguments[0]) };
 
-        return read_text_file_to_string(filename, config);
+        return read_text_file_to_string(filename, cfg);
     }
 
-    primitive_type head_tail_impl(const std::vector<primitive_type>& arguments, const config& config, context& ctx, bool reverse)
+    primitive_type head_tail_impl(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx, bool reverse)
     {
         if (arguments.size() < 2)
         {
@@ -2942,22 +2942,22 @@ namespace llmcpp
 
         std::string result;
         int tokens{};
-        truncate_by_tokens(str, max_tokens, config, reverse, result, tokens);
+        truncate_by_tokens(str, max_tokens, cfg, reverse, result, tokens);
 
         return result;
     }
 
-    primitive_type builtin::head(const std::vector< primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::head(const std::vector< primitive_type>& arguments, const config& cfg, context& ctx)
     {
-        return head_tail_impl(arguments, config, ctx, false);
+        return head_tail_impl(arguments, cfg, ctx, false);
     }
 
-    primitive_type builtin::tail(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
-        return head_tail_impl(arguments, config, ctx, true);
+        return head_tail_impl(arguments, cfg, ctx, true);
     }
 
-    primitive_type builtin::head_tail(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 3)
         {
@@ -2969,9 +2969,9 @@ namespace llmcpp
         const int tail_max_tokens{ get_or_throw<int>(arguments[2]) };
 
         const std::string_view ellipsis{ "..." };
-        const int ellipsis_tokens{ get_tokens_from_cache(config, ellipsis) };
+        const int ellipsis_tokens{ get_tokens_from_cache(cfg, ellipsis) };
 
-        const int total_tokens{ get_tokens_from_cache(config, str) };
+        const int total_tokens{ get_tokens_from_cache(cfg, str) };
 
         if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
         {
@@ -2980,14 +2980,14 @@ namespace llmcpp
 
         std::string result;
         int tokens{};
-        truncate_by_tokens(str, head_max_tokens, config, false, result, tokens);
+        truncate_by_tokens(str, head_max_tokens, cfg, false, result, tokens);
         result.append(ellipsis);
-        truncate_by_tokens(str, tail_max_tokens, config, true, result, tokens);
+        truncate_by_tokens(str, tail_max_tokens, cfg, true, result, tokens);
 
         return result;
     }
 
-    primitive_type builtin::json_literal(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 1)
         {
@@ -2997,7 +2997,7 @@ namespace llmcpp
         return json_escape_string(get_or_throw<std::string>(arguments[0]));
     }
 
-    primitive_type builtin::env(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::env(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 1)
         {
@@ -3014,7 +3014,7 @@ namespace llmcpp
         return std::string{};
     }
 
-    primitive_type builtin::generated(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 1)
         {
@@ -3026,12 +3026,12 @@ namespace llmcpp
         std::string result;
         {
             context pushed{ ctx.make_pushed() };
-            result = generate_text(config, prompt, pushed);
+            result = generate_text(cfg, prompt, pushed);
         }
         return result;
     }
 
-    primitive_type builtin::random(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         const std::optional<int> optional_min{ arguments.size() > 0 ? get_optional<int>(arguments[0]) : std::nullopt };
         const std::optional<int> optional_max{ arguments.size() > 1 ? get_optional<int>(arguments[1]) : std::nullopt };
@@ -3042,7 +3042,7 @@ namespace llmcpp
         return std::to_string(llmcpp::random<std::int64_t>(min, max));
     }
 
-    primitive_type builtin::choice(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.empty())
         {
@@ -3052,7 +3052,7 @@ namespace llmcpp
         return arguments[llmcpp::random<std::size_t>(0, arguments.size() - 1)];
     }
 
-    primitive_type builtin::exec(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         namespace process = boost::process::v2;
         namespace asio = boost::asio;
@@ -3101,7 +3101,7 @@ namespace llmcpp
         return console_string_to_u8string(output);
     }
 
-    primitive_type builtin::code_block(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 2)
         {
@@ -3120,7 +3120,7 @@ namespace llmcpp
         return std::string{};
     }
 
-    primitive_type builtin::summary(const std::vector<primitive_type>& arguments, const config& config, context& ctx)
+    primitive_type builtin::summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 3)
         {
@@ -3137,13 +3137,13 @@ namespace llmcpp
             context pushed{ ctx.make_pushed() };
             pushed.set("target", target);
             pushed.set("max_token", std::to_string(max_token));
-            output = generate_text(config, prompt, pushed);
-            output = remove_reasoning(output, config.llm.reasoning_prefix, config.llm.reasoning_suffix);
+            output = generate_text(cfg, prompt, pushed);
+            output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
         }
 
         std::string truncated;
         int tokens{};
-        truncate_by_tokens(output, max_token, config, false, truncated, tokens);
+        truncate_by_tokens(output, max_token, cfg, false, truncated, tokens);
 
         return truncated;
     }
@@ -3178,7 +3178,7 @@ namespace llmcpp
         return oss.str();
     }
 
-    std::string builtin::stdin_(const config& config)
+    std::string builtin::stdin_(const config& cfg)
     {
 #ifdef _WIN32
         bool is_terminal = (_isatty(0) != 0);
@@ -3194,11 +3194,11 @@ namespace llmcpp
         return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
     }
 
-    std::string expand_macro(std::string_view input, const config& config, const context& ctx)
+    std::string expand_macro(std::string_view input, const config& cfg, const context& ctx)
     {
         constexpr unsigned int max_depth{ 32 };
         context pushed{ ctx.make_pushed() };
-        return parser::evaluate_document_recursive(std::string{ input }, config, max_depth, pushed);
+        return parser::evaluate_document_recursive(std::string{ input }, cfg, max_depth, pushed);
     }
 
     template<typename T>
@@ -3285,7 +3285,7 @@ namespace llmcpp
         }
     }
 
-    void truncate_by_tokens(std::string_view string, int max_tokens, const config& config, bool reverse, std::string& result, int& tokens)
+    void truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse, std::string& result, int& tokens)
     {
         result = {};
         tokens = {};
@@ -3298,7 +3298,7 @@ namespace llmcpp
             {
                 for (; first != last; ++first)
                 {
-                    const int next_tokens{ get_tokens_from_cache(config, *first) };
+                    const int next_tokens{ get_tokens_from_cache(cfg, *first) };
                     if (tokens + next_tokens > max_tokens)
                     {
                         break;
@@ -3324,11 +3324,11 @@ namespace llmcpp
         }
     }
 
-    void truncate_prompt(std::string_view string, const config& config, bool reverse, std::string& result, int& remaining_tokens)
+    void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens)
     {
         std::string truncated;
         int tokens{};
-        truncate_by_tokens(string, remaining_tokens, config, reverse, truncated, tokens);
+        truncate_by_tokens(string, remaining_tokens, cfg, reverse, truncated, tokens);
         result += string;
         remaining_tokens -= tokens;
     }
@@ -3360,21 +3360,21 @@ namespace llmcpp
         return result;
     }
 
-    std::string read_text_file_to_string(std::string_view path, const config& config, std::string_view extension)
+    std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension)
     {
-        return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), config));
+        return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), cfg));
     };
 
-    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& config)
+    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg)
     {
-        return base64_encode(read_file_to_string(string_to_path_by_config(image_path, config)));
+        return base64_encode(read_file_to_string(string_to_path_by_config(image_path, cfg)));
     }
 
-    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& config)
+    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg)
     {
         std::vector<std::string> encoded_images;
         encoded_images.reserve(paths.size());
-        const auto unary_operator = [&config](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, config); };
+        const auto unary_operator = [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); };
         boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
         return encoded_images;
     }
@@ -3389,12 +3389,12 @@ namespace llmcpp
         return temp.string();
     }
 
-    std::filesystem::path string_to_path_by_config(std::string_view path, const config& config)
+    std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg)
     {
-        const std::filesystem::path file_path{ expand_macro(path, config, config.context) };
+        const std::filesystem::path file_path{ expand_macro(path, cfg, cfg.ctx) };
         if (file_path.is_relative())
         {
-            const std::filesystem::path base_path{ expand_macro(config.base_path, config, config.context) };
+            const std::filesystem::path base_path{ expand_macro(cfg.base_path, cfg, cfg.ctx) };
             return base_path / file_path;
 
         }
@@ -3633,7 +3633,7 @@ namespace llmcpp
     }
 
     std::string send_automatic1111_txt2img_request(
-        const config& config,
+        const config& cfg,
         std::string_view prompt,
         std::string_view negative_prompt
     )
@@ -3649,8 +3649,8 @@ namespace llmcpp
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.sd.host, config.sd.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.sd.host, cfg.sd.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
@@ -3658,81 +3658,81 @@ namespace llmcpp
 
         add_pair_into_json(json, "prompt", prompt);
         add_pair_into_json(json, "negative_prompt", negative_prompt);
-        //add_pair_into_json(json, "styles", config.sd_txt2img_params.styles);
-        add_pair_into_json(json, "seed", config.sd.seed);
-        add_pair_into_json(json, "subseed", config.sd.subseed);
-        add_pair_into_json(json, "subseed_strength", config.sd.subseed_strength);
-        add_pair_into_json(json, "seed_resize_from_h", config.sd.seed_resize_from_h);
-        add_pair_into_json(json, "seed_resize_from_w", config.sd.seed_resize_from_w);
-        add_pair_into_json(json, "sampler_name", config.sd.sampler_name);
-        add_pair_into_json(json, "scheduler", config.sd.scheduler);
-        add_pair_into_json(json, "batch_size", config.sd.batch_size);
-        add_pair_into_json(json, "n_iter", config.sd.n_iter);
-        add_pair_into_json(json, "steps", config.sd.steps);
-        add_pair_into_json(json, "cfg_scale", config.sd.cfg_scale);
-        add_pair_into_json(json, "width", config.sd.width);
-        add_pair_into_json(json, "height", config.sd.height);
-        add_pair_into_json(json, "restore_faces", config.sd.restore_faces);
-        add_pair_into_json(json, "tiling", config.sd.tiling);
-        add_pair_into_json(json, "do_not_save_samples", config.sd.do_not_save_samples);
-        add_pair_into_json(json, "do_not_save_grid", config.sd.do_not_save_grid);
-        add_pair_into_json(json, "eta", config.sd.eta);
-        add_pair_into_json(json, "denoising_strength", config.sd.denoising_strength);
-        add_pair_into_json(json, "s_min_uncond", config.sd.s_min_uncond);
-        add_pair_into_json(json, "s_churn", config.sd.s_churn);
-        add_pair_into_json(json, "s_tmax", config.sd.s_tmax);
-        add_pair_into_json(json, "s_tmin", config.sd.s_tmin);
-        add_pair_into_json(json, "s_noise", config.sd.s_noise);
-        add_pair_into_json(json, "override_settings", config.sd.override_settings);
-        add_pair_into_json(json, "override_settings_restore_afterwards", config.sd.override_settings_restore_afterwards);
-        add_pair_into_json(json, "refiner_checkpoint", config.sd.refiner_checkpoint);
-        add_pair_into_json(json, "refiner_switch_at", config.sd.refiner_switch_at);
-        add_pair_into_json(json, "disable_extra_networks", config.sd.disable_extra_networks);
-        add_pair_into_json(json, "firstpass_image", config.sd.firstpass_image);
-        add_pair_into_json(json, "comments", config.sd.comments);
+        //add_pair_into_json(json, "styles", cfg.sd_txt2img_params.styles);
+        add_pair_into_json(json, "seed", cfg.sd.seed);
+        add_pair_into_json(json, "subseed", cfg.sd.subseed);
+        add_pair_into_json(json, "subseed_strength", cfg.sd.subseed_strength);
+        add_pair_into_json(json, "seed_resize_from_h", cfg.sd.seed_resize_from_h);
+        add_pair_into_json(json, "seed_resize_from_w", cfg.sd.seed_resize_from_w);
+        add_pair_into_json(json, "sampler_name", cfg.sd.sampler_name);
+        add_pair_into_json(json, "scheduler", cfg.sd.scheduler);
+        add_pair_into_json(json, "batch_size", cfg.sd.batch_size);
+        add_pair_into_json(json, "n_iter", cfg.sd.n_iter);
+        add_pair_into_json(json, "steps", cfg.sd.steps);
+        add_pair_into_json(json, "cfg_scale", cfg.sd.cfg_scale);
+        add_pair_into_json(json, "width", cfg.sd.width);
+        add_pair_into_json(json, "height", cfg.sd.height);
+        add_pair_into_json(json, "restore_faces", cfg.sd.restore_faces);
+        add_pair_into_json(json, "tiling", cfg.sd.tiling);
+        add_pair_into_json(json, "do_not_save_samples", cfg.sd.do_not_save_samples);
+        add_pair_into_json(json, "do_not_save_grid", cfg.sd.do_not_save_grid);
+        add_pair_into_json(json, "eta", cfg.sd.eta);
+        add_pair_into_json(json, "denoising_strength", cfg.sd.denoising_strength);
+        add_pair_into_json(json, "s_min_uncond", cfg.sd.s_min_uncond);
+        add_pair_into_json(json, "s_churn", cfg.sd.s_churn);
+        add_pair_into_json(json, "s_tmax", cfg.sd.s_tmax);
+        add_pair_into_json(json, "s_tmin", cfg.sd.s_tmin);
+        add_pair_into_json(json, "s_noise", cfg.sd.s_noise);
+        add_pair_into_json(json, "override_settings", cfg.sd.override_settings);
+        add_pair_into_json(json, "override_settings_restore_afterwards", cfg.sd.override_settings_restore_afterwards);
+        add_pair_into_json(json, "refiner_checkpoint", cfg.sd.refiner_checkpoint);
+        add_pair_into_json(json, "refiner_switch_at", cfg.sd.refiner_switch_at);
+        add_pair_into_json(json, "disable_extra_networks", cfg.sd.disable_extra_networks);
+        add_pair_into_json(json, "firstpass_image", cfg.sd.firstpass_image);
+        add_pair_into_json(json, "comments", cfg.sd.comments);
 
-        if (config.sd.mode == sd_mode::txt2img)
+        if (cfg.sd.mode == sd_mode::txt2img)
         {
-            add_pair_into_json(json, "enable_hr", config.sd.txt2img.enable_hr);
-            add_pair_into_json(json, "firstphase_width", config.sd.txt2img.firstphase_width);
-            add_pair_into_json(json, "firstphase_height", config.sd.txt2img.firstphase_height);
-            add_pair_into_json(json, "hr_scale", config.sd.txt2img.hr_scale);
-            add_pair_into_json(json, "hr_upscaler", config.sd.txt2img.hr_upscaler);
-            add_pair_into_json(json, "hr_second_pass_steps", config.sd.txt2img.hr_second_pass_steps);
-            add_pair_into_json(json, "hr_resize_x", config.sd.txt2img.hr_resize_x);
-            add_pair_into_json(json, "hr_resize_y", config.sd.txt2img.hr_resize_y);
-            add_pair_into_json(json, "hr_checkpoint_name", config.sd.txt2img.hr_checkpoint_name);
+            add_pair_into_json(json, "enable_hr", cfg.sd.txt2img.enable_hr);
+            add_pair_into_json(json, "firstphase_width", cfg.sd.txt2img.firstphase_width);
+            add_pair_into_json(json, "firstphase_height", cfg.sd.txt2img.firstphase_height);
+            add_pair_into_json(json, "hr_scale", cfg.sd.txt2img.hr_scale);
+            add_pair_into_json(json, "hr_upscaler", cfg.sd.txt2img.hr_upscaler);
+            add_pair_into_json(json, "hr_second_pass_steps", cfg.sd.txt2img.hr_second_pass_steps);
+            add_pair_into_json(json, "hr_resize_x", cfg.sd.txt2img.hr_resize_x);
+            add_pair_into_json(json, "hr_resize_y", cfg.sd.txt2img.hr_resize_y);
+            add_pair_into_json(json, "hr_checkpoint_name", cfg.sd.txt2img.hr_checkpoint_name);
             //add_pair_into_json(json, "hr_prompt", prompt);
             //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
         }
-        else if (config.sd.mode == sd_mode::img2img)
+        else if (cfg.sd.mode == sd_mode::img2img)
         {
-            add_pair_into_json_from_vector(json, "sd_init_images", image_paths_to_base64_encoded_strings(config.sd.img2img.init_images, config));
-            add_pair_into_json(json, "sd_seed_resize_from_h", config.sd.img2img.seed_resize_from_h);
-            add_pair_into_json(json, "sd_seed_resize_from_w", config.sd.img2img.seed_resize_from_w);
-            add_pair_into_json(json, "sd_resize_mode", config.sd.img2img.resize_mode);
-            add_pair_into_json(json, "sd_image_cfg_scale", config.sd.img2img.image_cfg_scale);
-            add_pair_into_json(json, "sd_mask", image_path_to_base64_encoded_string(config.sd.img2img.mask, config));
-            add_pair_into_json(json, "sd_mask_blur_x", config.sd.img2img.mask_blur_x);
-            add_pair_into_json(json, "sd_mask_blur_y", config.sd.img2img.mask_blur_y);
-            add_pair_into_json(json, "sd_mask_blur", config.sd.img2img.mask_blur);
-            add_pair_into_json(json, "sd_mask_round", config.sd.img2img.mask_round);
-            add_pair_into_json(json, "sd_inpainting_fill", config.sd.img2img.inpainting_fill);
-            add_pair_into_json(json, "sd_inpaint_full_res", config.sd.img2img.inpaint_full_res);
-            add_pair_into_json(json, "sd_inpaint_full_res_padding", config.sd.img2img.inpaint_full_res_padding);
-            add_pair_into_json(json, "sd_inpainting_mask_invert", config.sd.img2img.inpainting_mask_invert);
-            add_pair_into_json(json, "sd_initial_noise_multiplier", config.sd.img2img.initial_noise_multiplier);
-            add_pair_into_json(json, "sd_latent_mask", image_path_to_base64_encoded_string(config.sd.img2img.latent_mask, config));
+            add_pair_into_json_from_vector(json, "sd_init_images", image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg));
+            add_pair_into_json(json, "sd_seed_resize_from_h", cfg.sd.img2img.seed_resize_from_h);
+            add_pair_into_json(json, "sd_seed_resize_from_w", cfg.sd.img2img.seed_resize_from_w);
+            add_pair_into_json(json, "sd_resize_mode", cfg.sd.img2img.resize_mode);
+            add_pair_into_json(json, "sd_image_cfg_scale", cfg.sd.img2img.image_cfg_scale);
+            add_pair_into_json(json, "sd_mask", image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg));
+            add_pair_into_json(json, "sd_mask_blur_x", cfg.sd.img2img.mask_blur_x);
+            add_pair_into_json(json, "sd_mask_blur_y", cfg.sd.img2img.mask_blur_y);
+            add_pair_into_json(json, "sd_mask_blur", cfg.sd.img2img.mask_blur);
+            add_pair_into_json(json, "sd_mask_round", cfg.sd.img2img.mask_round);
+            add_pair_into_json(json, "sd_inpainting_fill", cfg.sd.img2img.inpainting_fill);
+            add_pair_into_json(json, "sd_inpaint_full_res", cfg.sd.img2img.inpaint_full_res);
+            add_pair_into_json(json, "sd_inpaint_full_res_padding", cfg.sd.img2img.inpaint_full_res_padding);
+            add_pair_into_json(json, "sd_inpainting_mask_invert", cfg.sd.img2img.inpainting_mask_invert);
+            add_pair_into_json(json, "sd_initial_noise_multiplier", cfg.sd.img2img.initial_noise_multiplier);
+            add_pair_into_json(json, "sd_latent_mask", image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg));
         }
 
-        add_pair_into_json(json, "force_task_id", config.sd.force_task_id);
+        add_pair_into_json(json, "force_task_id", cfg.sd.force_task_id);
 
-        if (!config.sd.sampler_index.empty() && config.sd.sampler_name.empty())
+        if (!cfg.sd.sampler_index.empty() && cfg.sd.sampler_name.empty())
         {
-            add_pair_into_json(json, "sampler_index", config.sd.sampler_index);
+            add_pair_into_json(json, "sampler_index", cfg.sd.sampler_index);
         }
 
-        if (config.sd.abg_remover_enable)
+        if (cfg.sd.abg_remover_enable)
         {
             add_pair_into_json(json, "script_name", "abg remover");
             picojson::array args_array
@@ -3746,24 +3746,24 @@ namespace llmcpp
             add_pair_into_json(json, "script_args", args_array);
         }
 
-        add_pair_into_json(json, "send_images", config.sd.send_images);
-        add_pair_into_json(json, "save_images", config.sd.save_images);
+        add_pair_into_json(json, "send_images", cfg.sd.send_images);
+        add_pair_into_json(json, "save_images", cfg.sd.save_images);
 
         picojson::object alwayson_scripts;
-        if (config.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
+        if (cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
         {
             picojson::object adetailer;
             picojson::array args_array;
             picojson::object args;
             picojson::object object;
-            add_pair_into_json(object, "ad_model", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
-            if (!config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+            add_pair_into_json(object, "ad_model", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+            if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
             {
-                add_pair_into_json(object, "ad_prompt", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
+                add_pair_into_json(object, "ad_prompt", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
             }
-            if (!config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+            if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
             {
-                add_pair_into_json(object, "ad_negative_prompt", config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
+                add_pair_into_json(object, "ad_negative_prompt", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
             }
             args_array.push_back(picojson::value{ true });
             args_array.push_back(picojson::value{ false });
@@ -3774,18 +3774,18 @@ namespace llmcpp
         //{
         //    picojson::object sampler;
         //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.steps) });
-        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.sampler_name });
-        //    args_array.push_back(picojson::value{ config.sd_txt2img_params.scheduler });
+        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.steps) });
+        //    args_array.push_back(picojson::value{ cfg.sd_txt2img_params.sampler_name });
+        //    args_array.push_back(picojson::value{ cfg.sd_txt2img_params.scheduler });
         //    add_pair_into_json(sampler, "args", args_array);
         //    add_pair_into_json(alwayson_scripts, "Sampler", sampler);
         //}
         //{
         //    picojson::object seed;
         //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.seed) });
+        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.seed) });
         //    args_array.push_back(picojson::value{ false });
-        //    args_array.push_back(picojson::value{ static_cast<double>(config.sd_txt2img_params.subseed) });
+        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.subseed) });
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
         //    args_array.push_back(picojson::value{ static_cast<double>(0) });
@@ -3794,16 +3794,16 @@ namespace llmcpp
         //}
         add_pair_into_json(json, "alwayson_scripts", alwayson_scripts);
 
-        if (!config.sd.infotext.empty())
+        if (!cfg.sd.infotext.empty())
         {
-            add_pair_into_json(json, "infotext", config.sd.infotext);
+            add_pair_into_json(json, "infotext", cfg.sd.infotext);
         }
 
         const std::string request_body{ picojson::value{ json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(config.sd.mode, config), 11 };
-        request.set(http::field::host, config.sd.host);
+        http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(cfg.sd.mode, cfg), 11 };
+        request.set(http::field::host, cfg.sd.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
@@ -3839,7 +3839,7 @@ namespace llmcpp
     }
 
     std::string send_style_bert_voice_request(
-        const config& config,
+        const config& cfg,
         std::string_view text
     )
     {
@@ -3854,62 +3854,62 @@ namespace llmcpp
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.sb.host, config.sb.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.sb.host, cfg.sb.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        boost::url target{ config.sb.target };
+        boost::url target{ cfg.sb.target };
         target.params().set("text", text);
         //target.params().set("encoding", "utf-8");
 
-        if (!config.sb.model_name.empty())
+        if (!cfg.sb.model_name.empty())
         {
-            target.params().set("model_name", config.sb.model_name);
+            target.params().set("model_name", cfg.sb.model_name);
         }
         else
         {
-            target.params().set("model_id", std::to_string(config.sb.model_id));
+            target.params().set("model_id", std::to_string(cfg.sb.model_id));
         }
 
-        if (!config.sb.speaker_name.empty())
+        if (!cfg.sb.speaker_name.empty())
         {
-            target.params().set("speaker_name", config.sb.speaker_name);
+            target.params().set("speaker_name", cfg.sb.speaker_name);
         }
         else
         {
-            target.params().set("speaker_id", std::to_string(config.sb.speaker_id));
+            target.params().set("speaker_id", std::to_string(cfg.sb.speaker_id));
         }
 
-        target.params().set("sdp_ratio", std::to_string(config.sb.sdp_ratio));
-        target.params().set("noise", std::to_string(config.sb.noise));
-        target.params().set("noisew", std::to_string(config.sb.noisew));
-        target.params().set("length", std::to_string(config.sb.length));
-        target.params().set("language", config.sb.language);
-        target.params().set("auto_split", config.sb.auto_split ? "true" : "false");
-        target.params().set("split_interval", std::to_string(config.sb.split_interval));
+        target.params().set("sdp_ratio", std::to_string(cfg.sb.sdp_ratio));
+        target.params().set("noise", std::to_string(cfg.sb.noise));
+        target.params().set("noisew", std::to_string(cfg.sb.noisew));
+        target.params().set("length", std::to_string(cfg.sb.length));
+        target.params().set("language", cfg.sb.language);
+        target.params().set("auto_split", cfg.sb.auto_split ? "true" : "false");
+        target.params().set("split_interval", std::to_string(cfg.sb.split_interval));
 
-        if (!config.sb.assist_text.empty())
+        if (!cfg.sb.assist_text.empty())
         {
-            target.params().set("assist_text", config.sb.assist_text);
-            target.params().set("assist_text_weight", std::to_string(config.sb.assist_text_weight));
+            target.params().set("assist_text", cfg.sb.assist_text);
+            target.params().set("assist_text_weight", std::to_string(cfg.sb.assist_text_weight));
         }
 
-        if (!config.sb.style.empty())
+        if (!cfg.sb.style.empty())
         {
-            target.params().set("style", config.sb.style);
-            target.params().set("style_weight", std::to_string(config.sb.style_weight));
+            target.params().set("style", cfg.sb.style);
+            target.params().set("style_weight", std::to_string(cfg.sb.style_weight));
         }
 
-        if (!config.sb.reference_audio_path.empty())
+        if (!cfg.sb.reference_audio_path.empty())
         {
-            target.params().set("reference_audio_path", config.sb.reference_audio_path);
+            target.params().set("reference_audio_path", cfg.sb.reference_audio_path);
         }
 
         BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
         http::request<http::string_body> request{ http::verb::get, target, 11 };
-        request.set(http::field::host, config.sb.host);
+        request.set(http::field::host, cfg.sb.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.prepare_payload();
@@ -3951,7 +3951,7 @@ namespace llmcpp
     }
 
     std::string upload_image_to_comfy_ui(
-        const config& config,
+        const config& cfg,
         const std::filesystem::path& image_path,
         bool overwrite
     )
@@ -3987,13 +3987,13 @@ namespace llmcpp
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.cu.host, config.cu.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.cu.host, cfg.cu.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        http::request<http::string_body> request{ http::verb::post, config.cu.upload_image_target, 11 };
-        request.set(http::field::host, config.cu.host);
+        http::request<http::string_body> request{ http::verb::post, cfg.cu.upload_image_target, 11 };
+        request.set(http::field::host, cfg.cu.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "multipart/form-data; boundary=" + boundary);
         request.body() = body.str();
@@ -4026,11 +4026,11 @@ namespace llmcpp
     }
 
     void upload_images_to_comfy_ui(
-        const config& config,
-        context& context
+        const config& cfg,
+        context& ctx
     )
     {
-        for (const std::string& key_value_pair : config.cu.upload_images)
+        for (const std::string& key_value_pair : cfg.cu.upload_images)
         {
             const std::size_t separator_position{ key_value_pair.find('=') };
             if (separator_position != std::string::npos)
@@ -4039,9 +4039,9 @@ namespace llmcpp
                 const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
                 if (!variable_name.empty())
                 {
-                    const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, config) };
-                    const std::string server_path{ upload_image_to_comfy_ui(config, local_path) };
-                    context.set(variable_name, server_path);
+                    const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, cfg) };
+                    const std::string server_path{ upload_image_to_comfy_ui(cfg, local_path) };
+                    ctx.set(variable_name, server_path);
                     BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
                 }
             }
@@ -4053,7 +4053,7 @@ namespace llmcpp
     }
 
     void send_comfy_ui_prompt(
-        const config& config,
+        const config& cfg,
         std::string_view prompt
     )
     {
@@ -4075,8 +4075,8 @@ namespace llmcpp
             std::string type;
         };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.cu.host, config.cu.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.cu.host, cfg.cu.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
@@ -4088,8 +4088,8 @@ namespace llmcpp
         const std::string request_body{ picojson::value{ json }.serialize() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.cu.prompt_target, 11 };
-        request.set(http::field::host, config.cu.host);
+        http::request<http::string_body> request{ http::verb::post, cfg.cu.prompt_target, 11 };
+        request.set(http::field::host, cfg.cu.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
@@ -4121,10 +4121,10 @@ namespace llmcpp
 
             http::response<http::string_body> history_response{
                 send_http_get(
-                    config.cu.host,
-                    config.cu.port,
+                    cfg.cu.host,
+                    cfg.cu.port,
                     "/history/" + prompt_id,
-                    config.expires_after
+                    cfg.expires_after
                 )
             };
 
@@ -4209,8 +4209,8 @@ namespace llmcpp
 
         for (const generated_file_info& file_info : target_files)
         {
-            std::filesystem::path relative_file_path{ config.cu.output_directory };
-            if (config.cu.preserve_subdirectories)
+            std::filesystem::path relative_file_path{ cfg.cu.output_directory };
+            if (cfg.cu.preserve_subdirectories)
             {
                 relative_file_path /= file_info.subfolder;
             }
@@ -4225,13 +4225,13 @@ namespace llmcpp
             view_target.append(file_info.type);
 
             const http::response<http::string_body> view_response{ send_http_get(
-                config.cu.host,
-                config.cu.port,
+                cfg.cu.host,
+                cfg.cu.port,
                 view_target,
-                config.expires_after
+                cfg.expires_after
             ) };
 
-            write_file(config, view_response.body(), relative_file_path.string(), std::ios::binary);
+            write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
         }
 
         tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
@@ -4279,7 +4279,7 @@ namespace llmcpp
         return result;
     }
 
-    void write_item_list(const config& config, std::string_view task)
+    void write_item_list(const config& cfg, std::string_view task)
     {
         const std::vector<item> items{ parse_item_list(task) };
 
@@ -4290,12 +4290,12 @@ namespace llmcpp
             {
                 descriptions.append(description);
             }
-            write_file(config, descriptions, item.head, std::ios::binary);
+            write_file(cfg, descriptions, item.head, std::ios::binary);
         }
     }
 
     std::string send_completions_request(
-        const config& config,
+        const config& cfg,
         std::string_view prompt,
         const text_generation_parameters& params,
         int max_tokens
@@ -4312,24 +4312,24 @@ namespace llmcpp
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.llm.host, config.llm.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.llm.host, cfg.llm.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
         const std::string request_body{ params.get_request_body_for_text_completions(prompt, max_tokens) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.llm.completions_target, 11 };
-        request.set(http::field::host, config.llm.host);
+        http::request<http::string_body> request{ http::verb::post, cfg.llm.completions_target, 11 };
+        request.set(http::field::host, cfg.llm.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
         request.prepare_payload();
 
-        if (!config.llm.api_key.empty())
+        if (!cfg.llm.api_key.empty())
         {
-            request.set(http::field::authorization, ("Bearer ") + config.llm.api_key);
+            request.set(http::field::authorization, ("Bearer ") + cfg.llm.api_key);
         }
 
         http::write(tcp_stream, request, error_code);
@@ -4531,7 +4531,7 @@ namespace llmcpp
         return static_cast<int>(throwable_find<double>(object, "value"));
     }
 
-    int send_token_count_request(const config& config, std::string_view prompt)
+    int send_token_count_request(const config& cfg, std::string_view prompt)
     {
         namespace beast = boost::beast;
         namespace http = beast::http;
@@ -4544,16 +4544,16 @@ namespace llmcpp
         tcp::resolver resolver{ ioc };
         beast::tcp_stream tcp_stream{ ioc };
 
-        const tcp::resolver::results_type results{ resolver.resolve(config.llm.host, config.llm.port) };
-        tcp_stream.expires_after(std::chrono::seconds{ config.expires_after });
+        const tcp::resolver::results_type results{ resolver.resolve(cfg.llm.host, cfg.llm.port) };
+        tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        const std::string request_body{ config.llm.backend->get_request_body_for_token_count(prompt) };
+        const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt) };
         BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
-        http::request<http::string_body> request{ http::verb::post, config.llm.token_count_target, 11 };
-        request.set(http::field::host, config.llm.host);
+        http::request<http::string_body> request{ http::verb::post, cfg.llm.token_count_target, 11 };
+        request.set(http::field::host, cfg.llm.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
         request.body() = request_body;
@@ -4581,45 +4581,45 @@ namespace llmcpp
             );
         }
 
-        return config.llm.backend->parse_response_for_token_count(response.body());
+        return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
 
-    int get_tokens_from_cache(const config& config, std::string_view str)
+    int get_tokens_from_cache(const config& cfg, std::string_view str)
     {
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        lru_cache::const_iterator iter{ config.lru_cache.get<by_key>().find(std::string{ str }) };
-        if (iter != config.lru_cache.get<by_key>().end())
+        lru_cache::const_iterator iter{ cfg.lru_cache.get<by_key>().find(std::string{ str }) };
+        if (iter != cfg.lru_cache.get<by_key>().end())
         {
             tokens = iter->tokens;
-            config.lru_cache.get<by_lru>().relocate(
-                config.lru_cache.get<by_lru>().end(),
-                config.lru_cache.get<by_lru>().iterator_to(*iter));
+            cfg.lru_cache.get<by_lru>().relocate(
+                cfg.lru_cache.get<by_lru>().end(),
+                cfg.lru_cache.get<by_lru>().iterator_to(*iter));
         }
         else
         {
-            tokens = send_token_count_request(config, str);
-            config.lru_cache.insert({ std::string{ str }, tokens });
+            tokens = send_token_count_request(cfg, str);
+            cfg.lru_cache.insert({ std::string{ str }, tokens });
         }
 
-        if (config.lru_cache.size() > capacity)
+        if (cfg.lru_cache.size() > capacity)
         {
-            config.lru_cache.get<by_lru>().pop_front();
+            cfg.lru_cache.get<by_lru>().pop_front();
         }
 
         return tokens;
     }
 
-    void write_cache(const config& config)
+    void write_cache(const config& cfg)
     {
-        if (config.command_mode != command_mode::tg/* && config.command_mode != command_mode::kc*/)
+        if (cfg.command_mode != command_mode::tg/* && cfg.command_mode != command_mode::kc*/)
         {
             return;
         }
 
         picojson::array cache;
-        for (const token_count_string& element : config.lru_cache.get<by_lru>())
+        for (const token_count_string& element : cfg.lru_cache.get<by_lru>())
         {
             picojson::object node;
             add_pair_into_json(node, "string", element.str);
@@ -4630,21 +4630,21 @@ namespace llmcpp
         add_pair_into_json(json, "cache", cache);
         const std::string serialized{ picojson::value{ json }.serialize() };
 
-        const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
+        const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
         create_parent_directories(cache_path);
         boost::nowide::ofstream ofs{ cache_path };
         ofs << serialized;
     }
 
-    void read_cache(const config& config)
+    void read_cache(const config& cfg)
     {
-        if (config.command_mode != command_mode::tg)
+        if (cfg.command_mode != command_mode::tg)
         {
             return;
         }
 
         picojson::value json;
-        std::filesystem::path cache_path{ string_to_path_by_config("cache.json", config) };
+        std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
 
         if (!std::filesystem::exists(cache_path))
         {
@@ -4665,7 +4665,7 @@ namespace llmcpp
                 const int tokens{ static_cast<int>(throwable_find<double>(cache_object, "tokens")) };
                 lru_cache.insert({ str, tokens });
             }
-            config.lru_cache = lru_cache;
+            cfg.lru_cache = lru_cache;
         }
         catch (const boost::exception& exception)
         {
@@ -4675,39 +4675,39 @@ namespace llmcpp
     }
 
     std::string generate_text(
-        const config& config,
+        const config& cfg,
         std::string_view prompt,
         const context& ctx
     )
     {
-        std::string expanded_prompt{ expand_macro(prompt, config, ctx) };
-        const std::string expanded_prefix{ expand_macro(config.llm.generation_prefix, config, ctx) };
+        std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
+        const std::string expanded_prefix{ expand_macro(cfg.llm.generation_prefix, cfg, ctx) };
         const std::size_t initial_prompt_size{ expanded_prompt.size() };
         expanded_prompt += expanded_prefix;
 
-        const int initial_tokens{ send_token_count_request(config, expanded_prompt) };
+        const int initial_tokens{ send_token_count_request(cfg, expanded_prompt) };
 
         BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         std::string current_prompt{ expanded_prompt };
         int current_tokens = initial_tokens;
-        for (int completion_iterations{}; completion_iterations < config.llm.max_completion_iterations; ++completion_iterations)
+        for (int completion_iterations{}; completion_iterations < cfg.llm.max_completion_iterations; ++completion_iterations)
         {
             BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
 
-            if (current_tokens - initial_tokens >= config.llm.min_completion_tokens)
+            if (current_tokens - initial_tokens >= cfg.llm.min_completion_tokens)
             {
                 break;
             }
 
-            const int remaining_context{ config.llm.backend->get_truncation_length() - current_tokens };
-            if (remaining_context <= 0)
+            const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - current_tokens };
+            if (remaining_tokens <= 0)
             {
                 BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens";
                 break;
             }
 
-            int tokens_to_generate = std::min(config.llm.backend->get_max_tokens(), remaining_context);
+            int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
             if (tokens_to_generate <= 0)
             {
                 BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
@@ -4716,7 +4716,7 @@ namespace llmcpp
 
             const int max_tokens{ tokens_to_generate };
             const std::string response{ send_completions_request(
-                config, current_prompt, *config.llm.backend, max_tokens
+                cfg, current_prompt, *cfg.llm.backend, max_tokens
             ) };
 
             if (response.empty())
@@ -4725,11 +4725,11 @@ namespace llmcpp
             }
 
             current_prompt += response;
-            current_tokens = send_token_count_request(config, current_prompt);
+            current_tokens = send_token_count_request(cfg, current_prompt);
         }
 
         std::string generated{ current_prompt.substr(initial_prompt_size) };
-        generated.append(config.llm.generation_suffix);
+        generated.append(cfg.llm.generation_suffix);
 
         return generated;
     }
@@ -4819,27 +4819,27 @@ namespace llmcpp
         return result;
     }
 
-    void unescape_parameters(config& config)
+    void unescape_parameters(config& cfg)
     {
-        boost::transform(config.user_defined_variables, config.user_defined_variables.begin(), unescape_string);
-        boost::transform(config.phases, config.phases.begin(), unescape_string);
-        config.llm.prompt = unescape_string(config.llm.prompt);
-        config.llm.generation_prefix = unescape_string(config.llm.generation_prefix);
-        config.llm.generation_suffix = unescape_string(config.llm.generation_suffix);
-        config.llm.reasoning_prefix = unescape_string(config.llm.reasoning_prefix);
-        config.llm.reasoning_suffix = unescape_string(config.llm.reasoning_suffix);
-        boost::transform(config.tg.stop, config.tg.stop.begin(), unescape_string);
-        config.tg.dry_sequence_breakers = unescape_string(config.tg.dry_sequence_breakers);
-        boost::transform(config.kc.stop_sequence, config.kc.stop_sequence.begin(), unescape_string);
-        boost::transform(config.kc.banned_tokens, config.kc.banned_tokens.begin(), unescape_string);
-        boost::transform(config.kc.dry_sequence_breakers, config.kc.dry_sequence_breakers.begin(), unescape_string);
-        config.sd.prompt = unescape_string(config.sd.prompt);
-        config.sd.negative_prompt = unescape_string(config.sd.negative_prompt);
-        config.sb.text = unescape_string(config.sb.text);
-        config.cu.prompt = unescape_string(config.cu.prompt);
+        boost::transform(cfg.user_defined_variables, cfg.user_defined_variables.begin(), unescape_string);
+        boost::transform(cfg.phases, cfg.phases.begin(), unescape_string);
+        cfg.llm.prompt = unescape_string(cfg.llm.prompt);
+        cfg.llm.generation_prefix = unescape_string(cfg.llm.generation_prefix);
+        cfg.llm.generation_suffix = unescape_string(cfg.llm.generation_suffix);
+        cfg.llm.reasoning_prefix = unescape_string(cfg.llm.reasoning_prefix);
+        cfg.llm.reasoning_suffix = unescape_string(cfg.llm.reasoning_suffix);
+        boost::transform(cfg.tg.stop, cfg.tg.stop.begin(), unescape_string);
+        cfg.tg.dry_sequence_breakers = unescape_string(cfg.tg.dry_sequence_breakers);
+        boost::transform(cfg.kc.stop_sequence, cfg.kc.stop_sequence.begin(), unescape_string);
+        boost::transform(cfg.kc.banned_tokens, cfg.kc.banned_tokens.begin(), unescape_string);
+        boost::transform(cfg.kc.dry_sequence_breakers, cfg.kc.dry_sequence_breakers.begin(), unescape_string);
+        cfg.sd.prompt = unescape_string(cfg.sd.prompt);
+        cfg.sd.negative_prompt = unescape_string(cfg.sd.negative_prompt);
+        cfg.sb.text = unescape_string(cfg.sb.text);
+        cfg.cu.prompt = unescape_string(cfg.cu.prompt);
     }
 
-    void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& context)
+    void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& ctx)
     {
         for (const std::string& key_value_pair : user_defined_variables)
         {
@@ -4850,7 +4850,7 @@ namespace llmcpp
                 const std::string value{ key_value_pair.substr(separator_position + 1) };
                 if (!key.empty())
                 {
-                    context.set(key, value);
+                    ctx.set(key, value);
                     BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
                 }
             }
@@ -4905,68 +4905,68 @@ namespace llmcpp
         boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
     }
 
-    void init_logging(const config& config)
+    void init_logging(const config& cfg)
     {
         boost::log::trivial::severity_level level = boost::log::trivial::info;
-        if (config.log_level == "trace")
+        if (cfg.log_level == "trace")
         {
             level = boost::log::trivial::trace;
         }
-        else if (config.log_level == "debug")
+        else if (cfg.log_level == "debug")
         {
             level = boost::log::trivial::debug;
         }
-        else if (config.log_level == "info")
+        else if (cfg.log_level == "info")
         {
             level = boost::log::trivial::info;
         }
-        else if (config.log_level == "warning")
+        else if (cfg.log_level == "warning")
         {
             level = boost::log::trivial::warning;
         }
-        else if (config.log_level == "error")
+        else if (cfg.log_level == "error")
         {
             level = boost::log::trivial::error;
         }
-        else if (config.log_level == "fatal")
+        else if (cfg.log_level == "fatal")
         {
             level = boost::log::trivial::fatal;
         }
         else
         {
-            BOOST_LOG_TRIVIAL(warning) << "Unkown log level: \"" << config.log_level << "\"";
+            BOOST_LOG_TRIVIAL(warning) << "Unkown log level: \"" << cfg.log_level << "\"";
         }
 
-        if (config.verbose)
+        if (cfg.verbose)
         {
             init_logging_with_nowide_cout();
         }
 
-        if (!config.log_file.empty())
+        if (!cfg.log_file.empty())
         {
-            const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(config.log_file, ".txt"), config) };
+            const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(cfg.log_file, ".txt"), cfg) };
             init_logging_with_nowide_file_log(log_file_path);
         }
 
         boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
     }
 
-    void init_chat_mode(config& config)
+    void init_chat_mode(config& cfg)
     {
-        if (config.phases.empty())
+        if (cfg.phases.empty())
         {
-            config.phases = { "{{user}}", "{{char}}" };
+            cfg.phases = { "{{user}}", "{{char}}" };
         }
-        if (config.llm.generation_prefix.empty())
+        if (cfg.llm.generation_prefix.empty())
         {
-            config.llm.generation_prefix = "\\n{{phase}}: ";
+            cfg.llm.generation_prefix = "\\n{{phase}}: ";
         }
     }
 
     void set_phase_variables(
         const std::vector<std::string>& phases,
         std::size_t phase_index,
-        context& context
+        context& ctx
     )
     {
         if (phase_index >= phases.size())
@@ -4976,31 +4976,31 @@ namespace llmcpp
 
         if (phase_index > 0)
         {
-            context.set("prev_phase", phases[phase_index - 1]);
+            ctx.set("prev_phase", phases[phase_index - 1]);
         }
 
-        context.set("phase", phases[phase_index]);
+        ctx.set("phase", phases[phase_index]);
 
         if (phase_index < phases.size() - 1)
         {
-            context.set("next_phase", phases[phase_index + 1]);
+            ctx.set("next_phase", phases[phase_index + 1]);
         }
     }
 
     void set_static_builtin_variables(
-        config& config
+        config& cfg
     )
     {
-        config.context.set("stdin", builtin::stdin_(config));
+        cfg.ctx.set("stdin", builtin::stdin_(cfg));
     }
 
     void set_dynamic_builtin_variables(
-        config& config
+        config& cfg
     )
     {
-        config.context.set("date", builtin::date());
-        config.context.set("time", builtin::time());
-        config.context.set("datetime", builtin::datetime());
+        cfg.ctx.set("date", builtin::date());
+        cfg.ctx.set("time", builtin::time());
+        cfg.ctx.set("datetime", builtin::datetime());
     }
 
     void set_paragraphs_to_phases(
@@ -5020,38 +5020,38 @@ namespace llmcpp
         }
     }
 
-    void init_llm_mode(config& config)
+    void init_llm_mode(config& cfg)
     {
-        if (!config.llm.paragraphs_file.empty())
+        if (!cfg.llm.paragraphs_file.empty())
         {
-            config.phases.clear();
-            const std::string content{ read_text_file_to_string(config.llm.paragraphs_file, config) };
+            cfg.phases.clear();
+            const std::string content{ read_text_file_to_string(cfg.llm.paragraphs_file, cfg) };
             std::vector<item> paragraphs{ parse_item_list(content) };
-            set_paragraphs_to_phases(paragraphs, config.phases);
+            set_paragraphs_to_phases(paragraphs, cfg.phases);
         }
 
-        if (config.command_mode == command_mode::tg)
+        if (cfg.command_mode == command_mode::tg)
         {
-            config.llm.backend = &config.tg;
-            if (config.llm.completions_target.empty())
+            cfg.llm.backend = &cfg.tg;
+            if (cfg.llm.completions_target.empty())
             {
-                config.llm.completions_target = "/v1/completions";
+                cfg.llm.completions_target = "/v1/completions";
             }
-            if (config.llm.token_count_target.empty())
+            if (cfg.llm.token_count_target.empty())
             {
-                config.llm.token_count_target = "/v1/internal/token-count";
+                cfg.llm.token_count_target = "/v1/internal/token-count";
             }
         }
-        else if (config.command_mode == command_mode::kc)
+        else if (cfg.command_mode == command_mode::kc)
         {
-            config.llm.backend = &config.kc;
-            if (config.llm.completions_target.empty())
+            cfg.llm.backend = &cfg.kc;
+            if (cfg.llm.completions_target.empty())
             {
-                config.llm.completions_target = "/api/v1/generate";
+                cfg.llm.completions_target = "/api/v1/generate";
             }
-            if (config.llm.token_count_target.empty())
+            if (cfg.llm.token_count_target.empty())
             {
-                config.llm.token_count_target = "/api/extra/tokencount";
+                cfg.llm.token_count_target = "/api/extra/tokencount";
             }
         }
     }
@@ -5213,15 +5213,15 @@ namespace llmcpp
     int parse_command_line(
         int argc,
         char** argv,
-        config& config
+        config& cfg
     )
     {
         namespace po = boost::program_options;
 
         try
         {
-            config.tg.stop = { "\\n\\n", ":", "***" };
-            config.tg.sampler_priority =
+            cfg.tg.stop = { "\\n\\n", ":", "***" };
+            cfg.tg.sampler_priority =
             {
                 "repetition_penalty",
                 "presence_penalty",
@@ -5244,7 +5244,7 @@ namespace llmcpp
                 "encoder_repetition_penalty",
                 "no_repeat_ngram"
             };
-            config.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+            cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
             std::string command_mode_string;
             std::string sd_mode_string;
@@ -5253,260 +5253,260 @@ namespace llmcpp
             allowed_options.add_options()
                 ("help,h", "produce help message")
                 ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
-                ("base-path", po::value<std::string>(&config.base_path)->default_value("."), "base path")
-                ("log-level", po::value<std::string>(&config.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
-                ("log-file", po::value<std::string>(&config.log_file)->default_value("log"), "log file path")
-                ("config-file,c", po::value<std::string>(&config.config_file)->default_value("config.ini"), "config file path")
-                ("verbose,v", po::bool_switch(&config.verbose)->default_value(false), "enable verbose output")
-                ("expires-after", po::value<unsigned int>(&config.expires_after)->default_value(30), "connection timeout")
-                ("number-iterations,N", po::value<int>(&config.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-                ("define,D", po::value<std::vector<std::string>>(&config.user_defined_variables)->multitoken(), "define variables (key=value)")
-                ("phases", po::value<std::vector<std::string>>(&config.phases)->multitoken(), "phases name list")
-                ("seed", po::value<int>(&config.seed)->default_value(-1), "seed value")
+                ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
+                ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
+                ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
+                ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
+                ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
+                ("expires-after", po::value<unsigned int>(&cfg.expires_after)->default_value(30), "connection timeout")
+                ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
+                ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
+                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
+                ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
 
-                ("create-process", po::bool_switch(&config.create_process)->default_value(false), "create process switch")
-                ("terminate-process", po::bool_switch(&config.terminate_process)->default_value(false), "terminate process switch")
-                ("png-file", po::value<std::string>(&config.png_file)->default_value(""), "for extract-png-parametesrs")
-                ("server-executable-file", po::value<std::string>(&config.server_executable_file)->default_value(""), "server executable file")
-                ("server-arguments", po::value<std::string>(&config.server_arguments), "server arguments")
-                ("server-host", po::value<std::string>(&config.server_host)->default_value("localhost"), "server ip")
-                ("server-port", po::value<std::string>(&config.server_port)->default_value("5000"), "server port")
-                ("server-max-retries", po::value<int>(&config.server_max_retries)->default_value(60), "server max retries")
-                ("server-wait-ms", po::value<int>(&config.server_wait_ms)->default_value(1000), "server wait ms")
+                ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
+                ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
+                ("png-file", po::value<std::string>(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
+                ("server-executable-file", po::value<std::string>(&cfg.server_executable_file)->default_value(""), "server executable file")
+                ("server-arguments", po::value<std::string>(&cfg.server_arguments), "server arguments")
+                ("server-host", po::value<std::string>(&cfg.server_host)->default_value("localhost"), "server ip")
+                ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
+                ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
+                ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
 
-                ("llm-prompt", po::value<std::string>(&config.llm.prompt)->default_value(""), "LLM prompt")
-                ("llm-prompt-file", po::value<std::string>(&config.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
-                ("llm-output-file", po::value<std::string>(&config.llm.output_file)->default_value("output"), "LLM output file path")
-                ("llm-generation-prefix", po::value<std::string>(&config.llm.generation_prefix)->default_value(""), "LLM generation prefix")
-                ("llm-generation-suffix", po::value<std::string>(&config.llm.generation_suffix)->default_value(""), "LLM generation suffix")
-                ("llm-paragraphs-file", po::value<std::string>(&config.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
-                ("llm-host", po::value<std::string>(&config.llm.host)->default_value("localhost"), "LLM host")
-                ("llm-port", po::value<std::string>(&config.llm.port)->default_value("5000"), "LLM port")
-                ("llm-api-key", po::value<std::string>(&config.llm.api_key)->default_value(""), "LLM API key")
-                ("llm-completions-target", po::value<std::string>(&config.llm.completions_target)->default_value(""), "LLM completions target")
-                ("llm-token-count-target", po::value<std::string>(&config.llm.token_count_target)->default_value(""), "LLM token count target")
-                ("llm-min-completion-tokens", po::value<int>(&config.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
-                ("llm-max-completion-iterations", po::value<int>(&config.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
-                ("llm-reasoning-prefix", po::value<std::string>(&config.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-                ("llm-reasoning-suffix", po::value<std::string>(&config.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-                ("llm-code-block-extract", po::bool_switch(&config.llm.code_block_extract)->default_value(false), "code block extract switch")
+                ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
+                ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
+                ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
+                ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
+                ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
+                ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
+                ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
+                ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
+                ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
+                ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
+                ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
+                ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
+                ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
+                ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
+                ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+                ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "code block extract switch")
 
-                ("tg-model", po::value<std::string>(&config.tg.model)->default_value("", "TG model"))
-                ("tg-num-best-of", po::value<int>(&config.tg.best_of)->default_value(1), "TG best of")
-                ("tg-echo", po::bool_switch(&config.tg.echo)->default_value(false), "TG echo")
-                ("tg-frequency-penalty", po::value<double>(&config.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
+                ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
+                ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
+                ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
+                ("tg-frequency-penalty", po::value<double>(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
                 //std::map<int, double> logit_bias;
-                ("tg-logprobs", po::value<double>(&config.tg.logprobs)->default_value(0.0), "TG presence penalty")
-                ("tg-max-tokens", po::value<int>(&config.tg.max_tokens)->default_value(512), "TG max tokens")
-                ("tg-n", po::value<int>(&config.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
-                ("tg-presence-penalty", po::value<double>(&config.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                ("tg-stop", po::value<std::vector<std::string>>(&config.tg.stop)->multitoken(), "TG stop sequences")
-                ("tg-stream", po::bool_switch(&config.tg.stream)->default_value(false), "TG stream")
-                ("tg-suffix", po::value<std::string>(&config.tg.suffix)->default_value(""), "TG suffix")
-                ("tg-temperature", po::value<double>(&config.tg.temperature)->default_value(1.0), "TG temperature")
-                ("tg-top-p", po::value<double>(&config.tg.top_p)->default_value(1.0), "TG top p")
-                ("tg-dynatemp-low", po::value<double>(&config.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
-                ("tg-dynatemp-high", po::value<double>(&config.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
-                ("tg-dynatemp-exponent", po::value<double>(&config.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
-                ("tg-smoothing-factor", po::value<double>(&config.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
-                ("tg-smoothing-curve", po::value<double>(&config.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
-                ("tg-min-p", po::value<double>(&config.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
-                ("tg-top-k", po::value<int>(&config.tg.top_k)->default_value(0), "TG top k")
-                ("tg-typical-p", po::value<double>(&config.tg.typical_p)->default_value(1.0), "TG typical p")
-                ("tg-xtc-threshold", po::value<double>(&config.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
-                ("tg-xtc-probability", po::value<double>(&config.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
-                ("tg-epsilon-cutoff", po::value<double>(&config.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
-                ("tg-eta-cutoff", po::value<double>(&config.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
-                ("tg-tfs", po::value<double>(&config.tg.tfs)->default_value(1.0), "TG tfs")
-                ("tg-top-a", po::value<double>(&config.tg.top_a)->default_value(0.0), "TG top a")
-                ("tg-top-n-sigma", po::value<double>(&config.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
-                ("tg-dry-multiplier", po::value<double>(&config.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
-                ("tg-dry-allowed-length", po::value<int>(&config.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
-                ("tg-dry-base", po::value<double>(&config.tg.dry_base)->default_value(1.75), "TG DRY base")
-                ("tg-repetition-penalty", po::value<double>(&config.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
-                ("tg-encoder-repetition-penalty", po::value<double>(&config.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
-                ("tg-no-repeat-ngram-size", po::value<int>(&config.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
-                ("tg-repetition-penalty-range", po::value<int>(&config.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
-                ("tg-penalty-alpha", po::value<double>(&config.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
-                ("tg-guidance-scale", po::value<double>(&config.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
-                ("tg-mirostat-mode", po::value<int>(&config.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
-                ("tg-mirostat-tau", po::value<double>(&config.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
-                ("tg-mirostat-eta", po::value<double>(&config.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
-                ("tg-prompt-lookup-num-tokens", po::value<int>(&config.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
-                ("tg-max-tokens-second", po::value<int>(&config.tg.max_tokens_second)->default_value(0), "TG max tokens second")
-                ("tg-do-sample", po::bool_switch(&config.tg.do_sample)->default_value(true), "TG do sample")
-                ("tg-dynamic-temperature", po::bool_switch(&config.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
-                ("tg-temperature-last", po::bool_switch(&config.tg.temperature_last)->default_value(false), "TG temperature last")
-                ("tg-auto-max-new-tokens", po::bool_switch(&config.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
-                ("tg-ban-eos-token", po::bool_switch(&config.tg.ban_eos_token)->default_value(false), "TG ban eos token")
-                ("tg-add-bos-token", po::bool_switch(&config.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
-                ("tg-skip-special-tokens", po::bool_switch(&config.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-                ("tg-static-cache", po::bool_switch(&config.tg.static_cache)->default_value(false), "TG static cache")
-                ("tg-truncation-length", po::value<int>(&config.tg.truncation_length)->default_value(4096), "TG truncation length")
-                ("tg-sampler-priority", po::value<std::vector<std::string>>(&config.tg.sampler_priority)->multitoken(), "TG sampler priority")
-                ("tg-custom-token-bans", po::value<std::string>(&config.tg.custom_token_bans)->default_value(""), "TG custom token bans")
-                ("tg-negative-prompt", po::value<std::string>(&config.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                ("tg-dry-sequence-breakers", po::value<std::string>(&config.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
-                ("tg-grammar-string", po::value<std::string>(&config.tg.grammar_string)->default_value(""), "TG grammar-string")
+                ("tg-logprobs", po::value<double>(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
+                ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
+                ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
+                ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
+                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
+                ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
+                ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
+                ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
+                ("tg-top-p", po::value<double>(&cfg.tg.top_p)->default_value(1.0), "TG top p")
+                ("tg-dynatemp-low", po::value<double>(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
+                ("tg-dynatemp-high", po::value<double>(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
+                ("tg-dynatemp-exponent", po::value<double>(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
+                ("tg-smoothing-factor", po::value<double>(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
+                ("tg-smoothing-curve", po::value<double>(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
+                ("tg-min-p", po::value<double>(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
+                ("tg-top-k", po::value<int>(&cfg.tg.top_k)->default_value(0), "TG top k")
+                ("tg-typical-p", po::value<double>(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
+                ("tg-xtc-threshold", po::value<double>(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
+                ("tg-xtc-probability", po::value<double>(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
+                ("tg-epsilon-cutoff", po::value<double>(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
+                ("tg-eta-cutoff", po::value<double>(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
+                ("tg-tfs", po::value<double>(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
+                ("tg-top-a", po::value<double>(&cfg.tg.top_a)->default_value(0.0), "TG top a")
+                ("tg-top-n-sigma", po::value<double>(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
+                ("tg-dry-multiplier", po::value<double>(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
+                ("tg-dry-allowed-length", po::value<int>(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
+                ("tg-dry-base", po::value<double>(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
+                ("tg-repetition-penalty", po::value<double>(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
+                ("tg-encoder-repetition-penalty", po::value<double>(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
+                ("tg-no-repeat-ngram-size", po::value<int>(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
+                ("tg-repetition-penalty-range", po::value<int>(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
+                ("tg-penalty-alpha", po::value<double>(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
+                ("tg-guidance-scale", po::value<double>(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
+                ("tg-mirostat-mode", po::value<int>(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
+                ("tg-mirostat-tau", po::value<double>(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
+                ("tg-mirostat-eta", po::value<double>(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
+                ("tg-prompt-lookup-num-tokens", po::value<int>(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
+                ("tg-max-tokens-second", po::value<int>(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
+                ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
+                ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
+                ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
+                ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
+                ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
+                ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
+                ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+                ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
+                ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
+                ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
+                ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
+                ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
+                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
+                ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
 
-                ("kc-max-context-length", po::value<int>(&config.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
-                ("kc-max-length", po::value<int>(&config.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
-                ("kc-rep-pen", po::value<double>(&config.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
-                ("kc-rep-pen-range", po::value<int>(&config.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-                ("kc-sampler-order", po::value<std::vector<int>>(&config.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
-                ("kc-sampler-seed", po::value<int>(&config.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-                ("kc-stop-sequence", po::value<std::vector<std::string>>(&config.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
-                ("kc-temperature", po::value<double>(&config.kc.temperature)->default_value(1.0), "Temperature value.")
-                ("kc-tfs", po::value<double>(&config.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-top-a", po::value<double>(&config.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
-                ("kc-top-k", po::value<double>(&config.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
-                ("kc-top-p", po::value<double>(&config.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-min-p", po::value<double>(&config.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-typical", po::value<double>(&config.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-use-default-badwordsids", po::bool_switch(&config.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
-                ("kc-dynatemp_range", po::value<double>(&config.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
-                ("kc-smoothing-factor", po::value<double>(&config.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
-                ("kc-dynatemp-exponent", po::value<double>(&config.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
-                ("kc-mirostat", po::value<int>(&config.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
-                ("kc-mirostat-tau", po::value<double>(&config.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
-                ("kc-mirostat-eta", po::value<double>(&config.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
-                ("kc-genkey", po::value<std::string>(&config.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
-                ("kc-grammar", po::value<std::string>(&config.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
-                ("kc-grammar-retain-state", po::bool_switch(&config.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
-                ("kc-memory", po::value<std::string>(&config.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
-                ("kc-images", po::value<std::vector<std::string>>(&config.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
-                ("kc-trim-stop", po::bool_switch(&config.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
-                ("kc-render-special", po::bool_switch(&config.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
-                ("kc-bypass-eos", po::bool_switch(&config.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-                ("kc-banned-tokens", po::value<std::vector<std::string>>(&config.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
-                ("kc-dry-multiplier", po::value<double>(&config.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
-                ("kc-dry-base", po::value<double>(&config.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
-                ("kc-dry-allowed-length", po::value<int>(&config.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
-                ("kc-dry-penalty-last-n", po::value<int>(&config.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&config.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
-                ("kc-xtc-threshold", po::value<double>(&config.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
-                ("kc-xtc-probability", po::value<double>(&config.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
-                ("kc-nsigma", po::value<double>(&config.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
-                ("kc-logprobs", po::bool_switch(&config.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
-                ("kc-replace-instruct-placeholders", po::bool_switch(&config.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
+                ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+                ("kc-max-length", po::value<int>(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+                ("kc-rep-pen", po::value<double>(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+                ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+                ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+                ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+                ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+                ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
+                ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+                ("kc-top-k", po::value<double>(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+                ("kc-top-p", po::value<double>(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-min-p", po::value<double>(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-typical", po::value<double>(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+                ("kc-dynatemp_range", po::value<double>(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+                ("kc-smoothing-factor", po::value<double>(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+                ("kc-dynatemp-exponent", po::value<double>(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+                ("kc-mirostat", po::value<int>(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+                ("kc-mirostat-tau", po::value<double>(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+                ("kc-mirostat-eta", po::value<double>(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+                ("kc-genkey", po::value<std::string>(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+                ("kc-grammar", po::value<std::string>(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+                ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+                ("kc-memory", po::value<std::string>(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+                ("kc-images", po::value<std::vector<std::string>>(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+                ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+                ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+                ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+                ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+                ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+                ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+                ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+                ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+                ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+                ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+                ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+                ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+                ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
 
-                ("sd-host", po::value<std::string>(&config.sd.host)->default_value("localhost"), "SD host")
-                ("sd-port", po::value<std::string>(&config.sd.port)->default_value("7860"), "SD port")
-                ("sd-prompt-file", po::value<std::string>(&config.sd.prompt_file)->default_value("prompt"), "SD prompt file")
-                ("sd-negative-prompt-file", po::value<std::string>(&config.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
-                ("sd-output-file", po::value<std::string>(&config.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-                ("sd-prompt", po::value<std::string>(&config.sd.prompt)->default_value(""), "SD prompt")
-                ("sd-negative-prompt", po::value<std::string>(&config.sd.negative_prompt)->default_value(""), "SD negative prompt")
-                ("sd-styles", po::value<std::vector<std::string>>(&config.sd.styles), "SD styles")
-                ("sd-seed", po::value<int>(&config.sd.seed)->default_value(-1), "SD seed")
-                ("sd-subseed", po::value<int>(&config.sd.subseed)->default_value(-1), "SD subseed")
-                ("sd-subseed-strength", po::value<double>(&config.sd.subseed_strength)->default_value(0), "SD subseed strength")
-                ("sd-seed-resize-from-h", po::value<int>(&config.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
-                ("sd-seed-resize-from-w", po::value<int>(&config.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-                ("sd-sampler-name", po::value<std::string>(&config.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
-                ("sd-scheduler", po::value<std::string>(&config.sd.scheduler)->default_value("Automatic"), "SD scheduler")
-                ("sd-batch_size", po::value<int>(&config.sd.batch_size)->default_value(1), "SD batch size")
-                ("sd-n-iter", po::value<int>(&config.sd.n_iter)->default_value(1), "SD n iter")
-                ("sd-steps", po::value<int>(&config.sd.steps)->default_value(30), "SD steps")
-                ("sd-cfg-scale", po::value<double>(&config.sd.cfg_scale)->default_value(7), "SD cfg scale")
-                ("sd-width", po::value<int>(&config.sd.width)->default_value(1024), "SD image width")
-                ("sd-height", po::value<int>(&config.sd.height)->default_value(1024), "SD image height")
-                ("sd-restore-faces", po::bool_switch(&config.sd.restore_faces)->default_value(false), "SD restore faces")
-                ("sd-tiling", po::bool_switch(&config.sd.tiling)->default_value(false), "SD tiling")
-                ("sd-do-not-save-samples", po::bool_switch(&config.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
-                ("sd-do-not-save-grid", po::bool_switch(&config.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
-                ("sd-eta", po::value<int>(&config.sd.eta)->default_value(0), "SD eta")
-                ("sd-denoising-strength", po::value<double>(&config.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
-                ("sd-s-min-uncond", po::value<int>(&config.sd.s_min_uncond)->default_value(0), "SD s min uncond")
-                ("sd-s-churn", po::value<int>(&config.sd.s_churn)->default_value(0), "SD s churn")
-                ("sd-s-tmax", po::value<int>(&config.sd.s_tmax)->default_value(0), "SD s tmax")
-                ("sd-s-tmin", po::value<int>(&config.sd.s_tmin)->default_value(0), "SD s tmin")
-                ("sd-s-noise", po::value<int>(&config.sd.s_noise)->default_value(1), "SD s noise")
-                ("sd-override-settings", po::value<std::string>(&config.sd.override_settings)->default_value(""), "SD override settings")
-                ("sd-override-settings-restore-afterwards", po::bool_switch(&config.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
-                ("sd-refiner-checkpoint", po::value<std::string>(&config.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-                ("sd-refiner-switch-at", po::value<double>(&config.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
-                ("sd-disable-extra-networks", po::bool_switch(&config.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
-                ("sd-firstpass-image", po::value<std::string>(&config.sd.firstpass_image)->default_value(""), "SD firstpass image")
-                ("sd-comments", po::value<std::string>(&config.sd.comments)->default_value(""), "SD comments")
-                ("sd-force-task-id", po::value<std::string>(&config.sd.force_task_id)->default_value(""), "SD force task id")
-                ("sd-sampler-index", po::value<std::string>(&config.sd.sampler_index)->default_value(""), "SD sampler index")
-                ("sd-script-name", po::value<std::string>(&config.sd.script_name)->default_value(""), "SD script name")
-                ("sd-script-args", po::value<std::vector<std::string>>(&config.sd.script_args), "SD script_args")
-                ("sd-send-images", po::bool_switch(&config.sd.send_images)->default_value(true), "SD send images")
-                ("sd-save-images", po::bool_switch(&config.sd.save_images)->default_value(false), "SD save images")
-                ("sd-ad-enable", po::bool_switch(&config.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-                ("sd-ad-model", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-                ("sd-ad-prompt", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-                ("sd-ad-negative-prompt", po::value<std::string>(&config.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
-                ("sd-infotext", po::value<std::string>(&config.sd.infotext)->default_value(""), "SD infotext")
-                ("sd-abg-remover-enable", po::bool_switch(&config.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+                ("sd-host", po::value<std::string>(&cfg.sd.host)->default_value("localhost"), "SD host")
+                ("sd-port", po::value<std::string>(&cfg.sd.port)->default_value("7860"), "SD port")
+                ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
+                ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
+                ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
+                ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
+                ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
+                ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
+                ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
+                ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
+                ("sd-subseed-strength", po::value<double>(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
+                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+                ("sd-sampler-name", po::value<std::string>(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
+                ("sd-scheduler", po::value<std::string>(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
+                ("sd-batch_size", po::value<int>(&cfg.sd.batch_size)->default_value(1), "SD batch size")
+                ("sd-n-iter", po::value<int>(&cfg.sd.n_iter)->default_value(1), "SD n iter")
+                ("sd-steps", po::value<int>(&cfg.sd.steps)->default_value(30), "SD steps")
+                ("sd-cfg-scale", po::value<double>(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
+                ("sd-width", po::value<int>(&cfg.sd.width)->default_value(1024), "SD image width")
+                ("sd-height", po::value<int>(&cfg.sd.height)->default_value(1024), "SD image height")
+                ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
+                ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
+                ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
+                ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
+                ("sd-eta", po::value<int>(&cfg.sd.eta)->default_value(0), "SD eta")
+                ("sd-denoising-strength", po::value<double>(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
+                ("sd-s-min-uncond", po::value<int>(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
+                ("sd-s-churn", po::value<int>(&cfg.sd.s_churn)->default_value(0), "SD s churn")
+                ("sd-s-tmax", po::value<int>(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
+                ("sd-s-tmin", po::value<int>(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
+                ("sd-s-noise", po::value<int>(&cfg.sd.s_noise)->default_value(1), "SD s noise")
+                ("sd-override-settings", po::value<std::string>(&cfg.sd.override_settings)->default_value(""), "SD override settings")
+                ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+                ("sd-refiner-checkpoint", po::value<std::string>(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+                ("sd-refiner-switch-at", po::value<double>(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
+                ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
+                ("sd-firstpass-image", po::value<std::string>(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
+                ("sd-comments", po::value<std::string>(&cfg.sd.comments)->default_value(""), "SD comments")
+                ("sd-force-task-id", po::value<std::string>(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
+                ("sd-sampler-index", po::value<std::string>(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
+                ("sd-script-name", po::value<std::string>(&cfg.sd.script_name)->default_value(""), "SD script name")
+                ("sd-script-args", po::value<std::vector<std::string>>(&cfg.sd.script_args), "SD script_args")
+                ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
+                ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
+                ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+                ("sd-ad-model", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+                ("sd-ad-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+                ("sd-ad-negative-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+                ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
+                ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
                 ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
 
-                ("sd-txt2img-target", po::value<std::string>(&config.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
-                ("sd-enable-hr", po::bool_switch(&config.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
-                ("sd-firstphase-width", po::value<int>(&config.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
-                ("sd-firstphase-height", po::value<int>(&config.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
-                ("sd-hr-scale", po::value<double>(&config.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
-                ("sd-hr-upscaler", po::value<std::string>(&config.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-                ("sd-hr-second-pass-steps", po::value<int>(&config.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
-                ("sd-hr-resize-x", po::value<int>(&config.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
-                ("sd-hr-resize-y", po::value<int>(&config.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
-                ("sd-hr-checkpoint-name", po::value<std::string>(&config.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
-                //("sd-hr-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
-                //("sd-hr-negative-prompt", po::value<std::string>(&config.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
+                ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+                ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
+                ("sd-firstphase-width", po::value<int>(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
+                ("sd-firstphase-height", po::value<int>(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
+                ("sd-hr-scale", po::value<double>(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
+                ("sd-hr-upscaler", po::value<std::string>(&cfg.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
+                ("sd-hr-second-pass-steps", po::value<int>(&cfg.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+                ("sd-hr-resize-x", po::value<int>(&cfg.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
+                ("sd-hr-resize-y", po::value<int>(&cfg.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
+                ("sd-hr-checkpoint-name", po::value<std::string>(&cfg.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+                //("sd-hr-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+                //("sd-hr-negative-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
 
-                ("sd-img2img-target", po::value<std::string>(&config.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
-                ("sd-init-images", po::value<std::vector<std::string>>(&config.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
-                ("sd-seed-resize-from-h", po::value<int>(&config.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
-                ("sd-seed-resize-from-w", po::value<int>(&config.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
-                ("sd-resize-mode", po::value<int>(&config.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
-                ("sd-image-cfg-scale", po::value<double>(&config.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
-                ("sd-mask", po::value<std::string>(&config.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
-                ("sd-mask-blur-x", po::value<int>(&config.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
-                ("sd-mask-blur-y", po::value<int>(&config.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
-                ("sd-mask-blur", po::value<int>(&config.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
-                ("sd-mask-round", po::bool_switch(&config.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
-                ("sd-inpainting-fill", po::value<int>(&config.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
-                ("sd-inpaint-full-res", po::bool_switch(&config.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
-                ("sd-inpaint-full-res-padding", po::value<int>(&config.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
-                ("sd-inpainting-mask-invert", po::value<int>(&config.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
-                ("sd-initial-noise-multiplier", po::value<double>(&config.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
-                ("sd-latent-mask", po::value<std::string>(&config.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
+                ("sd-img2img-target", po::value<std::string>(&cfg.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
+                ("sd-init-images", po::value<std::vector<std::string>>(&cfg.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
+                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
+                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
+                ("sd-resize-mode", po::value<int>(&cfg.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
+                ("sd-image-cfg-scale", po::value<double>(&cfg.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
+                ("sd-mask", po::value<std::string>(&cfg.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
+                ("sd-mask-blur-x", po::value<int>(&cfg.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
+                ("sd-mask-blur-y", po::value<int>(&cfg.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
+                ("sd-mask-blur", po::value<int>(&cfg.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
+                ("sd-mask-round", po::bool_switch(&cfg.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
+                ("sd-inpainting-fill", po::value<int>(&cfg.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
+                ("sd-inpaint-full-res", po::bool_switch(&cfg.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
+                ("sd-inpaint-full-res-padding", po::value<int>(&cfg.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
+                ("sd-inpainting-mask-invert", po::value<int>(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
+                ("sd-initial-noise-multiplier", po::value<double>(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
+                ("sd-latent-mask", po::value<std::string>(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
 
-                ("sb-host", po::value<std::string>(&config.sb.host)->default_value("localhost"), "SB host")
-                ("sb-port", po::value<std::string>(&config.sb.port)->default_value("5001"), "SB port")
-                ("sb-target", po::value<std::string>(&config.sb.target)->default_value("/voice"), "SB voide target")
-                ("sb-text-file", po::value<std::string>(&config.sb.text_file)->default_value("text"), "SB text file")
-                ("sb-output-file", po::value<std::string>(&config.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
-                ("sb-text", po::value<std::string>(&config.sb.text)->default_value(""), "SB text")
-                ("sb-model-name", po::value<std::string>(&config.sb.model_name)->default_value(""), "SB model name")
-                ("sb-model-id", po::value<int>(&config.sb.model_id)->default_value(0), "SB model id")
-                ("sb-speaker-name", po::value<std::string>(&config.sb.speaker_name)->default_value(""), "SB speaker name")
-                ("sb-speaker-id", po::value<int>(&config.sb.speaker_id)->default_value(0), "SB speaker id")
-                ("sb-sdp-ratio", po::value<double>(&config.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
-                ("sb-noise", po::value<double>(&config.sb.noise)->default_value(0.6, "0.6"), "SB noise")
-                ("sb-noisew", po::value<double>(&config.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
-                ("sb-length", po::value<double>(&config.sb.length)->default_value(1), "SB length")
-                ("sb-language", po::value<std::string>(&config.sb.language)->default_value(""), "SB language")
-                ("sb-auto-split", po::bool_switch(&config.sb.auto_split)->default_value(true), "SB auto split")
-                ("sb-split-interval", po::value<double>(&config.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
-                ("sb-assist-text", po::value<std::string>(&config.sb.assist_text)->default_value(""), "SB assist text")
-                ("sb-assist-text-weight", po::value<double>(&config.sb.assist_text_weight)->default_value(1), "SB assist text weight")
-                ("sb-style", po::value<std::string>(&config.sb.style)->default_value(""), "SB style")
-                ("sb-style-weight", po::value<double>(&config.sb.style_weight)->default_value(1), "SB style weight")
-                ("sb-reference-audio-path", po::value<std::string>(&config.sb.reference_audio_path)->default_value(""), "SB reference audio path")
+                ("sb-host", po::value<std::string>(&cfg.sb.host)->default_value("localhost"), "SB host")
+                ("sb-port", po::value<std::string>(&cfg.sb.port)->default_value("5001"), "SB port")
+                ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
+                ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
+                ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
+                ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
+                ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
+                ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
+                ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
+                ("sb-speaker-id", po::value<int>(&cfg.sb.speaker_id)->default_value(0), "SB speaker id")
+                ("sb-sdp-ratio", po::value<double>(&cfg.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
+                ("sb-noise", po::value<double>(&cfg.sb.noise)->default_value(0.6, "0.6"), "SB noise")
+                ("sb-noisew", po::value<double>(&cfg.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
+                ("sb-length", po::value<double>(&cfg.sb.length)->default_value(1), "SB length")
+                ("sb-language", po::value<std::string>(&cfg.sb.language)->default_value(""), "SB language")
+                ("sb-auto-split", po::bool_switch(&cfg.sb.auto_split)->default_value(true), "SB auto split")
+                ("sb-split-interval", po::value<double>(&cfg.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
+                ("sb-assist-text", po::value<std::string>(&cfg.sb.assist_text)->default_value(""), "SB assist text")
+                ("sb-assist-text-weight", po::value<double>(&cfg.sb.assist_text_weight)->default_value(1), "SB assist text weight")
+                ("sb-style", po::value<std::string>(&cfg.sb.style)->default_value(""), "SB style")
+                ("sb-style-weight", po::value<double>(&cfg.sb.style_weight)->default_value(1), "SB style weight")
+                ("sb-reference-audio-path", po::value<std::string>(&cfg.sb.reference_audio_path)->default_value(""), "SB reference audio path")
 
-                ("cu-host", po::value<std::string>(&config.cu.host)->default_value("localhost"), "Comfy UI host")
-                ("cu-port", po::value<std::string>(&config.cu.port)->default_value("8188"), "Comfy UI port")
-                ("cu-prompt-target", po::value<std::string>(&config.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
-                ("cu-upload-image-target", po::value<std::string>(&config.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
-                ("cu-prompt", po::value<std::string>(&config.cu.prompt)->default_value(""), "Comfy UI prompt")
-                ("cu-prompt-file", po::value<std::string>(&config.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
-                ("cu-output-directory", po::value<std::string>(&config.cu.output_directory)->default_value("output"), "Comfy UI output directory")
-                ("cu-upload-images", po::value<std::vector<std::string>>(&config.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
-                ("cu-preserve-subdirectories", po::bool_switch(&config.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
+                ("cu-host", po::value<std::string>(&cfg.cu.host)->default_value("localhost"), "Comfy UI host")
+                ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
+                ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
+                ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
+                ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
+                ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
+                ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
+                ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
+                ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
                 ;
 
             po::options_description config_file_options;
@@ -5518,7 +5518,7 @@ namespace llmcpp
 
             try
             {
-                config.command_mode = string_to_command_mode(command_mode_string);
+                cfg.command_mode = string_to_command_mode(command_mode_string);
             }
             catch (const command_line_exception&)
             {
@@ -5526,11 +5526,11 @@ namespace llmcpp
                 return 1;
             }
 
-            config.sd.mode = string_to_sd_mode(sd_mode_string);
+            cfg.sd.mode = string_to_sd_mode(sd_mode_string);
 
-            if (!config.config_file.empty())
+            if (!cfg.config_file.empty())
             {
-                std::istringstream config_file{ read_text_file_to_string(config.config_file, config, ".ini") };
+                std::istringstream config_file{ read_text_file_to_string(cfg.config_file, cfg, ".ini") };
                 po::store(po::parse_config_file(config_file, allowed_options), vm, true);
                 po::notify(vm);
             }
@@ -5541,20 +5541,20 @@ namespace llmcpp
                 return 1;
             }
 
-            init_logging(config);
+            init_logging(cfg);
 
-            if (config.command_mode == command_mode::tg || config.command_mode == command_mode::kc)
+            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
             {
-                init_llm_mode(config);
+                init_llm_mode(cfg);
             }
 
-            if (config.phases.empty())
+            if (cfg.phases.empty())
             {
-                config.phases = { "" };
+                cfg.phases = { "" };
             }
 
-            unescape_parameters(config);
-            parse_user_defined_variables(config.user_defined_variables, config.context);
+            unescape_parameters(cfg);
+            parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
         }
         catch (const po::error& e)
         {
@@ -5564,11 +5564,11 @@ namespace llmcpp
         return 0;
     }
 
-    std::string truncate_prompt_by_config(std::string_view prompt, const config& config)
+    std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg)
     {
         std::string result;
-        int remaining_tokens{ config.tg.truncation_length - config.tg.max_tokens };
-        truncate_prompt(prompt, config, false, result, remaining_tokens);
+        int remaining_tokens{ cfg.tg.truncation_length - cfg.tg.max_tokens };
+        truncate_prompt(prompt, cfg, false, result, remaining_tokens);
         return result;
     }
 
@@ -5605,11 +5605,11 @@ namespace llmcpp
         return result;
     }
 
-    void write_file(const config& config, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
+    void write_file(const config& cfg, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
     {
         const bool is_binary{ (mode & std::ios::binary) != 0 };
         const std::string complemented{ complement_extension(filepath, ".txt") };
-        const std::filesystem::path file_path{ string_to_path_by_config(complemented, config) };
+        const std::filesystem::path file_path{ string_to_path_by_config(complemented, cfg) };
         create_parent_directories(file_path);
         boost::nowide::ofstream ofs{ file_path, mode };
         if (!ofs.is_open())
@@ -5622,9 +5622,9 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
     }
 
-    void write_code_block(const config& config, std::string_view markdown)
+    void write_code_block(const config& cfg, std::string_view markdown)
     {
-        if (config.llm.code_block_extract)
+        if (cfg.llm.code_block_extract)
         {
             const code_blocks blocks{ extract_code_block_from_markdown(markdown) };
             for (const auto& [name, code] : blocks)
@@ -5635,137 +5635,137 @@ namespace llmcpp
                 }
                 else
                 {
-                    write_file(config, code, name, 0);
+                    write_file(cfg, code, name, 0);
                 }
             }
         }
     }
 
-    void generate_text_and_write(const config& config, std::string_view prompt, const context& ctx)
+    void generate_text_and_write(const config& cfg, std::string_view prompt, const context& ctx)
     {
-        const std::string truncated_prompt{ truncate_prompt_by_config(prompt, config) };
+        const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
 
-        std::string response{ generate_text(config, truncated_prompt, ctx) };
-        response = remove_reasoning(response, config.llm.reasoning_prefix, config.llm.reasoning_suffix);
-        response += config.llm.generation_suffix;
+        std::string response{ generate_text(cfg, truncated_prompt, ctx) };
+        response = remove_reasoning(response, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
+        response += cfg.llm.generation_suffix;
 
-        write_file(config, response, config.llm.output_file, std::ios_base::app);
+        write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
-        if (!config.verbose)
+        if (!cfg.verbose)
         {
             boost::nowide::cout << response << std::flush;
         }
 
-        write_code_block(config, response);
+        write_code_block(cfg, response);
     }
 
     std::string prompt_from_string_or_file_path(
         std::string_view string,
         std::string_view file_path,
-        const config& config
+        const config& cfg
     )
     {
-        return string.empty() ? read_text_file_to_string(file_path, config) : std::string{ string };
+        return string.empty() ? read_text_file_to_string(file_path, cfg) : std::string{ string };
     }
 
-    void generate_and_output(const config& config)
+    void generate_and_output(const config& cfg)
     {
-        if (config.command_mode == command_mode::tg || config.command_mode == command_mode::kc)
+        if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
         {
-            const std::string prompt{ prompt_from_string_or_file_path(config.llm.prompt, config.llm.prompt_file, config) };
-            generate_text_and_write(config, prompt, config.context);
+            const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
+            generate_text_and_write(cfg, prompt, cfg.ctx);
         }
-        else if (config.command_mode == command_mode::sd)
+        else if (cfg.command_mode == command_mode::sd)
         {
-            const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.prompt, config.sd.prompt_file, config), config, config.context) };
-            const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(config.sd.negative_prompt, config.sd.negative_prompt_file, config), config, config.context) };
-            const std::string image{ send_automatic1111_txt2img_request(config, prompt_string, negative_prompt_string) };
-            write_file(config, image, config.sd.output_file, std::ios::binary);
+            const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string image{ send_automatic1111_txt2img_request(cfg, prompt_string, negative_prompt_string) };
+            write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
         }
-        else if (config.command_mode == command_mode::sb)
+        else if (cfg.command_mode == command_mode::sb)
         {
-            const std::string text{ expand_macro(prompt_from_string_or_file_path(config.sb.text, config.sb.text_file, config), config, config.context) };
-            const std::string voice{ send_style_bert_voice_request(config, text) };
-            write_file(config, voice, config.sb.output_file, std::ios::binary);
+            const std::string text{ expand_macro(prompt_from_string_or_file_path(cfg.sb.text, cfg.sb.text_file, cfg), cfg, cfg.ctx) };
+            const std::string voice{ send_style_bert_voice_request(cfg, text) };
+            write_file(cfg, voice, cfg.sb.output_file, std::ios::binary);
         }
-        else if (config.command_mode == command_mode::cu)
+        else if (cfg.command_mode == command_mode::cu)
         {
-            const std::string prompt{ expand_macro(prompt_from_string_or_file_path(config.cu.prompt, config.cu.prompt_file, config), config, config.context) };
-            send_comfy_ui_prompt(config, prompt);
+            const std::string prompt{ expand_macro(prompt_from_string_or_file_path(cfg.cu.prompt, cfg.cu.prompt_file, cfg), cfg, cfg.ctx) };
+            send_comfy_ui_prompt(cfg, prompt);
         }
     }
 
-    void set_seed(config& config)
+    void set_seed(config& cfg)
     {
-        if (config.seed == -1)
+        if (cfg.seed == -1)
         {
-            config.tg.seed = random<int>(0);
-            config.kc.sampler_seed = random<int>(0, 999999);
-            config.sd.seed = random<int>(0);
+            cfg.tg.seed = random<int>(0);
+            cfg.kc.sampler_seed = random<int>(0, 999999);
+            cfg.sd.seed = random<int>(0);
         }
         else
         {
-            config.tg.seed = config.seed;
-            config.kc.sampler_seed = config.seed;
-            config.sd.seed = config.seed;
+            cfg.tg.seed = cfg.seed;
+            cfg.kc.sampler_seed = cfg.seed;
+            cfg.sd.seed = cfg.seed;
         }
     }
 
-    void create_process(const config& config)
+    void create_process(const config& cfg)
     {
-        if (!config.server_executable_file.empty())
+        if (!cfg.server_executable_file.empty())
         {
-            const std::vector<std::string> arguments{ parse_command_line_args(config.server_arguments) };
-            create_process_async(config.server_executable_file, arguments);
-            if (!wait_for_port(config.server_host, config.server_port, config.server_max_retries, config.server_wait_ms))
+            const std::vector<std::string> arguments{ parse_command_line_args(cfg.server_arguments) };
+            create_process_async(cfg.server_executable_file, arguments);
+            if (!wait_for_port(cfg.server_host, cfg.server_port, cfg.server_max_retries, cfg.server_wait_ms))
             {
                 BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
             }
         }
     }
 
-    void terminate_process(const config& config)
+    void terminate_process(const config& cfg)
     {
-        if (!config.server_executable_file.empty())
+        if (!cfg.server_executable_file.empty())
         {
-            if (terminate_process_by_path(config.server_executable_file) == 0)
+            if (terminate_process_by_path(cfg.server_executable_file) == 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << config.server_executable_file << ").";
+                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << cfg.server_executable_file << ").";
             }
         }
     }
 
-    void create_process_or_terminate(const config& config)
+    void create_process_or_terminate(const config& cfg)
     {
-        if (config.create_process)
+        if (cfg.create_process)
         {
-            create_process(config);
+            create_process(cfg);
         }
-        else if (config.terminate_process)
+        else if (cfg.terminate_process)
         {
-            terminate_process(config);
+            terminate_process(cfg);
         }
     }
 
-    void iterate(config& config)
+    void iterate(config& cfg)
     {
-        read_cache(config);
+        read_cache(cfg);
 
         int iteration_count{};
-        while (config.number_iterations == -1 || iteration_count < config.number_iterations)
+        while (cfg.number_iterations == -1 || iteration_count < cfg.number_iterations)
         {
-            set_seed(config);
+            set_seed(cfg);
 
-            set_dynamic_builtin_variables(config);
-            config.context.set("N", std::to_string(iteration_count + 1));
+            set_dynamic_builtin_variables(cfg);
+            cfg.ctx.set("N", std::to_string(iteration_count + 1));
 
-            for (std::size_t phase_index{}; phase_index < config.phases.size(); ++phase_index)
+            for (std::size_t phase_index{}; phase_index < cfg.phases.size(); ++phase_index)
             {
-                set_phase_variables(config.phases, phase_index, config.context);
-                generate_and_output(config);
+                set_phase_variables(cfg.phases, phase_index, cfg.ctx);
+                generate_and_output(cfg);
             }
 
-            write_cache(config);
+            write_cache(cfg);
 
             iteration_count += 1;
         }
@@ -5775,33 +5775,33 @@ namespace llmcpp
     {
         try
         {
-            config config;
+            config cfg;
 
-            if (parse_command_line(argc, argv, config))
+            if (parse_command_line(argc, argv, cfg))
             {
                 return 0;
             }
 
-            if (config.create_process || config.terminate_process)
+            if (cfg.create_process || cfg.terminate_process)
             {
-                create_process_or_terminate(config);
+                create_process_or_terminate(cfg);
                 return 0;
             }
 
-            if (config.command_mode == command_mode::extract_png_parameters)
+            if (cfg.command_mode == command_mode::extract_png_parameters)
             {
-                const std::string parameters{ tEXt::extract_parameters(read_file_to_string(string_to_path_by_config(config.png_file, config), std::ios::binary)) };
+                const std::string parameters{ tEXt::extract_parameters(read_file_to_string(string_to_path_by_config(cfg.png_file, cfg), std::ios::binary)) };
                 boost::nowide::cout << parameters << std::flush;
             }
 
-            set_static_builtin_variables(config);
+            set_static_builtin_variables(cfg);
 
-            if (config.command_mode == command_mode::cu)
+            if (cfg.command_mode == command_mode::cu)
             {
-                upload_images_to_comfy_ui(config, config.context);
+                upload_images_to_comfy_ui(cfg, cfg.ctx);
             }
 
-            iterate(config);
+            iterate(cfg);
         }
         catch (const boost::exception& exception)
         {
