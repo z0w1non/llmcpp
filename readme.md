@@ -154,6 +154,22 @@ koboldcpp.exe --model %model% ^
   --port 5000
 ```
 
+画像分析を利用する場合、KoboldCpp の起動オプションで下記のように CLIP / Vision 投影モデルを指定する必要がある。
+```
+--mmproj mmproj-f16.gguf
+```
+
+下記のようなコマンドで llmcpp を実行すると、画像分析の結果が出力される。
+```
+llmcpp --mode kc --llm-mode vision --llm-prompt-file vision_prompt --llm-image-file 
+```
+
+この場合、プロンプトにはチャットテンプレートのタグ(`<|turn>`, `<|think|>`, `<turn|>` 等)を含めない。
+
+```vision_prompt.txt
+入力された画像に何が含まれるか詳細に分析し説明せよ。
+```
+
 ## AUTOMATIC1111/stable-diffusion-webui の使用法
 AUTOMATIC1111/stable-diffusion-webui (https://github.com/AUTOMATIC1111/stable-diffusion-webui) を導入し、下記の準備をする。
 

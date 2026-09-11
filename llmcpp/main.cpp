@@ -4402,7 +4402,7 @@ namespace llmcpp
         }
 
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
-        http::request<http::string_body> request{ http::verb::post, cfg.llm.completions_target, 11 };
+        http::request<http::string_body> request{ http::verb::post, llm_mode_to_target(cfg.llm.mode, cfg), 11 };
         request.set(http::field::host, cfg.llm.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
         request.set(http::field::content_type, "application/json; charset=UTF-8");
@@ -4635,6 +4635,41 @@ namespace llmcpp
     {
         picojson::object json;
 
+        add_pair_into_json(json, "max_length", max_tokens);
+        add_pair_into_json(json, "rep_pen", rep_pen);
+        add_pair_into_json(json, "rep_pen_range", rep_pen_range);
+        add_pair_into_json_from_vector(json, "sampler_order", sampler_order);
+
+        if (sampler_seed != -1)
+        {
+            add_pair_into_json(json, "sampler_seed", sampler_seed);
+        }
+
+        std::vector<std::string> stop_sequence
+        {
+            "{{[INPUT]}}",
+            "{{[OUTPUT]}}"
+        };
+        add_pair_into_json_from_vector(json, "stop_sequence", stop_sequence);
+        add_pair_into_json(json, "temperature", temperature);
+        add_pair_into_json(json, "tfs", tfs);
+        add_pair_into_json(json, "top_a", top_a);
+        add_pair_into_json(json, "top_k", top_k);
+        add_pair_into_json(json, "top_p", top_p);
+        add_pair_into_json(json, "min_p", min_p);
+        add_pair_into_json(json, "typical", typical);
+        add_pair_into_json(json, "use_default_badwordsids", use_default_badwordsids);
+        add_pair_into_json(json, "dynatemp_range", dynatemp_range);
+        add_pair_into_json(json, "smoothing_factor", smoothing_factor);
+        add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
+        add_pair_into_json(json, "mirostat", mirostat);
+        add_pair_into_json(json, "genkey", genkey);
+        add_pair_into_json(json, "trim_stop", trim_stop);
+        add_pair_into_json(json, "render_special", render_special);
+        add_pair_into_json(json, "bypass_eos", bypass_eos);
+        add_pair_into_json_from_vector(json, "banned_tokens", banned_tokens);
+        add_pair_into_json(json, "logprobs", logprobs);
+
         picojson::object message;
         add_pair_into_json(message, "role", "user");
 
@@ -4666,7 +4701,6 @@ namespace llmcpp
             picojson::value{ message }
         };
         add_pair_into_json(json, "messages", messages_array);
-        add_pair_into_json(json, "max_tokens", max_tokens);
 
         return picojson::value{ json }.serialize();
     }
@@ -4675,15 +4709,11 @@ namespace llmcpp
     {
         picojson::value response_json;
         picojson::parse(response_json, response);
-        //const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        //const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
-        //const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
-        //const picojson::object& message{ throwable_find<picojson::object>(choice, "message")};
-        //return throwable_find<std::string>(message, "content");
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
-        const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
-        return throwable_find<std::string>(result, "text");
+        const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
+        const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
+        const picojson::object& message{ throwable_find<picojson::object>(choice, "message")};
+        return throwable_find<std::string>(message, "content");
     }
 
     int send_token_count_request(const config& cfg, std::string_view prompt)
