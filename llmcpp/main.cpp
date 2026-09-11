@@ -4524,7 +4524,8 @@ namespace llmcpp
     {
         nlohmann::json json{ nlohmann::json::object() };
 
-        json["max_length"] = max_tokens;
+        //json["max_length"] = max_tokens;
+        json["max_tokens"] = max_tokens;
         json["rep_pen"] = rep_pen;
         json["rep_pen_range"] = rep_pen_range;
         json["sampler_order"] = sampler_order;
@@ -4575,7 +4576,7 @@ namespace llmcpp
                 },
                 {
                     { "type", "image_url" },
-                    { "image_url", url }
+                    { "image_url", { { "url", url } } }
                 }
             })}
         };
