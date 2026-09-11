@@ -4349,6 +4349,7 @@ namespace llmcpp
     {
         nlohmann::json json{ nlohmann::json::object() };
 
+        json["prompt"] = prompt;
         json["model"] = model;
         json["best_of"] = best_of;
         json["echo"] = echo;
