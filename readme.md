@@ -154,7 +154,7 @@ koboldcpp.exe --model %model% ^
   --port 5000
 ```
 
-画像分析を利用する場合、KoboldCpp の起動オプションで下記のように CLIP / Vision 投影モデルを指定する必要がある。
+画像分析を利用する場合、KoboldCpp の起動オプションで下記のように CLIP / Vision 投影モデルを指定する必要がある。現状、画像分析は KoboldCpp のみ対応している。
 ```
 --mmproj mmproj-f16.gguf
 ```
