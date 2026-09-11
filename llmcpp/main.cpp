@@ -931,6 +931,53 @@ namespace llmcpp
     void init_logging_with_nowide_cout();
     void init_logging_with_nowide_file_log(const std::filesystem::path& log);
     void init_logging(const config& cfg);
+
+    class log_stream
+    {
+    public:
+        log_stream(boost::log::trivial::severity_level level)
+            : level{ level }
+        {
+        }
+
+        ~log_stream()
+        {
+            namespace logging = boost::log::trivial;
+            switch (level)
+            {
+            case logging::trace:
+                BOOST_LOG_TRIVIAL(trace) << oss.str();
+                break;
+            case logging::debug:
+                BOOST_LOG_TRIVIAL(debug) << oss.str();
+                break;
+            case logging::info:
+                BOOST_LOG_TRIVIAL(info) << oss.str();
+                break;
+            case logging::warning:
+                BOOST_LOG_TRIVIAL(warning) << oss.str();
+                break;
+            case logging::error:
+                BOOST_LOG_TRIVIAL(error) << oss.str();
+                break;
+            case logging::fatal:
+                BOOST_LOG_TRIVIAL(fatal) << oss.str();
+                break;
+            }
+        }
+
+        template<typename T>
+        log_stream& operator<<(const T& value)
+        {
+            oss << value;
+            return *this;
+        }
+
+    private:
+        boost::log::trivial::severity_level level;
+        std::ostringstream oss;
+    };
+
     void init_chat_mode(config& cfg);
 
     void set_phase_variables(
@@ -4389,19 +4436,20 @@ namespace llmcpp
         if (cfg.llm.mode == llm_mode::completions)
         {
             request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
+            BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
         }
         else if (cfg.llm.mode == llm_mode::vision)
         {
             const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
             const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
             request_body = params.get_request_body_for_vision(prompt, max_tokens, base64_image, mime_type);
+            BOOST_LOG_TRIVIAL(info) << "Send JSON";
         }
         else
         {
             llmcpp::throw_exception(logic_error{});
         }
 
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
         http::request<http::string_body> request{ http::verb::post, llm_mode_to_target(cfg.llm.mode, cfg), 11 };
         request.set(http::field::host, cfg.llm.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -4712,7 +4760,7 @@ namespace llmcpp
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
         const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
-        const picojson::object& message{ throwable_find<picojson::object>(choice, "message")};
+        const picojson::object& message{ throwable_find<picojson::object>(choice, "message") };
         return throwable_find<std::string>(message, "content");
     }
 
@@ -5895,6 +5943,8 @@ namespace llmcpp
         {
             boost::nowide::cout << response << std::flush;
         }
+
+        write_code_block(cfg, response);
     }
 
     std::string prompt_from_string_or_file_path(
