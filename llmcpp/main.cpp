@@ -465,7 +465,7 @@ namespace llmcpp
             bool ad_restore_face{};
             std::string ad_controlnet_model;
             std::string ad_controlnet_module;
-            std::string ad_controlnet_weight{};
+            std::string ad_controlnet_weight;
             double ad_controlnet_guidance_start{};
             double ad_controlnet_guidance_end{};
         };
@@ -614,7 +614,7 @@ namespace llmcpp
         double assist_text_weight{};
         std::string style;
         double style_weight{};
-        std::string reference_audio_path{};
+        std::string reference_audio_path;
     };
 
     struct cu_generation_parameters
@@ -755,7 +755,7 @@ namespace llmcpp
 
     struct token_count_string
     {
-        std::string str{};
+        std::string str;
         int tokens{};
     };
 
