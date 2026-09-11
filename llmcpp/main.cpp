@@ -4535,7 +4535,7 @@ namespace llmcpp
             json["sampler_seed"] = sampler_seed;
         }
 
-        std::vector<std::string> stop_sequence
+        const std::vector<std::string> stop_sequence
         {
             "{{[INPUT]}}",
             "{{[OUTPUT]}}"
