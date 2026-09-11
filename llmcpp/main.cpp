@@ -71,7 +71,7 @@
 #include <boost/optional.hpp>
 #include <boost/spirit/include/qi.hpp>
 
-#include "picojson.h"
+#include "json.hpp"
 
 #ifdef _WIN32
 #include <boost/process/v2/windows/creation_flags.hpp>
@@ -834,15 +834,6 @@ namespace llmcpp
 
     std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
 
-    template<typename Value>
-    const Value& throwable_get(const picojson::value& value);
-
-    template<typename Value>
-    const Value& throwable_at(const picojson::array& array, std::size_t index);
-
-    template<typename Value>
-    const Value& throwable_find(const picojson::object& object, std::string_view key);
-
     std::string base64_encode(std::string_view encoded_string);
 
     std::string base64_decode(std::string_view encoded_string);
@@ -1023,7 +1014,7 @@ namespace llmcpp
 
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
-    void write_file(const config& cfg, std::string_view response, std::string_view filepath, std::ios_base::openmode mode);
+    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
 
     void write_code_block(const config& cfg, std::string_view markdown);
 
@@ -1160,42 +1151,6 @@ namespace llmcpp
             return cfg.llm.vision_target;
         }
         llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
-    }
-
-    template<typename Value>
-    const Value& throwable_get(const picojson::value& value)
-    {
-        if (!value.is<Value>())
-        {
-            llmcpp::throw_exception(json_parse_exception{});
-        }
-        return value.get<Value>();
-    }
-
-    template<typename Value>
-    const Value& throwable_at(const picojson::array& array, std::size_t index)
-    {
-        if (index >= array.size())
-        {
-            llmcpp::throw_exception(json_parse_exception{});
-        }
-        const picojson::value& element{ array[index] };
-        if (!element.is<Value>())
-        {
-            llmcpp::throw_exception(json_parse_exception{});
-        }
-        return element.get<Value>();
-    }
-
-    template<typename Value>
-    const Value& throwable_find(const picojson::object& object, std::string_view key)
-    {
-        picojson::object::const_iterator iter{ object.find(std::string{ key }) };
-        if (iter == object.end() || !iter->second.is<Value>())
-        {
-            llmcpp::throw_exception(json_parse_exception{});
-        }
-        return iter->second.get<Value>();
     }
 
     std::string base64_encode(std::string_view input)
@@ -3293,90 +3248,6 @@ namespace llmcpp
         return parser::evaluate_document_recursive(std::string{ input }, cfg, max_depth, pushed);
     }
 
-    template<typename T>
-    struct promote_integral_to_double
-    {
-        using type = std::conditional_t<
-            std::is_integral_v<T> && !std::is_same_v<std::remove_cv_t<T>, bool>,
-            double,
-            T
-        >;
-    };
-
-    template<typename T>
-    using promote_integral_to_double_t = typename promote_integral_to_double<T>::type;
-
-    namespace detail
-    {
-        template<typename Value>
-        struct add_pair_into_json_impl
-        {
-            void operator ()(picojson::object& object, std::string_view key, const Value& value)
-            {
-                object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ static_cast<promote_integral_to_double_t<Value>>(value) } });
-            }
-        };
-
-        template<>
-        struct add_pair_into_json_impl<picojson::value>
-        {
-            void operator ()(picojson::object& object, std::string_view key, const picojson::value& value)
-            {
-                object.insert(std::pair<std::string, picojson::value>{ key, value });
-            }
-        };
-
-        template<>
-        struct add_pair_into_json_impl<std::string_view>
-        {
-            void operator ()(picojson::object& object, std::string_view key, std::string_view value)
-            {
-                if (!value.empty())
-                {
-                    object.insert(std::pair<std::string, picojson::value>{ key, picojson::value{ std::string{ value } } });
-                }
-            }
-        };
-
-        template<>
-        struct add_pair_into_json_impl<char*>
-        {
-            void operator ()(picojson::object& object, std::string_view key, const char* value)
-            {
-                add_pair_into_json_impl<std::string_view>{}(object, key, value);
-            }
-        };
-
-        template<>
-        struct add_pair_into_json_impl<std::string>
-        {
-            void operator ()(picojson::object& object, std::string_view key, const std::string& value)
-            {
-                add_pair_into_json_impl<std::string_view>{}(object, key, value);
-            }
-        };
-    }
-
-    template<typename Value>
-    void add_pair_into_json(picojson::object& object, std::string_view key, const Value& value)
-    {
-        detail::add_pair_into_json_impl<std::decay_t<Value>>{}(object, key, value);
-    }
-
-    template<typename Value>
-    void add_pair_into_json_from_vector(picojson::object& object, std::string_view key, const std::vector<Value>& value)
-    {
-        if (!value.empty())
-        {
-            picojson::array json_array;
-            for (const auto& element : value)
-            {
-                json_array.push_back(picojson::value{ static_cast<promote_integral_to_double_t<Value>>(element) });
-            }
-            object.insert(std::pair<std::string, picojson::value>{ key, json_array });
-        }
-    }
-
     void truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse, std::string& result, int& tokens)
     {
         result = {};
@@ -3769,152 +3640,147 @@ namespace llmcpp
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        picojson::object json;
+        nlohmann::json json;
 
-        add_pair_into_json(json, "prompt", prompt);
-        add_pair_into_json(json, "negative_prompt", negative_prompt);
-        //add_pair_into_json(json, "styles", cfg.sd_txt2img_params.styles);
-        add_pair_into_json(json, "seed", cfg.sd.seed);
-        add_pair_into_json(json, "subseed", cfg.sd.subseed);
-        add_pair_into_json(json, "subseed_strength", cfg.sd.subseed_strength);
-        add_pair_into_json(json, "seed_resize_from_h", cfg.sd.seed_resize_from_h);
-        add_pair_into_json(json, "seed_resize_from_w", cfg.sd.seed_resize_from_w);
-        add_pair_into_json(json, "sampler_name", cfg.sd.sampler_name);
-        add_pair_into_json(json, "scheduler", cfg.sd.scheduler);
-        add_pair_into_json(json, "batch_size", cfg.sd.batch_size);
-        add_pair_into_json(json, "n_iter", cfg.sd.n_iter);
-        add_pair_into_json(json, "steps", cfg.sd.steps);
-        add_pair_into_json(json, "cfg_scale", cfg.sd.cfg_scale);
-        add_pair_into_json(json, "width", cfg.sd.width);
-        add_pair_into_json(json, "height", cfg.sd.height);
-        add_pair_into_json(json, "restore_faces", cfg.sd.restore_faces);
-        add_pair_into_json(json, "tiling", cfg.sd.tiling);
-        add_pair_into_json(json, "do_not_save_samples", cfg.sd.do_not_save_samples);
-        add_pair_into_json(json, "do_not_save_grid", cfg.sd.do_not_save_grid);
-        add_pair_into_json(json, "eta", cfg.sd.eta);
-        add_pair_into_json(json, "denoising_strength", cfg.sd.denoising_strength);
-        add_pair_into_json(json, "s_min_uncond", cfg.sd.s_min_uncond);
-        add_pair_into_json(json, "s_churn", cfg.sd.s_churn);
-        add_pair_into_json(json, "s_tmax", cfg.sd.s_tmax);
-        add_pair_into_json(json, "s_tmin", cfg.sd.s_tmin);
-        add_pair_into_json(json, "s_noise", cfg.sd.s_noise);
-        add_pair_into_json(json, "override_settings", cfg.sd.override_settings);
-        add_pair_into_json(json, "override_settings_restore_afterwards", cfg.sd.override_settings_restore_afterwards);
-        add_pair_into_json(json, "refiner_checkpoint", cfg.sd.refiner_checkpoint);
-        add_pair_into_json(json, "refiner_switch_at", cfg.sd.refiner_switch_at);
-        add_pair_into_json(json, "disable_extra_networks", cfg.sd.disable_extra_networks);
-        add_pair_into_json(json, "firstpass_image", cfg.sd.firstpass_image);
-        add_pair_into_json(json, "comments", cfg.sd.comments);
+        json["prompt"] = prompt;
+        json["negative_prompt"] = negative_prompt;
+        //json["styles"] = cfg.sd_txt2img_params.styles;
+        json["seed"] = cfg.sd.seed;
+        json["subseed"] = cfg.sd.subseed;
+        json["subseed_strength"] = cfg.sd.subseed_strength;
+        json["seed_resize_from_h"] = cfg.sd.seed_resize_from_h;
+        json["seed_resize_from_w"] = cfg.sd.seed_resize_from_w;
+        json["sampler_name"] = cfg.sd.sampler_name;
+        json["scheduler"] = cfg.sd.scheduler;
+        json["batch_size"] = cfg.sd.batch_size;
+        json["n_iter"] = cfg.sd.n_iter;
+        json["steps"] = cfg.sd.steps;
+        json["cfg_scale"] = cfg.sd.cfg_scale;
+        json["width"] = cfg.sd.width;
+        json["height"] = cfg.sd.height;
+        json["restore_faces"] = cfg.sd.restore_faces;
+        json["tiling"] = cfg.sd.tiling;
+        json["do_not_save_samples"] = cfg.sd.do_not_save_samples;
+        json["do_not_save_grid"] = cfg.sd.do_not_save_grid;
+        json["eta"] = cfg.sd.eta;
+        json["denoising_strength"] = cfg.sd.denoising_strength;
+        json["s_min_uncond"] = cfg.sd.s_min_uncond;
+        json["s_churn"] = cfg.sd.s_churn;
+        json["s_tmax"] = cfg.sd.s_tmax;
+        json["s_tmin"] = cfg.sd.s_tmin;
+        json["s_noise"] = cfg.sd.s_noise;
+        json["override_settings"] = cfg.sd.override_settings;
+        json["override_settings_restore_afterwards"] = cfg.sd.override_settings_restore_afterwards;
+        json["refiner_checkpoint"] = cfg.sd.refiner_checkpoint;
+        json["refiner_switch_at"] = cfg.sd.refiner_switch_at;
+        json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
+        json["firstpass_image"] = cfg.sd.firstpass_image;
+        json["comments"] = cfg.sd.comments;
 
         if (cfg.sd.mode == sd_mode::txt2img)
         {
-            add_pair_into_json(json, "enable_hr", cfg.sd.txt2img.enable_hr);
-            add_pair_into_json(json, "firstphase_width", cfg.sd.txt2img.firstphase_width);
-            add_pair_into_json(json, "firstphase_height", cfg.sd.txt2img.firstphase_height);
-            add_pair_into_json(json, "hr_scale", cfg.sd.txt2img.hr_scale);
-            add_pair_into_json(json, "hr_upscaler", cfg.sd.txt2img.hr_upscaler);
-            add_pair_into_json(json, "hr_second_pass_steps", cfg.sd.txt2img.hr_second_pass_steps);
-            add_pair_into_json(json, "hr_resize_x", cfg.sd.txt2img.hr_resize_x);
-            add_pair_into_json(json, "hr_resize_y", cfg.sd.txt2img.hr_resize_y);
-            add_pair_into_json(json, "hr_checkpoint_name", cfg.sd.txt2img.hr_checkpoint_name);
-            //add_pair_into_json(json, "hr_prompt", prompt);
-            //add_pair_into_json(json, "hr_negative_prompt", negative_prompt);
+            json["enable_hr"] = cfg.sd.txt2img.enable_hr;
+            json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
+            json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
+            json["hr_scale"] = cfg.sd.txt2img.hr_scale;
+            json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
+            json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
+            json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
+            json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
+            json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
+            //json["hr_prompt"] = prompt;
+            //json["hr_negative_prompt"] = negative_prompt;
         }
         else if (cfg.sd.mode == sd_mode::img2img)
         {
-            add_pair_into_json_from_vector(json, "sd_init_images", image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg));
-            add_pair_into_json(json, "sd_seed_resize_from_h", cfg.sd.img2img.seed_resize_from_h);
-            add_pair_into_json(json, "sd_seed_resize_from_w", cfg.sd.img2img.seed_resize_from_w);
-            add_pair_into_json(json, "sd_resize_mode", cfg.sd.img2img.resize_mode);
-            add_pair_into_json(json, "sd_image_cfg_scale", cfg.sd.img2img.image_cfg_scale);
-            add_pair_into_json(json, "sd_mask", image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg));
-            add_pair_into_json(json, "sd_mask_blur_x", cfg.sd.img2img.mask_blur_x);
-            add_pair_into_json(json, "sd_mask_blur_y", cfg.sd.img2img.mask_blur_y);
-            add_pair_into_json(json, "sd_mask_blur", cfg.sd.img2img.mask_blur);
-            add_pair_into_json(json, "sd_mask_round", cfg.sd.img2img.mask_round);
-            add_pair_into_json(json, "sd_inpainting_fill", cfg.sd.img2img.inpainting_fill);
-            add_pair_into_json(json, "sd_inpaint_full_res", cfg.sd.img2img.inpaint_full_res);
-            add_pair_into_json(json, "sd_inpaint_full_res_padding", cfg.sd.img2img.inpaint_full_res_padding);
-            add_pair_into_json(json, "sd_inpainting_mask_invert", cfg.sd.img2img.inpainting_mask_invert);
-            add_pair_into_json(json, "sd_initial_noise_multiplier", cfg.sd.img2img.initial_noise_multiplier);
-            add_pair_into_json(json, "sd_latent_mask", image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg));
+            json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
+            json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
+            json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
+            json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
+            json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
+            json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
+            json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
+            json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
+            json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
+            json["sd_mask_round"] = cfg.sd.img2img.mask_round;
+            json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
+            json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
+            json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
+            json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
+            json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
+            json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
         }
 
-        add_pair_into_json(json, "force_task_id", cfg.sd.force_task_id);
+        json["force_task_id"] = cfg.sd.force_task_id;
 
         if (!cfg.sd.sampler_index.empty() && cfg.sd.sampler_name.empty())
         {
-            add_pair_into_json(json, "sampler_index", cfg.sd.sampler_index);
+            json["sampler_index"] = cfg.sd.sampler_index;
         }
 
         if (cfg.sd.abg_remover_enable)
         {
-            add_pair_into_json(json, "script_name", "abg remover");
-            picojson::array args_array
-            {
-                picojson::value{ false },
-                picojson::value{ false },
-                picojson::value{ false },
-                picojson::value{ "#000000" },
-                picojson::value{ false }
+            json["script_name"] = "abg remover";
+            json["script_args"] = {
+                false,
+                false,
+                false,
+                "#000000",
+                false
             };
-            add_pair_into_json(json, "script_args", args_array);
         }
 
-        add_pair_into_json(json, "send_images", cfg.sd.send_images);
-        add_pair_into_json(json, "save_images", cfg.sd.save_images);
+        json["send_images"] = cfg.sd.send_images;
+        json["save_images"] = cfg.sd.save_images;
 
-        picojson::object alwayson_scripts;
+        nlohmann::json alwayson_scripts{ nlohmann::json::object() };
         if (cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
         {
-            picojson::object adetailer;
-            picojson::array args_array;
-            picojson::object args;
-            picojson::object object;
-            add_pair_into_json(object, "ad_model", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model);
+            nlohmann::json adetailer{ nlohmann::json::object() };
+            nlohmann::json object{ nlohmann::json::object() };
+            object["ad_model"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
             if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
             {
-                add_pair_into_json(object, "ad_prompt", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt);
+                object["ad_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
             }
             if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
             {
-                add_pair_into_json(object, "ad_negative_prompt", cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt);
+                object["ad_negative_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
             }
-            args_array.push_back(picojson::value{ true });
-            args_array.push_back(picojson::value{ false });
-            args_array.push_back(picojson::value{ object });
-            add_pair_into_json(adetailer, "args", args_array);
-            add_pair_into_json(alwayson_scripts, "ADetailer", adetailer);
+            adetailer["args"] = { true, false, object };
+            alwayson_scripts["ADetailer"] = adetailer;
         }
         //{
-        //    picojson::object sampler;
-        //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.steps) });
-        //    args_array.push_back(picojson::value{ cfg.sd_txt2img_params.sampler_name });
-        //    args_array.push_back(picojson::value{ cfg.sd_txt2img_params.scheduler });
-        //    add_pair_into_json(sampler, "args", args_array);
-        //    add_pair_into_json(alwayson_scripts, "Sampler", sampler);
+        //    nlohmann::json sampler{ nlohmann::json::object() };
+        //    sampler["args"] =
+        //    {
+        //        cfg.sd.steps,
+        //        cfg.sd.sampler_name,
+        //        cfg.sd.scheduler
+        //    };
+        //    alwayson_scripts["Sampler"] = sampler;
         //}
         //{
-        //    picojson::object seed;
-        //    picojson::array args_array;
-        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.seed) });
-        //    args_array.push_back(picojson::value{ false });
-        //    args_array.push_back(picojson::value{ static_cast<double>(cfg.sd_txt2img_params.subseed) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    args_array.push_back(picojson::value{ static_cast<double>(0) });
-        //    add_pair_into_json(seed, "args", args_array);
-        //    add_pair_into_json(alwayson_scripts, "Seed", seed);
+        //    nlohmann::json seed{ nlohmann::json::object() };
+        //    seed["args"] = 
+        //    {
+        //        cfg.sd.seed,
+        //        false,
+        //        cfg.sd.subseed,
+        //        0,
+        //        0,
+        //        0
+        //    };
+        //    alwayson_scripts["Seed"] = seed;
         //}
-        add_pair_into_json(json, "alwayson_scripts", alwayson_scripts);
+        json["alwayson_scripts"] = alwayson_scripts;
 
         if (!cfg.sd.infotext.empty())
         {
-            add_pair_into_json(json, "infotext", cfg.sd.infotext);
+            json["infotext"] = cfg.sd.infotext;
         }
 
-        const std::string request_body{ picojson::value{ json }.serialize() };
+        const std::string request_body{ json.dump() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, sd_mode_to_target(cfg.sd.mode, cfg), 11 };
@@ -3936,12 +3802,9 @@ namespace llmcpp
 
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
-        picojson::value response_json;
-        picojson::parse(response_json, response.body());
+        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& images{ throwable_find<picojson::array>(object, "images") };
-        const std::string base64_image_data{ throwable_at<std::string>(images, 0) };
+        const std::string base64_image_data{ response_json.at("images").at(0).get<std::string>() };
 
         if (base64_image_data.empty())
         {
@@ -4133,11 +3996,9 @@ namespace llmcpp
             llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "Failed to upload image: " + response.body() });
         }
 
-        picojson::value response_json;
-        picojson::parse(response_json, response.body());
-        const picojson::object& response_object{ response_json.get<picojson::object>() };
+        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
-        return response_object.at("name").get<std::string>();
+        return response_json.at("name").get<std::string>();
     }
 
     void upload_images_to_comfy_ui(
@@ -4195,12 +4056,11 @@ namespace llmcpp
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        picojson::object json;
-        picojson::value prompt_json;
-        picojson::parse(prompt_json, std::string{ prompt });
-        add_pair_into_json(json, "prompt", prompt_json);
+        nlohmann::json json;
+        nlohmann::json prompt_json{ nlohmann::json::parse(prompt) };
+        json["prompt"] = prompt_json;
 
-        const std::string request_body{ picojson::value{ json }.serialize() };
+        const std::string request_body{ json.dump() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         http::request<http::string_body> request{ http::verb::post, cfg.cu.prompt_target, 11 };
@@ -4218,13 +4078,11 @@ namespace llmcpp
         http::read(tcp_stream, buffer, response, error_code);
         if_error_throw<http_receive_exception>(error_code);
 
-        picojson::value response_json;
-        picojson::parse(response_json, response.body());
+        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
         BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
 
-        const picojson::object& response_object{ throwable_get<picojson::object>(response_json) };
-        const std::string prompt_id{ throwable_find<std::string>(response_object, "prompt_id") };
+        const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
         BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
 
         std::vector<generated_file_info> target_files;
@@ -4243,23 +4101,21 @@ namespace llmcpp
                 )
             };
 
-            picojson::value history_json;
-            picojson::parse(history_json, history_response.body());
+            nlohmann::json history_json{ nlohmann::json::parse(history_response.body()) };
 
-            if (!history_json.is<picojson::object>())
+            if (!history_json.is_object())
             {
                 continue;
             }
-            const picojson::object& history_object{ throwable_get<picojson::object>(history_json) };
 
             try
             {
-                const picojson::object& prompt_response_obj{ throwable_find<picojson::object>(history_object, prompt_id) };
+                const nlohmann::json& prompt_response_obj{ history_json.at(prompt_id) };
 
                 try
                 {
-                    const picojson::object& status_object{ throwable_find<picojson::object>(prompt_response_obj, "status") };
-                    const std::string status_str{ throwable_find<std::string>(status_object, "status_str") };
+                    const nlohmann::json& status_object{ prompt_response_obj.at("status") };
+                    const std::string status_str{ status_object.at("status_str").get<std::string>() };
                     if (status_str == "error")
                     {
                         llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
@@ -4271,37 +4127,33 @@ namespace llmcpp
 
                 target_files.clear();
 
-                const picojson::object& outputs_object{ throwable_find<picojson::object>(prompt_response_obj, "outputs") };
-                for (const std::pair<const std::string, picojson::value>& node_pair : outputs_object)
+                const nlohmann::json& outputs_object{ prompt_response_obj.at("outputs") };
+                for (const auto& [key, value] : outputs_object.items())
                 {
-                    if (!node_pair.second.is<picojson::object>())
+                    if (!value.is_object())
                     {
                         continue;
                     }
 
-                    const picojson::object& node_object{ throwable_get<picojson::object>(node_pair.second) };
-
-                    for (const std::pair<const std::string, picojson::value>& prop_pair : node_object)
+                    for (const auto& [prop_key, file_list] : value.items())
                     {
-                        if (!prop_pair.second.is<picojson::array>())
+                        if (!file_list.is_array())
                         {
                             continue;
                         }
 
-                        const picojson::array& file_list{ throwable_get<picojson::array>(prop_pair.second) };
                         for (std::size_t i{}; i < file_list.size(); ++i)
                         {
                             try
                             {
-                                const picojson::object& file_object{ throwable_at<picojson::object>(file_list, i) };
-
-                                target_files.emplace_back(
-                                    throwable_find<std::string>(file_object, "filename"),
-                                    throwable_find<std::string>(file_object, "subfolder"),
-                                    throwable_find<std::string>(file_object, "type")
+                                target_files.emplace_back
+                                (
+                                    file_list.at(i).at("filename"),
+                                    file_list.at(i).at("subfolder"),
+                                    file_list.at(i).at("type")
                                 );
                             }
-                            catch (const json_parse_exception&)
+                            catch (const nlohmann::json::parse_error&)
                             {
                                 continue;
                             }
@@ -4314,7 +4166,7 @@ namespace llmcpp
                     is_finished = true;
                 }
             }
-            catch (const json_parse_exception&)
+            catch (const nlohmann::json::parse_error&)
             {
                 continue;
             }
@@ -4495,100 +4347,94 @@ namespace llmcpp
 
     std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
     {
-        picojson::object json;
-        add_pair_into_json(json, "prompt", prompt);
-        add_pair_into_json(json, "model", model);
-        add_pair_into_json(json, "best_of", best_of);
-        add_pair_into_json(json, "echo", echo);
-        add_pair_into_json(json, "frequency_penalty", frequency_penalty);
-        //add_pair_into_json(json, "logit_bias", logit_bias);
-        add_pair_into_json(json, "logprobs", logprobs);
-        add_pair_into_json(json, "max_tokens", max_tokens);
-        add_pair_into_json(json, "n", n);
-        add_pair_into_json(json, "presence_penalty", presence_penalty);
-        add_pair_into_json_from_vector(json, "stop", stop);
-        add_pair_into_json(json, "stream", stream);
-        add_pair_into_json(json, "suffix", suffix);
-        add_pair_into_json(json, "temperature", temperature);
-        add_pair_into_json(json, "top_p", top_p);
+        nlohmann::json json{ nlohmann::json::object() };
+
+        json["model"] = model;
+        json["best_of"] = best_of;
+        json["echo"] = echo;
+        json["frequency_penalty"] = frequency_penalty;
+        //json["logit_bias"] = logit_bias;
+        json["logprobs"] = logprobs;
+        json["max_tokens"] = max_tokens;
+        json["n"] = n;
+        json["presence_penalty"] = presence_penalty;
+        json["stop"] = stop;
+        json["stream"] = stream;
+        json["suffix"] = suffix;
+        json["temperature"] = temperature;
+        json["top_p"] = top_p;
 
         if (seed != -1)
         {
-            add_pair_into_json(json, "seed", seed);
+            json["seed"] = seed;
         }
 
-        add_pair_into_json(json, "user", user);
-        add_pair_into_json(json, "preset", preset);
-        add_pair_into_json(json, "dynatemp_low", dynatemp_low);
-        add_pair_into_json(json, "dynatemp_high", dynatemp_high);
-        add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
-        add_pair_into_json(json, "smoothing_factor", smoothing_factor);
-        add_pair_into_json(json, "smoothing_curve", smoothing_curve);
-        add_pair_into_json(json, "min_p", min_p);
-        add_pair_into_json(json, "top_k", top_k);
-        add_pair_into_json(json, "typical_p", typical_p);
-        add_pair_into_json(json, "xtc_threshold", xtc_threshold);
-        add_pair_into_json(json, "xtc_probability", xtc_probability);
-        add_pair_into_json(json, "epsilon_cutoff", epsilon_cutoff);
-        add_pair_into_json(json, "eta_cutoff", eta_cutoff);
-        add_pair_into_json(json, "tfs", tfs);
-        add_pair_into_json(json, "top_a", top_a);
-        add_pair_into_json(json, "top_n_sigma", top_n_sigma);
-        add_pair_into_json(json, "dry_multiplier", dry_multiplier);
-        add_pair_into_json(json, "dry_allowed_length", dry_allowed_length);
-        add_pair_into_json(json, "dry_base", dry_base);
-        add_pair_into_json(json, "repetition_penalty", repetition_penalty);
-        add_pair_into_json(json, "encoder_repetition_penalty", encoder_repetition_penalty);
-        add_pair_into_json(json, "no_repeat_ngram_size", no_repeat_ngram_size);
-        add_pair_into_json(json, "repetition_penalty_range", repetition_penalty_range);
-        add_pair_into_json(json, "penalty_alpha", penalty_alpha);
-        add_pair_into_json(json, "guidance_scale", guidance_scale);
-        add_pair_into_json(json, "mirostat_mode", mirostat_mode);
-        add_pair_into_json(json, "mirostat_tau", mirostat_tau);
-        add_pair_into_json(json, "mirostat_eta", mirostat_eta);
-        add_pair_into_json(json, "prompt_lookup_num_tokens", prompt_lookup_num_tokens);
-        add_pair_into_json(json, "max_tokens_second", max_tokens_second);
-        add_pair_into_json(json, "do_sample", do_sample);
-        add_pair_into_json(json, "dynamic_temperature", max_tokens_second);
-        add_pair_into_json(json, "temperature_last", temperature_last);
-        add_pair_into_json(json, "auto_max_new_tokens", auto_max_new_tokens);
-        add_pair_into_json(json, "ban_eos_token", ban_eos_token);
-        add_pair_into_json(json, "add_bos_token", add_bos_token);
-        add_pair_into_json(json, "skip_special_tokens", skip_special_tokens);
-        add_pair_into_json(json, "static_cache", static_cache);
-        add_pair_into_json(json, "truncation_length", truncation_length);
-        add_pair_into_json_from_vector(json, "sampler_priority", sampler_priority);
-        add_pair_into_json(json, "custom_token_bans", custom_token_bans);
-        add_pair_into_json(json, "negative_prompt", negative_prompt);
-        add_pair_into_json(json, "dry_sequence_breakers", dry_sequence_breakers);
-        add_pair_into_json(json, "grammar_string", grammar_string);
+        json["user"] = user;
+        json["preset"] = preset;
+        json["dynatemp_low"] = dynatemp_low;
+        json["dynatemp_high"] = dynatemp_high;
+        json["dynatemp_exponent"] = dynatemp_exponent;
+        json["smoothing_factor"] = smoothing_factor;
+        json["smoothing_curve"] = smoothing_curve;
+        json["min_p"] = min_p;
+        json["top_k"] = top_k;
+        json["typical_p"] = typical_p;
+        json["xtc_threshold"] = xtc_threshold;
+        json["xtc_probability"] = xtc_probability;
+        json["epsilon_cutoff"] = epsilon_cutoff;
+        json["eta_cutoff"] = eta_cutoff;
+        json["tfs"] = tfs;
+        json["top_a"] = top_a;
+        json["top_n_sigma"] = top_n_sigma;
+        json["dry_multiplier"] = dry_multiplier;
+        json["dry_allowed_length"] = dry_allowed_length;
+        json["dry_base"] = dry_base;
+        json["repetition_penalty"] = repetition_penalty;
+        json["encoder_repetition_penalty"] = encoder_repetition_penalty;
+        json["no_repeat_ngram_size"] = no_repeat_ngram_size;
+        json["repetition_penalty_range"] = repetition_penalty_range;
+        json["penalty_alpha"] = penalty_alpha;
+        json["guidance_scale"] = guidance_scale;
+        json["mirostat_mode"] = mirostat_mode;
+        json["mirostat_tau"] = mirostat_tau;
+        json["mirostat_eta"] = mirostat_eta;
+        json["prompt_lookup_num_tokens"] = prompt_lookup_num_tokens;
+        json["max_tokens_second"] = max_tokens_second;
+        json["do_sample"] = do_sample;
+        json["dynamic_temperature"] = max_tokens_second;
+        json["temperature_last"] = temperature_last;
+        json["auto_max_new_tokens"] = auto_max_new_tokens;
+        json["ban_eos_token"] = ban_eos_token;
+        json["add_bos_token"] = add_bos_token;
+        json["skip_special_tokens"] = skip_special_tokens;
+        json["static_cache"] = static_cache;
+        json["truncation_length"] = truncation_length;
+        json["sampler_priority"] = sampler_priority;
+        json["custom_token_bans"] = custom_token_bans;
+        json["negative_prompt"] = negative_prompt;
+        json["dry_sequence_breakers"] = dry_sequence_breakers;
+        json["grammar_string"] = grammar_string;
 
-        return picojson::value{ json }.serialize();
+        return json.dump();
     }
 
     std::string tg_completions_parameters::parse_response_for_text_completions(const std::string& response) const
     {
-        picojson::value response_json;
-        picojson::parse(response_json, response);
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
-        const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
-        return throwable_find<std::string>(choice, "text");
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("choices").at(0).at("text").get<std::string>();
     }
 
     std::string tg_completions_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
-        picojson::object json;
-        add_pair_into_json(json, "text", prompt);
-        return picojson::value{ json }.serialize();
+        nlohmann::json json{ nlohmann::json::object() };
+        json["text"] = prompt;
+        return json.dump();
     }
 
     int tg_completions_parameters::parse_response_for_token_count(const std::string& response) const
     {
-        picojson::value response_json;
-        picojson::parse(response_json, response);
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        return static_cast<int>(throwable_find<double>(object, "length"));
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("length").get<int>();
     }
 
     std::string tg_completions_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
@@ -4603,94 +4449,88 @@ namespace llmcpp
 
     std::string kc_generation_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
     {
-        picojson::object json;
+        nlohmann::json json{ nlohmann::json::object() };
 
-        add_pair_into_json(json, "max_context_length", max_context_length);
-        add_pair_into_json(json, "max_length", max_tokens);
-        add_pair_into_json(json, "prompt", std::string{ prompt });
-        add_pair_into_json(json, "rep_pen", rep_pen);
-        add_pair_into_json(json, "rep_pen_range", rep_pen_range);
-        add_pair_into_json_from_vector(json, "sampler_order", sampler_order);
+        json["max_context_length"] = max_context_length;
+        json["max_length"] = max_tokens;
+        json["prompt"] = prompt;
+        json["rep_pen"] = rep_pen;
+        json["rep_pen_range"] = rep_pen_range;
+        json["sampler_order"] = sampler_order;
 
         if (sampler_seed != -1)
         {
-            add_pair_into_json(json, "sampler_seed", sampler_seed);
+            json["sampler_seed"] = sampler_seed;
         }
 
-        add_pair_into_json_from_vector(json, "stop_sequence", stop_sequence);
-        add_pair_into_json(json, "temperature", temperature);
-        add_pair_into_json(json, "tfs", tfs);
-        add_pair_into_json(json, "top_a", top_a);
-        add_pair_into_json(json, "top_k", top_k);
-        add_pair_into_json(json, "top_p", top_p);
-        add_pair_into_json(json, "min_p", min_p);
-        add_pair_into_json(json, "typical", typical);
-        add_pair_into_json(json, "use_default_badwordsids", use_default_badwordsids);
-        add_pair_into_json(json, "dynatemp_range", dynatemp_range);
-        add_pair_into_json(json, "smoothing_factor", smoothing_factor);
-        add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
-        add_pair_into_json(json, "mirostat", mirostat);
-        add_pair_into_json(json, "mirostat_tau", mirostat_tau);
-        add_pair_into_json(json, "mirostat_eta", mirostat_eta);
-        add_pair_into_json(json, "genkey", genkey);
-        add_pair_into_json(json, "grammar", grammar);
-        add_pair_into_json(json, "grammar_retain_state", grammar_retain_state);
-        add_pair_into_json(json, "memory", memory);
-        add_pair_into_json_from_vector(json, "images", images);
-        add_pair_into_json(json, "trim_stop", trim_stop);
-        add_pair_into_json(json, "render_special", render_special);
-        add_pair_into_json(json, "bypass_eos", bypass_eos);
-        add_pair_into_json_from_vector(json, "banned_tokens", banned_tokens);
-        add_pair_into_json(json, "dry_multiplier", dry_multiplier);
-        add_pair_into_json(json, "dry_base", dry_base);
-        add_pair_into_json(json, "dry_allowed_length", dry_allowed_length);
-        add_pair_into_json(json, "dry_penalty_last_n", dry_penalty_last_n);
-        add_pair_into_json_from_vector(json, "dry_sequence_breakers", dry_sequence_breakers);
-        add_pair_into_json(json, "xtc_probability", xtc_probability);
-        add_pair_into_json(json, "nsigma", nsigma);
-        add_pair_into_json(json, "logprobs", logprobs);
-        add_pair_into_json(json, "replace_instruct_placeholders", replace_instruct_placeholders);
+        json["stop_sequence"] = stop_sequence;
+        json["temperature"] = temperature;
+        json["tfs"] = tfs;
+        json["top_a"] = top_a;
+        json["top_k"] = top_k;
+        json["top_p"] = top_p;
+        json["min_p"] = min_p;
+        json["typical"] = typical;
+        json["use_default_badwordsids"] = use_default_badwordsids;
+        json["dynatemp_range"] = dynatemp_range;
+        json["smoothing_factor"] = smoothing_factor;
+        json["dynatemp_exponent"] = dynatemp_exponent;
+        json["mirostat"] = mirostat;
+        json["mirostat_tau"] = mirostat_tau;
+        json["mirostat_eta"] = mirostat_eta;
+        json["genkey"] = genkey;
+        json["grammar"] = grammar;
+        json["grammar_retain_state"] = grammar_retain_state;
+        json["memory"] = memory;
+        json["images"] = images;
+        json["trim_stop"] = trim_stop;
+        json["render_special"] = render_special;
+        json["bypass_eos"] = bypass_eos;
+        json["banned_tokens"] = banned_tokens;
+        json["dry_multiplier"] = dry_multiplier;
+        json["dry_base"] = dry_base;
+        json["dry_allowed_length"] = dry_allowed_length;
+        json["dry_penalty_last_n"] = dry_penalty_last_n;
+        json["dry_sequence_breakers"] = dry_sequence_breakers;
+        json["xtc_probability"] = xtc_probability;
+        json["nsigma"] = nsigma;
+        json["logprobs"] = logprobs;
+        json["replace_instruct_placeholders"] = replace_instruct_placeholders;
 
-        return picojson::value{ json }.serialize();
+        return json.dump();
     }
 
     std::string kc_generation_parameters::parse_response_for_text_completions(const std::string& response) const
     {
-        picojson::value response_json;
-        picojson::parse(response_json, response);
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
-        const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
-        return throwable_find<std::string>(result, "text");
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("results").at(0).at("text").get<std::string>();
     }
 
     std::string kc_generation_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
-        picojson::object json;
-        add_pair_into_json(json, "prompt", prompt);
-        return picojson::value{ json }.serialize();
+        nlohmann::json json{ nlohmann::json::object() };
+        json["prompt"] = prompt;
+        return json.dump();
     }
 
     int kc_generation_parameters::parse_response_for_token_count(const std::string& response) const
     {
-        picojson::value response_json;
-        picojson::parse(response_json, response);
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        return static_cast<int>(throwable_find<double>(object, "value"));
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("value").get<int>();
     }
 
     std::string kc_generation_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
     {
-        picojson::object json;
+        nlohmann::json json{ nlohmann::json::object() };
 
-        add_pair_into_json(json, "max_length", max_tokens);
-        add_pair_into_json(json, "rep_pen", rep_pen);
-        add_pair_into_json(json, "rep_pen_range", rep_pen_range);
-        add_pair_into_json_from_vector(json, "sampler_order", sampler_order);
+        json["max_length"] = max_tokens;
+        json["rep_pen"] = rep_pen;
+        json["rep_pen_range"] = rep_pen_range;
+        json["sampler_order"] = sampler_order;
 
         if (sampler_seed != -1)
         {
-            add_pair_into_json(json, "sampler_seed", sampler_seed);
+            json["sampler_seed"] = sampler_seed;
         }
 
         std::vector<std::string> stop_sequence
@@ -4698,70 +4538,56 @@ namespace llmcpp
             "{{[INPUT]}}",
             "{{[OUTPUT]}}"
         };
-        add_pair_into_json_from_vector(json, "stop_sequence", stop_sequence);
-        add_pair_into_json(json, "temperature", temperature);
-        add_pair_into_json(json, "tfs", tfs);
-        add_pair_into_json(json, "top_a", top_a);
-        add_pair_into_json(json, "top_k", top_k);
-        add_pair_into_json(json, "top_p", top_p);
-        add_pair_into_json(json, "min_p", min_p);
-        add_pair_into_json(json, "typical", typical);
-        add_pair_into_json(json, "use_default_badwordsids", use_default_badwordsids);
-        add_pair_into_json(json, "dynatemp_range", dynatemp_range);
-        add_pair_into_json(json, "smoothing_factor", smoothing_factor);
-        add_pair_into_json(json, "dynatemp_exponent", dynatemp_exponent);
-        add_pair_into_json(json, "mirostat", mirostat);
-        add_pair_into_json(json, "genkey", genkey);
-        add_pair_into_json(json, "trim_stop", trim_stop);
-        add_pair_into_json(json, "render_special", render_special);
-        add_pair_into_json(json, "bypass_eos", bypass_eos);
-        add_pair_into_json_from_vector(json, "banned_tokens", banned_tokens);
-        add_pair_into_json(json, "logprobs", logprobs);
 
-        picojson::object message;
-        add_pair_into_json(message, "role", "user");
+        json["stop_sequence"] = stop_sequence;
+        json["temperature"] = temperature;
+        json["tfs"] = tfs;
+        json["top_a"] = top_a;
+        json["top_k"] = top_k;
+        json["top_p"] = top_p;
+        json["min_p"] = min_p;
+        json["typical"] = typical;
+        json["use_default_badwordsids"] = use_default_badwordsids;
+        json["dynatemp_range"] = dynatemp_range;
+        json["smoothing_factor"] = smoothing_factor;
+        json["dynatemp_exponent"] = dynatemp_exponent;
+        json["mirostat"] = mirostat;
+        json["genkey"] = genkey;
+        json["trim_stop"] = trim_stop;
+        json["render_special"] = render_special;
+        json["bypass_eos"] = bypass_eos;
+        json["banned_tokens"] = banned_tokens;
+        json["logprobs"] = logprobs;
 
-        picojson::object text_object;
-        add_pair_into_json(text_object, "type", "text");
-        add_pair_into_json(text_object, "text", prompt);
-
-        picojson::object image_url_inner;
         std::string url{ "data:image/" };
         url.reserve(11 + mime_type.size() + 8 + base64_image.size());
         url.append(mime_type);
         url.append(";base64,");
         url.append(base64_image);
-        add_pair_into_json(image_url_inner, "url", url);
 
-        picojson::object image_object;
-        add_pair_into_json(image_object, "type", "image_url");
-        add_pair_into_json(image_object, "image_url", image_url_inner);
-
-        picojson::array content_array
-        {
-            picojson::value{ text_object },
-            picojson::value{ image_object }
+        nlohmann::json message{
+            { "role", "user" },
+            { "content", nlohmann::json::array({
+                {
+                    { "type", "text" },
+                    { "text", prompt }
+                },
+                {
+                    { "type", "image_url" },
+                    { "image_url", url }
+                }
+            })}
         };
-        add_pair_into_json(message, "content", content_array);
 
-        picojson::array messages_array
-        {
-            picojson::value{ message }
-        };
-        add_pair_into_json(json, "messages", messages_array);
+        json["messages"] = nlohmann::json::array({ message });
 
-        return picojson::value{ json }.serialize();
+        return json.dump();
     }
 
     std::string kc_generation_parameters::parse_response_for_vision(const std::string& response) const
     {
-        picojson::value response_json;
-        picojson::parse(response_json, response);
-        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
-        const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
-        const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
-        const picojson::object& message{ throwable_find<picojson::object>(choice, "message") };
-        return throwable_find<std::string>(message, "content");
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("choices").at(0).at("message").at("message").at("content").get<std::string>();
     }
 
     int send_token_count_request(const config& cfg, std::string_view prompt)
@@ -4851,22 +4677,19 @@ namespace llmcpp
             return;
         }
 
-        picojson::array cache;
+        nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string& element : cfg.lru_cache.get<by_lru>())
         {
-            picojson::object node;
-            add_pair_into_json(node, "string", element.str);
-            add_pair_into_json(node, "tokens", element.tokens);
-            cache.push_back(picojson::value{ node });
+            nlohmann::json node{ nlohmann::json::object() };
+            node["string"] = element.str;
+            node["tokens"] = element.tokens;
+            cache.push_back(node);
         }
-        picojson::object json;
-        add_pair_into_json(json, "cache", cache);
-        const std::string serialized{ picojson::value{ json }.serialize() };
+        nlohmann::json json{ nlohmann::json::object() };
+        json["cache"] = cache;
+        const std::string serialized{ json.dump() };
 
-        const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
-        create_parent_directories(cache_path);
-        boost::nowide::ofstream ofs{ cache_path };
-        ofs << serialized;
+        write_file(cfg, serialized, "cache.json");
     }
 
     void read_cache(const config& cfg)
@@ -4876,8 +4699,7 @@ namespace llmcpp
             return;
         }
 
-        picojson::value json;
-        std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
+        const std::filesystem::path cache_path{ read_file_to_string(string_to_path_by_config("cache.json", cfg)) };
 
         if (!std::filesystem::exists(cache_path))
         {
@@ -4887,15 +4709,13 @@ namespace llmcpp
         try
         {
             boost::nowide::ifstream ifs{ cache_path };
-            picojson::parse(json, ifs);
+            nlohmann::json json{ nlohmann::json::parse(ifs) };
             lru_cache lru_cache;
-            const picojson::object& object{ throwable_get<picojson::object>(json) };
-            const picojson::array& caches{ throwable_find<picojson::array>(object, "cache") };
-            for (const picojson::value& cache : caches)
+            const nlohmann::json caches{ json.at("cache") };
+            for (const nlohmann::json& cache : caches)
             {
-                const picojson::object& cache_object{ throwable_get<picojson::object>(cache) };
-                const std::string str{ throwable_find<std::string>(cache_object, "string") };
-                const int tokens{ static_cast<int>(throwable_find<double>(cache_object, "tokens")) };
+                const std::string str{ cache.at("string").get<std::string>() };
+                const int tokens{ cache.at("tokens").get<int>() };
                 lru_cache.insert({ str, tokens });
             }
             cfg.lru_cache = lru_cache;
@@ -5877,7 +5697,7 @@ namespace llmcpp
         return result;
     }
 
-    void write_file(const config& cfg, std::string_view response, std::string_view filepath, std::ios_base::openmode mode)
+    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
     {
         const bool is_binary{ (mode & std::ios::binary) != 0 };
         const std::string complemented{ complement_extension(filepath, ".txt") };
@@ -5888,7 +5708,7 @@ namespace llmcpp
         {
             llmcpp::throw_exception(file_open_exception{} << error_info::path{ file_path });
         }
-        ofs << response;
+        ofs << data;
 
         const std::string_view file_type{ is_binary ? "binary" : "text" };
         BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
