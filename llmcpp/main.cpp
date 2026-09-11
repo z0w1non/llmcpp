@@ -229,9 +229,20 @@ namespace llmcpp
         virtual std::string parse_response_for_text_completions(const std::string& response) const = 0;
         virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
         virtual int parse_response_for_token_count(const std::string& response) const = 0;
+        virtual std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const = 0;
+        virtual std::string parse_response_for_vision(const std::string& response) const = 0;
         virtual int get_max_tokens() const = 0;
         virtual int get_truncation_length() const = 0;
     };
+
+    enum class llm_mode
+    {
+        completions, vision
+    };
+
+    llm_mode string_to_llm_mode(std::string_view str);
+
+    std::string llm_mode_to_target(llm_mode mode, const config& cfg);
 
     struct llm_prompt_parameters
     {
@@ -241,12 +252,14 @@ namespace llmcpp
         std::string generation_prefix;
         std::string generation_suffix;
         std::string paragraphs_file;
+        std::string image_file;
 
         std::string host;
         std::string port;
         std::string api_key;
         std::string completions_target;
         std::string token_count_target;
+        std::string vision_target;
 
         int min_completion_tokens{};
         int max_completion_iterations{};
@@ -257,6 +270,7 @@ namespace llmcpp
         bool code_block_extract{};
 
         text_generation_parameters* backend{};
+        llm_mode mode;
     };
 
     struct tg_completions_parameters
@@ -327,6 +341,8 @@ namespace llmcpp
         std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
+        std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const override;
+        std::string parse_response_for_vision(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -389,6 +405,8 @@ namespace llmcpp
         std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
+        std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const override;
+        std::string parse_response_for_vision(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -850,6 +868,8 @@ namespace llmcpp
     template<typename Integer>
     Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
+    std::string extension_to_mime_type(std::string_view extension);
+
     std::string complement_extension(std::string_view filepath, std::string_view extension);
 
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
@@ -896,11 +916,9 @@ namespace llmcpp
     void write_cache(const config& cfg);
     void read_cache(const config& cfg);
 
-    std::string generate_text(
-        const config& cfg,
-        std::string_view prompt,
-        const context& ctx
-    );
+    std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx);
+
+    std::string vision_image(const config& cfg, std::string_view prompt, const context& ctx);
 
     std::string unescape_string(std::string_view str);
 
@@ -1054,7 +1072,7 @@ namespace llmcpp
         {
             return iter->second;
         }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown sd_mode string " + std::string{ str } });
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown sd-mode string " + std::string{ str } });
     }
 
     std::string sd_mode_to_target(sd_mode mode, const config& cfg)
@@ -1067,7 +1085,34 @@ namespace llmcpp
         {
             return cfg.sd.img2img.target;
         }
-        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd_mode" });
+        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
+    }
+
+    llm_mode string_to_llm_mode(std::string_view str)
+    {
+        static const std::unordered_map<std::string_view, llm_mode> map
+        {
+            { "completions", llm_mode::completions },
+            { "vision", llm_mode::vision }
+        };
+        if (const auto iter{ map.find(str) }; iter != map.end())
+        {
+            return iter->second;
+        }
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown llm-mode string " + std::string{ str } });
+    }
+
+    std::string llm_mode_to_target(llm_mode mode, const config& cfg)
+    {
+        if (mode == llm_mode::completions)
+        {
+            return cfg.llm.completions_target;
+        }
+        else if (mode == llm_mode::vision)
+        {
+            return cfg.llm.vision_target;
+        }
+        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
     }
 
     template<typename Value>
@@ -3367,7 +3412,7 @@ namespace llmcpp
 
     std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg)
     {
-        return base64_encode(read_file_to_string(string_to_path_by_config(image_path, cfg)));
+        return base64_encode(read_file_to_string(string_to_path_by_config(image_path, cfg), std::ios::binary));
     }
 
     std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg)
@@ -3377,6 +3422,29 @@ namespace llmcpp
         const auto unary_operator = [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); };
         boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
         return encoded_images;
+    }
+
+    std::string extension_to_mime_type(std::string_view extension)
+    {
+        static const string_unordered_map<std::string> map
+        {
+            { ".jpg", "jpg" },
+            { ".jpeg", "jpg" },
+            { ".png", "png" },
+            { ".webp", "webp" },
+            { ".gif", "gif" },
+            { ".bmp", "bmp" },
+            { ".svg", "svg+xml" },
+            { ".avif", "avif" },
+            { ".tif", "tiff" },
+            { ".tiff", "tiff" },
+            { ".ico", "x-icon" }
+        };
+        if (const auto iter{ map.find(extension) }; iter != map.end())
+        {
+            return iter->second;
+        }
+        llmcpp::throw_exception(logic_error{});
     }
 
     std::string complement_extension(std::string_view filepath, std::string_view extension)
@@ -4317,9 +4385,23 @@ namespace llmcpp
         tcp_stream.connect(results, error_code);
         if_error_throw<connect_exception>(error_code);
 
-        const std::string request_body{ params.get_request_body_for_text_completions(prompt, max_tokens) };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        std::string request_body;
+        if (cfg.llm.mode == llm_mode::completions)
+        {
+            request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
+        }
+        else if (cfg.llm.mode == llm_mode::vision)
+        {
+            const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
+            const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
+            request_body = params.get_request_body_for_vision(prompt, max_tokens, base64_image, mime_type);
+        }
+        else
+        {
+            llmcpp::throw_exception(logic_error{});
+        }
 
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
         http::request<http::string_body> request{ http::verb::post, cfg.llm.completions_target, 11 };
         request.set(http::field::host, cfg.llm.host);
         request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -4352,7 +4434,15 @@ namespace llmcpp
 
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
-        return params.parse_response_for_text_completions(response.body());
+        if (cfg.llm.mode == llm_mode::completions)
+        {
+            return params.parse_response_for_text_completions(response.body());
+        }
+        else if (cfg.llm.mode == llm_mode::vision)
+        {
+            return params.parse_response_for_vision(response.body());
+        }
+        llmcpp::throw_exception(logic_error{});
     }
 
     std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
@@ -4453,6 +4543,16 @@ namespace llmcpp
         return static_cast<int>(throwable_find<double>(object, "length"));
     }
 
+    std::string tg_completions_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
+    {
+        return {};
+    }
+
+    std::string tg_completions_parameters::parse_response_for_vision(const std::string& response) const
+    {
+        return {};
+    }
+
     std::string kc_generation_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
     {
         picojson::object json;
@@ -4529,6 +4629,61 @@ namespace llmcpp
         picojson::parse(response_json, response);
         const picojson::object& object{ throwable_get<picojson::object>(response_json) };
         return static_cast<int>(throwable_find<double>(object, "value"));
+    }
+
+    std::string kc_generation_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
+    {
+        picojson::object json;
+
+        picojson::object message;
+        add_pair_into_json(message, "role", "user");
+
+        picojson::object text_object;
+        add_pair_into_json(text_object, "type", "text");
+        add_pair_into_json(text_object, "text", prompt);
+
+        picojson::object image_url_inner;
+        std::string url{ "data:image/" };
+        url.reserve(11 + mime_type.size() + 8 + base64_image.size());
+        url.append(mime_type);
+        url.append(";base64,");
+        url.append(base64_image);
+        add_pair_into_json(image_url_inner, "url", url);
+
+        picojson::object image_object;
+        add_pair_into_json(image_object, "type", "image_url");
+        add_pair_into_json(image_object, "image_url", image_url_inner);
+
+        picojson::array content_array
+        {
+            picojson::value{ text_object },
+            picojson::value{ image_object }
+        };
+        add_pair_into_json(message, "content", content_array);
+
+        picojson::array messages_array
+        {
+            picojson::value{ message }
+        };
+        add_pair_into_json(json, "messages", messages_array);
+        add_pair_into_json(json, "max_tokens", max_tokens);
+
+        return picojson::value{ json }.serialize();
+    }
+
+    std::string kc_generation_parameters::parse_response_for_vision(const std::string& response) const
+    {
+        picojson::value response_json;
+        picojson::parse(response_json, response);
+        //const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+        //const picojson::array& choices{ throwable_find<picojson::array>(object, "choices") };
+        //const picojson::object& choice{ throwable_at<picojson::object>(choices, 0) };
+        //const picojson::object& message{ throwable_find<picojson::object>(choice, "message")};
+        //return throwable_find<std::string>(message, "content");
+        const picojson::object& object{ throwable_get<picojson::object>(response_json) };
+        const picojson::array& results{ throwable_find<picojson::array>(object, "results") };
+        const picojson::object& result{ throwable_at<picojson::object>(results, 0) };
+        return throwable_find<std::string>(result, "text");
     }
 
     int send_token_count_request(const config& cfg, std::string_view prompt)
@@ -4732,6 +4887,35 @@ namespace llmcpp
         generated.append(cfg.llm.generation_suffix);
 
         return generated;
+    }
+
+    std::string vision_image(
+        const config& cfg,
+        std::string_view prompt,
+        const context& ctx
+    )
+    {
+        const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
+
+        const int prompt_tokens{ send_token_count_request(cfg, expanded_prompt) };
+
+        BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
+
+        const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - prompt_tokens };
+        if (remaining_tokens <= 0)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens";
+            return std::string{};
+        }
+
+        const int max_tokens{ std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens) };
+        if (max_tokens <= 0)
+        {
+            BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
+            return std::string{};
+        }
+
+        return send_completions_request(cfg, expanded_prompt, *cfg.llm.backend, max_tokens);
     }
 
     std::string unescape_string(std::string_view str)
@@ -5053,6 +5237,10 @@ namespace llmcpp
             {
                 cfg.llm.token_count_target = "/api/extra/tokencount";
             }
+            if (cfg.llm.vision_target.empty())
+            {
+                cfg.llm.vision_target = "/api/v1/chat/completions";
+            }
         }
     }
 
@@ -5247,6 +5435,7 @@ namespace llmcpp
             cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
             std::string command_mode_string;
+            std::string llm_mode_string;
             std::string sd_mode_string;
 
             po::options_description allowed_options("Allowed options");
@@ -5280,16 +5469,20 @@ namespace llmcpp
                 ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
                 ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
                 ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
+                ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
                 ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
                 ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
                 ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
                 ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
                 ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
+                ("llm-vision-target", po::value<std::string>(&cfg.llm.vision_target)->default_value(""), "LLM vision target")
                 ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
                 ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
                 ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
                 ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-                ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "code block extract switch")
+                ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
+
+                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | vision)")
 
                 ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
                 ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
@@ -5526,6 +5719,7 @@ namespace llmcpp
                 return 1;
             }
 
+            cfg.llm.mode = string_to_llm_mode(llm_mode_string);
             cfg.sd.mode = string_to_sd_mode(sd_mode_string);
 
             if (!cfg.config_file.empty())
@@ -5659,6 +5853,20 @@ namespace llmcpp
         write_code_block(cfg, response);
     }
 
+    void vision_image_and_write(const config& cfg, std::string_view prompt, const context& ctx)
+    {
+        const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
+
+        std::string response{ vision_image(cfg, truncated_prompt, ctx) };
+
+        write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
+
+        if (!cfg.verbose)
+        {
+            boost::nowide::cout << response << std::flush;
+        }
+    }
+
     std::string prompt_from_string_or_file_path(
         std::string_view string,
         std::string_view file_path,
@@ -5672,8 +5880,16 @@ namespace llmcpp
     {
         if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
         {
-            const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
-            generate_text_and_write(cfg, prompt, cfg.ctx);
+            if (cfg.llm.mode == llm_mode::completions)
+            {
+                const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
+                generate_text_and_write(cfg, prompt, cfg.ctx);
+            }
+            else if (cfg.llm.mode == llm_mode::vision)
+            {
+                const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
+                vision_image_and_write(cfg, prompt, cfg.ctx);
+            }
         }
         else if (cfg.command_mode == command_mode::sd)
         {
