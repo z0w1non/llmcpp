@@ -783,13 +783,7 @@ namespace llmcpp
 
     enum class command_mode
     {
-        none,
-        tg,
-        kc,
-        sd,
-        sb,
-        cu,
-        extract_png_parameters
+        none, tg, kc, sd, sb, cu, extract_png_parameters
     };
 
     command_mode string_to_command_mode(std::string_view str);
@@ -2396,41 +2390,34 @@ namespace llmcpp
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::suffix_expression_type,
-    operand,
-    operators
+    operand, operators
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::prefix_expression_node_type,
-    operator_,
-    operand
+    operator_, operand
 )
 
 BOOST_FUSION_ADAPT_TPL_STRUCT(
     (Operand)(Operator),
     (llmcpp::parser::operator_operand_pair)(Operand)(Operator),
-    operator_,
-    operand
+    operator_, operand
 )
 
 BOOST_FUSION_ADAPT_TPL_STRUCT(
     (LowerExpression)(Operator),
     (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
-    first,
-    rest
+    first, rest
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::conditional_expression_node_type,
-    condition,
-    then_expr,
-    else_expr
+    condition, then_expr, else_expr
 );
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::macro_expression_node_type,
-    name,
-    arguments
+    name, arguments
 );
 
 BOOST_FUSION_ADAPT_STRUCT(
@@ -2440,9 +2427,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::assignment_expression_node_type,
-    lhs,
-    operator_,
-    rhs
+    lhs, operator_, rhs
 )
 
 BOOST_FUSION_ADAPT_STRUCT(
