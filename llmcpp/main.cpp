@@ -4587,7 +4587,7 @@ namespace llmcpp
     std::string kc_generation_parameters::parse_response_for_vision(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
-        return response_json.at("choices").at(0).at("message").at("message").at("content").get<std::string>();
+        return response_json.at("choices").at(0).at("message").at("content").get<std::string>();
     }
 
     int send_token_count_request(const config& cfg, std::string_view prompt)
