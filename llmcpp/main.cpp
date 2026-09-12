@@ -4119,7 +4119,7 @@ namespace llmcpp
                         llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
                     }
                 }
-                catch (const json_parse_exception&) {
+                catch (const nlohmann::json::out_of_range&) {
                     ;
                 }
 
@@ -4151,7 +4151,7 @@ namespace llmcpp
                                     file_list.at(i).at("type")
                                 );
                             }
-                            catch (const nlohmann::json::parse_error&)
+                            catch (const nlohmann::json::out_of_range&)
                             {
                                 continue;
                             }
@@ -4164,7 +4164,7 @@ namespace llmcpp
                     is_finished = true;
                 }
             }
-            catch (const nlohmann::json::parse_error&)
+            catch (const nlohmann::json::out_of_range&)
             {
                 continue;
             }
