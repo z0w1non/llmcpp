@@ -4621,7 +4621,7 @@ namespace llmcpp
 
     void write_cache(const config& cfg)
     {
-        if (cfg.command_mode != command_mode::tg/* && cfg.command_mode != command_mode::kc*/)
+        if (cfg.command_mode != command_mode::tg && cfg.command_mode != command_mode::kc)
         {
             return;
         }
@@ -4636,17 +4636,17 @@ namespace llmcpp
         }
         nlohmann::json json{ { "cache", std::move(cache) } };
         const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
-        write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), "cache", std::ios::binary);
+        write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
     }
 
     void read_cache(const config& cfg)
     {
-        if (cfg.command_mode != command_mode::tg)
+        if (cfg.command_mode != command_mode::tg && cfg.command_mode != command_mode::kc)
         {
             return;
         }
 
-        const std::filesystem::path cache_path{ string_to_path_by_config("cache", cfg) };
+        const std::filesystem::path cache_path{ string_to_path_by_config(".token_cache.bin", cfg) };
 
         if (!std::filesystem::exists(cache_path))
         {
