@@ -865,19 +865,14 @@ namespace llmcpp
         boost::beast::http::verb method,
         std::string_view host,
         std::string_view target,
-        std::string_view content_type,
-        std::optional<std::string_view> body
+        std::optional<std::string_view> content_type = std::nullopt,
+        std::optional<std::string_view> body = std::nullopt
     );
 
     boost::beast::http::request<boost::beast::http::string_body> make_post_json_request(
         std::string_view host,
         std::string_view target,
         std::string_view body
-    );
-
-    boost::beast::http::request<boost::beast::http::string_body> make_get_json_request(
-        std::string_view host,
-        std::string_view target
     );
 
     boost::beast::http::response<boost::beast::http::string_body> send_http_get(
@@ -2453,8 +2448,7 @@ BOOST_FUSION_ADAPT_STRUCT(
 
 BOOST_FUSION_ADAPT_STRUCT(
     llmcpp::parser::expression_type,
-    expressions,
-    terminated
+    expressions, terminated
 )
 
 namespace llmcpp
@@ -2519,7 +2513,7 @@ namespace llmcpp
             std::string result;
             for (const node_type& node : ast)
             {
-                result.append(boost::apply_visitor(node_visitor{ cfg, ctx }, node));
+                result += boost::apply_visitor(node_visitor{ cfg, ctx }, node);
             }
             return result;
         }
@@ -3289,7 +3283,7 @@ namespace llmcpp
 
         for (const std::string& line : temp)
         {
-            result.append(line);
+            result += line;
         }
     }
 
@@ -3638,14 +3632,17 @@ namespace llmcpp
         boost::beast::http::verb method,
         std::string_view host,
         std::string_view target,
-        std::string_view content_type,
+        std::optional<std::string_view> content_type,
         std::optional<std::string_view> body
     )
     {
         boost::beast::http::request<boost::beast::http::string_body> request{ method, target, 11 };
         request.set(boost::beast::http::field::host, host);
         request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        request.set(boost::beast::http::field::content_type, content_type);
+        if (content_type)
+        {
+            request.set(boost::beast::http::field::content_type, *content_type);
+        }
         if (body)
         {
             request.body() = *body;
@@ -3676,40 +3673,16 @@ namespace llmcpp
         std::string_view target,
         unsigned int expires_after)
     {
-        namespace beast = boost::beast;
-        namespace http = beast::http;
-        namespace asio = boost::asio;
-        using tcp = asio::ip::tcp;
+        tcp tcp;
+        tcp.tcp_stream.expires_after(std::chrono::seconds{ expires_after });
 
-        beast::error_code error_code;
+        tcp.connect(host, port);
 
-        asio::io_context ioc;
-        tcp::resolver resolver{ ioc };
-        beast::tcp_stream tcp_stream{ ioc };
+        boost::beast::http::request<boost::beast::http::string_body> request{ make_request(boost::beast::http::verb::get, host, target) };
 
-        const tcp::resolver::results_type results{ resolver.resolve(host, port, error_code) };
-        if_error_throw<dns_resolve_exception>(error_code);
+        tcp.send(request);
 
-        tcp_stream.expires_after(std::chrono::seconds{ expires_after });
-        tcp_stream.connect(results, error_code);
-        if_error_throw<connect_exception>(error_code);
-
-        http::request<http::empty_body> req{ http::verb::get, target, 11 };
-        req.set(http::field::host, host);
-        req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-
-        http::write(tcp_stream, req, error_code);
-        if_error_throw<http_send_exception>(error_code);
-
-        beast::flat_buffer buffer;
-        http::response_parser<http::string_body> parser;
-        parser.body_limit(boost::none);
-        http::read(tcp_stream, buffer, parser, error_code);
-        if_error_throw<http_receive_exception>(error_code);
-
-        tcp_stream.socket().shutdown(tcp::socket::shutdown_both);
-
-        return parser.release();
+        return tcp.recieve();
     };
 
     // unused
@@ -4010,21 +3983,32 @@ namespace llmcpp
         const std::string boundary{ generate_boundary() };
         const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
 
-        std::ostringstream body;
-        body
-            << "--" << boundary << "\r\n"
-            << "Content-Disposition: form-data; name=\"image\"; filename=\"" << filename << "\"\r\n"
-            << "Content-Type: image/png\r\n\r\n"
-            << image_data + "\r\n";
+        std::string body;
+        body.reserve(512 + image_data.size());
+
+        body += "--";
+        body += boundary;
+        body += "\r\n";
+        body += "Content-Disposition: form-data; name=\"image\"; filename=\"";
+        body += filename;
+        body += "\"\r\n";
+        body += "Content-Type: image/png\r\n\r\n";
+
+        body += image_data;
+        body += "\r\n";
 
         if (overwrite)
         {
-            body
-                << "--" << boundary << "\r\n"
-                << "Content-Disposition: form-data; name=\"overwrite\"\r\n\r\n"
-                << "true\r\n";
+            body += "--";
+            body += boundary;
+            body += "\r\n";
+            body += "Content-Disposition: form-data; name=\"overwrite\"\r\n\r\n";
+            body += "true\r\n";
         }
-        body << "--" << boundary << "--\r\n";
+
+        body += "--";
+        body += boundary;
+        body += "--\r\n";
 
         const std::string_view host{ cfg.cu.host };
         const std::string_view port{ cfg.cu.port };
@@ -4036,8 +4020,8 @@ namespace llmcpp
 
         std::string content_type;
         content_type.reserve(30 + boundary.size());
-        content_type.append("multipart/form-data; boundary=");
-        content_type.append(boundary);
+        content_type += "multipart/form-data; boundary=";
+        content_type += boundary;
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body.str()) };
         request.set(boost::beast::http::field::content_type, "multipart/form-data; boundary=" + boundary);
 
@@ -4209,12 +4193,12 @@ namespace llmcpp
             relative_file_path /= file_info.filename;
 
             std::string view_target;
-            view_target.append("/view?filename=");
-            view_target.append(file_info.filename);
-            view_target.append("&subfolder=");
-            view_target.append(file_info.subfolder);
-            view_target.append("&type=");
-            view_target.append(file_info.type);
+            view_target += "/view?filename=";
+            view_target += file_info.filename;
+            view_target += "&subfolder=";
+            view_target += file_info.subfolder;
+            view_target += "&type=";
+            view_target += file_info.type;
 
             const boost::beast::http::response<boost::beast::http::string_body> view_response{ send_http_get(
                 cfg.cu.host,
@@ -4278,7 +4262,7 @@ namespace llmcpp
             std::string descriptions;
             for (const std::string& description : item.descriptions)
             {
-                descriptions.append(description);
+                descriptions += description;
             }
             write_file(cfg, descriptions, item.head, std::ios::binary);
         }
@@ -4555,10 +4539,10 @@ namespace llmcpp
         json["logprobs"] = logprobs;
 
         std::string url{ "data:image/" };
-        url.reserve(11 + mime_type.size() + 8 + base64_image.size());
-        url.append(mime_type);
-        url.append(";base64,");
-        url.append(base64_image);
+        url.reserve(19 + mime_type.size() + base64_image.size());
+        url += mime_type;
+        url += ";base64,";
+        url += base64_image;
 
         nlohmann::json message{
             { "role", "user" },
@@ -4682,10 +4666,10 @@ namespace llmcpp
             }
             cfg.lru_cache = lru_cache;
         }
-        catch (const boost::exception& exception)
+        catch (const nlohmann::json::exception& e)
         {
-            BOOST_LOG_TRIVIAL(error) << boost::diagnostic_information(exception);
-            llmcpp::throw_exception(syntax_exception{});
+            cfg.lru_cache.clear();
+            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(e);
         }
     }
 
@@ -4744,7 +4728,7 @@ namespace llmcpp
         }
 
         std::string generated{ current_prompt.substr(initial_prompt_size) };
-        generated.append(cfg.llm.generation_suffix);
+        generated += cfg.llm.generation_suffix;
 
         return generated;
     }
@@ -4838,13 +4822,13 @@ namespace llmcpp
         {
             switch (c)
             {
-            case '"':   result.append("\\\""); break;
-            case '\\':  result.append("\\\\"); break;
-            case '\b':  result.append("\\b"); break;
-            case '\f':  result.append("\\f"); break;
-            case '\n':  result.append("\\n"); break;
-            case '\r':  result.append("\\r"); break;
-            case '\t':  result.append("\\t"); break;
+            case '"':   result += "\\\""; break;
+            case '\\':  result += "\\\\"; break;
+            case '\b':  result += "\\b"; break;
+            case '\f':  result += "\\f"; break;
+            case '\n':  result += "\\n"; break;
+            case '\r':  result += "\\r"; break;
+            case '\t':  result += "\\t"; break;
             default:
                 if (static_cast<unsigned char>(c) < 0x20)
                 {
