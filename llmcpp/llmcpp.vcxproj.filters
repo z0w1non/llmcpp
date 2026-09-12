@@ -16,9 +16,6 @@
     <Filter Include="ヘッダー ファイル\third_party">
       <UniqueIdentifier>{9520c501-e08d-4901-abc9-d814d6b59004}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ヘッダー ファイル\third_party\picojson">
-      <UniqueIdentifier>{a38ad4fa-3307-4580-b22f-163649ae0df6}</UniqueIdentifier>
-    </Filter>
     <Filter Include="ヘッダー ファイル\third_party\nlohmann">
       <UniqueIdentifier>{4f7c8d34-0194-46bb-944c-b4ad69fee1e3}</UniqueIdentifier>
     </Filter>
@@ -29,9 +26,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\third_party\picojson\picojson.h">
-      <Filter>ヘッダー ファイル\third_party\picojson</Filter>
-    </ClInclude>
     <ClInclude Include="..\third_party\nlohmann\json.hpp">
       <Filter>ヘッダー ファイル\third_party\nlohmann</Filter>
     </ClInclude>
