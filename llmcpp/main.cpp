@@ -3874,7 +3874,7 @@ namespace llmcpp
         const std::string request_body{ json.dump() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        const std::string_view target{ sd_mode_to_target(cfg.sd.mode, cfg) };
+        const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
         tcp.send(request);
@@ -4022,8 +4022,8 @@ namespace llmcpp
         content_type.reserve(30 + boundary.size());
         content_type += "multipart/form-data; boundary=";
         content_type += boundary;
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body.str()) };
-        request.set(boost::beast::http::field::content_type, "multipart/form-data; boundary=" + boundary);
+        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body) };
+        request.set(boost::beast::http::field::content_type, content_type);
 
         tcp.send(request);
         boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
@@ -4276,7 +4276,7 @@ namespace llmcpp
     )
     {
         const std::string_view host{ cfg.llm.host };
-        const std::string_view target{ llm_mode_to_target(cfg.llm.mode, cfg) };
+        const std::string target{ llm_mode_to_target(cfg.llm.mode, cfg) };
 
         tcp tcp;
         tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
