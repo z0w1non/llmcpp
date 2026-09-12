@@ -3628,7 +3628,10 @@ namespace llmcpp
         nlohmann::json json;
 
         json["prompt"] = prompt;
-        json["negative_prompt"] = negative_prompt;
+        if (!negative_prompt.empty())
+        {
+            json["negative_prompt"] = negative_prompt;
+        }
         //json["styles"] = cfg.sd_txt2img_params.styles;
         json["seed"] = cfg.sd.seed;
         json["subseed"] = cfg.sd.subseed;
@@ -3654,14 +3657,22 @@ namespace llmcpp
         json["s_tmax"] = cfg.sd.s_tmax;
         json["s_tmin"] = cfg.sd.s_tmin;
         json["s_noise"] = cfg.sd.s_noise;
-        json["override_settings"] = cfg.sd.override_settings;
+        if (!cfg.sd.override_settings.empty())
+        {
+            json["override_settings"] = nlohmann::json::parse(cfg.sd.override_settings);
+        }
         json["override_settings_restore_afterwards"] = cfg.sd.override_settings_restore_afterwards;
         json["refiner_checkpoint"] = cfg.sd.refiner_checkpoint;
         json["refiner_switch_at"] = cfg.sd.refiner_switch_at;
         json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
-        json["firstpass_image"] = cfg.sd.firstpass_image;
-        json["comments"] = cfg.sd.comments;
-
+        if (!cfg.sd.firstpass_image.empty())
+        {
+            json["firstpass_image"] = image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
+        }
+        if (!cfg.sd.comments.empty())
+        {
+            json["comments"] = cfg.sd.comments;
+        }
         if (cfg.sd.mode == sd_mode::txt2img)
         {
             json["enable_hr"] = cfg.sd.txt2img.enable_hr;
@@ -3672,7 +3683,9 @@ namespace llmcpp
             json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
             json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
             json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
-            json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
+            if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
+            {
+            }
             //json["hr_prompt"] = prompt;
             //json["hr_negative_prompt"] = negative_prompt;
         }
