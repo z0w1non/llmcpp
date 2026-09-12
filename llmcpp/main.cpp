@@ -1024,6 +1024,8 @@ namespace llmcpp
 
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
+    void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode = 0);
+
     void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
 
     void write_code_block(const config& cfg, std::string_view markdown);
@@ -4626,16 +4628,14 @@ namespace llmcpp
         nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string& element : cfg.lru_cache.get<by_lru>())
         {
-            nlohmann::json node{ nlohmann::json::object() };
-            node["string"] = element.str;
-            node["tokens"] = element.tokens;
-            cache.push_back(node);
+            cache.push_back({
+                { "string", element.str },
+                { "tokens", element.tokens }
+                });
         }
-        nlohmann::json json{ nlohmann::json::object() };
-        json["cache"] = cache;
-        const std::string serialized{ json.dump() };
-
-        write_file(cfg, serialized, "cache.json");
+        nlohmann::json json{ { "cache", std::move(cache) } };
+        const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
+        write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), "cache", std::ios::binary);
     }
 
     void read_cache(const config& cfg)
@@ -4645,7 +4645,7 @@ namespace llmcpp
             return;
         }
 
-        const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
+        const std::filesystem::path cache_path{ string_to_path_by_config("cache", cfg) };
 
         if (!std::filesystem::exists(cache_path))
         {
@@ -4654,17 +4654,33 @@ namespace llmcpp
 
         try
         {
-            boost::nowide::ifstream ifs{ cache_path };
-            nlohmann::json json{ nlohmann::json::parse(ifs) };
-            lru_cache lru_cache;
-            const nlohmann::json caches{ json.at("cache") };
+            boost::nowide::ifstream ifs{ cache_path, std::ios::binary };
+            if (!ifs.is_open())
+            {
+                return;
+            }
+
+            const std::vector<std::uint8_t> cbor{ std::istreambuf_iterator<char>{ ifs }, std::istreambuf_iterator<char>{} };
+
+            nlohmann::json json{ nlohmann::json::from_cbor(cbor) };
+            if (!json.is_object() || !json.contains("cache") || !json["cache"].is_array())
+            {
+                return;
+            }
+
+            lru_cache temp_lru_cache;
+            const nlohmann::json caches{ json["cache"] };
             for (const nlohmann::json& cache : caches)
             {
-                const std::string str{ cache.at("string").get<std::string>() };
-                const int tokens{ cache.at("tokens").get<int>() };
-                lru_cache.insert({ str, tokens });
+                if (cache.is_object() && cache.contains("string") && cache.contains("tokens"))
+                {
+                    temp_lru_cache.insert({
+                        cache["string"].get<std::string>(),
+                        cache["tokens"].get<int>()
+                        });
+                }
             }
-            cfg.lru_cache = lru_cache;
+            cfg.lru_cache = std::move(temp_lru_cache);
         }
         catch (const nlohmann::json::exception& e)
         {
@@ -5643,10 +5659,10 @@ namespace llmcpp
         return result;
     }
 
-    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
+    void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode)
     {
         const bool is_binary{ (mode & std::ios::binary) != 0 };
-        const std::string complemented{ complement_extension(filepath, ".txt") };
+        const std::string complemented{ is_binary ? filepath : complement_extension(filepath, ".txt") };
         const std::filesystem::path file_path{ string_to_path_by_config(complemented, cfg) };
         create_parent_directories(file_path);
         boost::nowide::ofstream ofs{ file_path, mode };
@@ -5654,10 +5670,14 @@ namespace llmcpp
         {
             llmcpp::throw_exception(file_open_exception{} << error_info::path{ file_path });
         }
-        ofs << data;
-
+        ofs.write(data, size);
         const std::string_view file_type{ is_binary ? "binary" : "text" };
         BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
+    }
+
+    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
+    {
+        return write_file(cfg, data.data(), data.size(), filepath, mode);
     }
 
     void write_code_block(const config& cfg, std::string_view markdown)
