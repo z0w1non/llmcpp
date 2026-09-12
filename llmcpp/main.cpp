@@ -4278,11 +4278,12 @@ namespace llmcpp
     )
     {
         const std::string_view host{ cfg.llm.host };
+        const std::string_view port{ cfg.llm.port };
         const std::string target{ llm_mode_to_target(cfg.llm.mode, cfg) };
 
         tcp tcp;
         tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
-        tcp.connect(host, target);
+        tcp.connect(host, port);
 
         std::string request_body;
         if (cfg.llm.mode == llm_mode::completions)
