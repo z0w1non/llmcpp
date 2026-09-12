@@ -844,6 +844,8 @@ namespace llmcpp
 
     std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
+    std::string read_binary_file_to_string(std::string_view file, const config& cfg);
+
     std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension = ".txt");
 
     std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg);
@@ -902,7 +904,7 @@ namespace llmcpp
 
     std::string upload_image_to_comfy_ui(
         const config& cfg,
-        const std::filesystem::path& image_path,
+        std::string_view image_path,
         bool overwrite = true
     );
 
@@ -3327,6 +3329,11 @@ namespace llmcpp
         return result;
     }
 
+    std::string read_binary_file_to_string(std::string_view file, const config& cfg)
+    {
+        return read_file_to_string(string_to_path_by_config(file, cfg), std::ios::binary);
+    }
+
     std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension)
     {
         return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), cfg));
@@ -3334,7 +3341,7 @@ namespace llmcpp
 
     std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg)
     {
-        return base64_encode(read_file_to_string(string_to_path_by_config(image_path, cfg), std::ios::binary));
+        return base64_encode(read_binary_file_to_string(image_path, cfg));
     }
 
     std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg)
@@ -3995,13 +4002,13 @@ namespace llmcpp
 
     std::string upload_image_to_comfy_ui(
         const config& cfg,
-        const std::filesystem::path& image_path,
+        std::string_view image_path,
         bool overwrite
     )
     {
-        const std::string image_data{ read_file_to_string(image_path, std::ios::binary) };
+        const std::string image_data{ read_binary_file_to_string(image_path, cfg) };
         const std::string boundary{ generate_boundary() };
-        const std::string filename{ image_path.filename().string() };
+        const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
 
         std::ostringstream body;
         body
@@ -4056,8 +4063,7 @@ namespace llmcpp
                 const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
                 if (!variable_name.empty())
                 {
-                    const std::filesystem::path local_path{ string_to_path_by_config(local_relative_path, cfg) };
-                    const std::string server_path{ upload_image_to_comfy_ui(cfg, local_path) };
+                    const std::string server_path{ upload_image_to_comfy_ui(cfg, local_relative_path) };
                     ctx.set(variable_name, server_path);
                     BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
                 }
@@ -4655,7 +4661,7 @@ namespace llmcpp
             return;
         }
 
-        const std::filesystem::path cache_path{ read_file_to_string(string_to_path_by_config("cache.json", cfg)) };
+        const std::filesystem::path cache_path{ string_to_path_by_config("cache.json", cfg) };
 
         if (!std::filesystem::exists(cache_path))
         {
@@ -5862,7 +5868,7 @@ namespace llmcpp
 
             if (cfg.command_mode == command_mode::extract_png_parameters)
             {
-                const std::string parameters{ tEXt::extract_parameters(read_file_to_string(string_to_path_by_config(cfg.png_file, cfg), std::ios::binary)) };
+                const std::string parameters{ tEXt::extract_parameters(read_binary_file_to_string(cfg.png_file, cfg)) };
                 boost::nowide::cout << parameters << std::flush;
             }
 
