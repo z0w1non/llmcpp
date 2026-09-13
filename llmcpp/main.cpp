@@ -762,7 +762,8 @@ namespace llmcpp
     struct by_key {};
     struct by_lru {};
 
-    using lru_cache = boost::multi_index::multi_index_container<
+    struct lru_cache
+        : boost::multi_index::multi_index_container<
         token_count_string,
         boost::multi_index::indexed_by<
         boost::multi_index::hashed_unique<
@@ -773,7 +774,11 @@ namespace llmcpp
         boost::multi_index::tag<by_lru>
         >
         >
-    >;
+        >
+    {
+        void to_file(const config& cfg) const;
+        void from_file(const config& cfg);
+    };
 
     struct item
     {
@@ -914,8 +919,6 @@ namespace llmcpp
 
     int send_token_count_request(const config& cfg, std::string_view prompt);
     int get_tokens_from_cache(const config& cfg, std::string_view str);
-    void write_cache(const config& cfg);
-    void read_cache(const config& cfg);
 
     std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx);
 
@@ -4671,10 +4674,10 @@ namespace llmcpp
         return tokens;
     }
 
-    void write_cache(const config& cfg)
+    void lru_cache::to_file(const config& cfg) const
     {
         nlohmann::json cache{ nlohmann::json::array() };
-        for (const token_count_string& element : cfg.lru_cache.get<by_lru>())
+        for (const token_count_string& element : get<by_lru>())
         {
             cache.push_back({
                 { "string", element.str },
@@ -4686,7 +4689,7 @@ namespace llmcpp
         write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
     }
 
-    void read_cache(const config& cfg)
+    void lru_cache::from_file(const config& cfg)
     {
         const std::filesystem::path cache_path{ string_to_path_by_config(".token_cache.bin", cfg) };
 
@@ -4723,11 +4726,11 @@ namespace llmcpp
                         });
                 }
             }
-            cfg.lru_cache = std::move(temp_lru_cache);
+            *this = std::move(temp_lru_cache);
         }
         catch (const nlohmann::json::exception& e)
         {
-            cfg.lru_cache.clear();
+            clear();
             BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(e);
         }
     }
@@ -5876,7 +5879,7 @@ namespace llmcpp
     {
         if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
         {
-            read_cache(cfg);
+            cfg.lru_cache.from_file(cfg);
         }
 
         for (int iteration_count{}; cfg.number_iterations == -1 || iteration_count < cfg.number_iterations; iteration_count += 1)
@@ -5894,7 +5897,7 @@ namespace llmcpp
 
             if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
             {
-                write_cache(cfg);
+                cfg.lru_cache.to_file(cfg);
             }
         }
     }
