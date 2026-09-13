@@ -100,15 +100,15 @@
 
 namespace llmcpp
 {
-    struct base_exception
+    struct exception
         : virtual boost::exception
         , virtual std::exception
     {
-        base_exception();
+        exception();
     };
 
-    struct runtime_exception : base_exception {};
-    struct logic_error : base_exception {};
+    struct runtime_exception : exception {};
+    struct logic_error : exception {};
     struct io_exception : runtime_exception {};
     struct file_open_exception : io_exception {};
     struct socket_exception : runtime_exception {};
@@ -119,7 +119,6 @@ namespace llmcpp
     struct json_parse_exception : runtime_exception {};
     struct macro_exception : runtime_exception {};
     struct command_line_exception : runtime_exception {};
-    struct array_index_out_of_bounds_exception : runtime_exception {};
     struct dns_resolve_exception : runtime_exception {};
     struct connect_exception : runtime_exception {};
     struct http_send_exception : runtime_exception {};
@@ -165,7 +164,7 @@ namespace llmcpp
         }
     }
 
-    base_exception::base_exception()
+    exception::exception()
     {
         *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
     }
@@ -5019,7 +5018,7 @@ namespace llmcpp
     {
         if (phase_index >= phases.size())
         {
-            llmcpp::throw_exception(array_index_out_of_bounds_exception{});
+            llmcpp::throw_exception(logic_error{});
         }
 
         if (phase_index > 0)
@@ -5718,7 +5717,7 @@ namespace llmcpp
     {
         const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
 
-        std::string response{ chat_completions(cfg, truncated_prompt, ctx) };
+        const std::string response{ chat_completions(cfg, truncated_prompt, ctx) };
 
         write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
