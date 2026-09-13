@@ -4207,7 +4207,9 @@ namespace llmcpp
 
                         for (const nlohmann::json& file_item : file_list)
                         {
-                            if (!file_item.is_object())
+                            if (!file_item.is_object()
+                                || !file_item.contains("filename")
+                                || !file_item.contains("type"))
                             {
                                 continue;
                             }
