@@ -4673,11 +4673,6 @@ namespace llmcpp
 
     void write_cache(const config& cfg)
     {
-        if (cfg.command_mode != command_mode::tg && cfg.command_mode != command_mode::kc)
-        {
-            return;
-        }
-
         nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string& element : cfg.lru_cache.get<by_lru>())
         {
@@ -4693,11 +4688,6 @@ namespace llmcpp
 
     void read_cache(const config& cfg)
     {
-        if (cfg.command_mode != command_mode::tg && cfg.command_mode != command_mode::kc)
-        {
-            return;
-        }
-
         const std::filesystem::path cache_path{ string_to_path_by_config(".token_cache.bin", cfg) };
 
         if (!std::filesystem::exists(cache_path))
@@ -5884,7 +5874,10 @@ namespace llmcpp
 
     void iterate(config& cfg)
     {
-        read_cache(cfg);
+        if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+        {
+            read_cache(cfg);
+        }
 
         for (int iteration_count{}; cfg.number_iterations == -1 || iteration_count < cfg.number_iterations; iteration_count += 1)
         {
@@ -5899,7 +5892,10 @@ namespace llmcpp
                 generate_and_output(cfg);
             }
 
-            write_cache(cfg);
+            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+            {
+                write_cache(cfg);
+            }
         }
     }
 
@@ -5957,6 +5953,6 @@ namespace llmcpp
 
 int main(int argc, char** argv)
 {
-    boost::nowide::args a(argc, argv);
+    boost::nowide::args _(argc, argv);
     return llmcpp::exception_safe_main(argc, argv);
 }
