@@ -5952,7 +5952,7 @@ namespace llmcpp
 
         return 0;
     }
-}
+} // namespace llmcpp
 
 int main(int argc, char** argv)
 {
