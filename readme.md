@@ -161,12 +161,13 @@ koboldcpp.exe --model %model% ^
 
 下記のようなコマンドで llmcpp を実行すると、画像分析の結果が出力される。
 ```
-llmcpp --mode kc --llm-mode vision --llm-prompt-file vision_prompt --llm-image-file 
+llmcpp --mode kc --llm-mode chat-completions --llm-image-file 
 ```
 
-この場合、プロンプトにはチャットテンプレートのタグ(`<|turn>`, `<|think|>`, `<turn|>` 等)を含めない。
+`--llm-mode chat-completions` を指定する場合、プロンプトにはチャットテンプレートのタグ(`<|turn>`, `<|think|>`, `<turn|>` 等)を含めてはならない。
+同オプションが指定された場合、OpenAI 互換 API `/v1/chat/completions` を利用することになるが、同 API は対話テンプレートの構築をサーバー側に任せることを想定している。
 
-```vision_prompt.txt
+```prompt.txt
 入力された画像に何が含まれるか詳細に分析し説明せよ。
 ```
 
