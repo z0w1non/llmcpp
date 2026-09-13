@@ -715,14 +715,14 @@ namespace llmcpp
         return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
     }
 
-    template<typename Result>
+    template<typename Result, typename Exception = macro_exception>
     const Result& get_or_throw(const primitive_type& value)
     {
         if (const Result* ptr{ boost::get<Result>(&value) }; ptr)
         {
             return *ptr;
         }
-        llmcpp::throw_exception(macro_exception{});
+        llmcpp::throw_exception(Exception{});
     }
 
     template<typename Result>
