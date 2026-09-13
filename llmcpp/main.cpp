@@ -1284,6 +1284,11 @@ namespace llmcpp
         primitive_type exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+
 
         std::string date();
         std::string time();
@@ -2912,7 +2917,11 @@ namespace llmcpp
             {"choice", choice},
             {"exec", exec},
             {"code_block", code_block},
-            {"summary", summary}
+            {"summary", summary},
+            {"root", root},
+            {"parent", parent},
+            {"stem", stem},
+            {"extension", extension}
         };
 
         if (const auto iter{ macros.find(name) }; iter != macros.end())
@@ -3196,6 +3205,47 @@ namespace llmcpp
 
         return truncated;
     }
+
+    primitive_type builtin::root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    {
+        if (arguments.empty())
+        {
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.root_path().string();
+    }
+
+    primitive_type builtin::parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    {
+        if (arguments.empty())
+        {
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.relative_path().string();
+    }
+
+    primitive_type builtin::stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    {
+        if (arguments.empty())
+        {
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.stem().string();
+    }
+
+    primitive_type builtin::extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    {
+        if (arguments.empty())
+        {
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.extension().string();
+    }
+
 
     std::string builtin::date()
     {
