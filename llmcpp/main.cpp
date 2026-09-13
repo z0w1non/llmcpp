@@ -104,7 +104,7 @@ namespace llmcpp
         : virtual boost::exception
         , virtual std::exception
     {
-        base_exception() {}
+        base_exception();
     };
 
     struct runtime_exception : base_exception {};
