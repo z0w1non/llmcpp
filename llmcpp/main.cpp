@@ -5884,8 +5884,7 @@ namespace llmcpp
     {
         read_cache(cfg);
 
-        int iteration_count{};
-        while (cfg.number_iterations == -1 || iteration_count < cfg.number_iterations)
+        for (int iteration_count{}; cfg.number_iterations == -1 || iteration_count < cfg.number_iterations; iteration_count += 1)
         {
             set_seed(cfg);
 
@@ -5899,8 +5898,6 @@ namespace llmcpp
             }
 
             write_cache(cfg);
-
-            iteration_count += 1;
         }
     }
 
