@@ -4710,11 +4710,7 @@ namespace llmcpp
         }
     }
 
-    std::string generate_text(
-        const config& cfg,
-        std::string_view prompt,
-        const context& ctx
-    )
+    std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx)
     {
         std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
         const std::string expanded_prefix{ expand_macro(cfg.llm.generation_prefix, cfg, ctx) };
@@ -4770,11 +4766,7 @@ namespace llmcpp
         return generated;
     }
 
-    std::string chat_completions(
-        const config& cfg,
-        std::string_view prompt,
-        const context& ctx
-    )
+    std::string chat_completions(const config& cfg, std::string_view prompt, const context& ctx)
     {
         const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
 
@@ -5254,8 +5246,8 @@ namespace llmcpp
 
     std::vector<std::string> parse_command_line_args(std::string_view args)
     {
-        boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
-        boost::tokenizer<
+        const boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
+        const boost::tokenizer<
             boost::escaped_list_separator<char>,
             std::string_view::const_iterator,
             std::string
@@ -5672,8 +5664,8 @@ namespace llmcpp
     void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode)
     {
         const bool is_binary{ (mode & std::ios::binary) != 0 };
-        const std::string complemented{ is_binary ? filepath : complement_extension(filepath, ".txt") };
-        const std::filesystem::path file_path{ string_to_path_by_config(complemented, cfg) };
+        const std::string complemented{ complement_extension(filepath, ".txt") };
+        const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complemented, cfg) };
         create_parent_directories(file_path);
         boost::nowide::ofstream ofs{ file_path, mode };
         if (!ofs.is_open())
