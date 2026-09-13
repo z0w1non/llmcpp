@@ -224,20 +224,29 @@ namespace llmcpp
 
     struct text_generation_parameters
     {
+        struct chat_completions_context
+        {
+            struct image_info_type
+            {
+                std::string_view base64_image;
+                std::string_view mime_type;
+            };
+            std::optional<image_info_type> image_info;
+        };
         virtual ~text_generation_parameters() {}
         virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
         virtual std::string parse_response_for_text_completions(const std::string& response) const = 0;
         virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
         virtual int parse_response_for_token_count(const std::string& response) const = 0;
-        virtual std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const = 0;
-        virtual std::string parse_response_for_vision(const std::string& response) const = 0;
+        virtual std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const = 0;
+        virtual std::string parse_response_for_chat_completions(const std::string& response) const = 0;
         virtual int get_max_tokens() const = 0;
         virtual int get_truncation_length() const = 0;
     };
 
     enum class llm_mode
     {
-        completions, vision
+        completions, chat_completions
     };
 
     llm_mode string_to_llm_mode(std::string_view str);
@@ -259,7 +268,7 @@ namespace llmcpp
         std::string api_key;
         std::string completions_target;
         std::string token_count_target;
-        std::string vision_target;
+        std::string chat_completions_target;
 
         int min_completion_tokens{};
         int max_completion_iterations{};
@@ -341,8 +350,8 @@ namespace llmcpp
         std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const override;
-        std::string parse_response_for_vision(const std::string& response) const override;
+        std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const override;
+        std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -405,8 +414,8 @@ namespace llmcpp
         std::string parse_response_for_text_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const override;
-        std::string parse_response_for_vision(const std::string& response) const override;
+        std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const override;
+        std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
         {
@@ -857,6 +866,8 @@ namespace llmcpp
 
     std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg);
 
+    std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type);
+
     template<typename Integer>
     Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
@@ -922,7 +933,7 @@ namespace llmcpp
 
     std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx);
 
-    std::string vision_image(const config& cfg, std::string_view prompt, const context& ctx);
+    std::string chat_completions(const config& cfg, std::string_view prompt, const context& ctx);
 
     std::string unescape_string(std::string_view str);
 
@@ -1146,7 +1157,7 @@ namespace llmcpp
         static const std::unordered_map<std::string_view, llm_mode> map
         {
             { "completions", llm_mode::completions },
-            { "vision", llm_mode::vision }
+            { "chat-completions", llm_mode::chat_completions }
         };
         if (const auto iter{ map.find(str) }; iter != map.end())
         {
@@ -1161,9 +1172,9 @@ namespace llmcpp
         {
             return cfg.llm.completions_target;
         }
-        else if (mode == llm_mode::vision)
+        else if (mode == llm_mode::chat_completions)
         {
-            return cfg.llm.vision_target;
+            return cfg.llm.chat_completions_target;
         }
         llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
     }
@@ -3402,6 +3413,16 @@ namespace llmcpp
         return encoded_images;
     }
 
+    std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type)
+    {
+        std::string url{ "data:image/" };
+        url.reserve(19 + mime_type.size() + base64_image.size());
+        url += mime_type;
+        url += ";base64,";
+        url += base64_image;
+        return url;
+    }
+
     std::string extension_to_mime_type(std::string_view extension)
     {
         static const string_unordered_map<std::string> map
@@ -4346,11 +4367,17 @@ namespace llmcpp
             request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
             BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
         }
-        else if (cfg.llm.mode == llm_mode::vision)
+        else if (cfg.llm.mode == llm_mode::chat_completions)
         {
-            const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
-            const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
-            request_body = params.get_request_body_for_vision(prompt, max_tokens, base64_image, mime_type);
+            text_generation_parameters::chat_completions_context ctx;
+            if (!cfg.llm.image_file.empty())
+            {
+                const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
+                const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
+                ctx.image_info = { base64_image, mime_type };
+            }
+
+            request_body = params.get_request_body_for_chat_completions(prompt, max_tokens, ctx);
             BOOST_LOG_TRIVIAL(info) << "Send JSON";
         }
         else
@@ -4373,9 +4400,9 @@ namespace llmcpp
         {
             return params.parse_response_for_text_completions(response.body());
         }
-        else if (cfg.llm.mode == llm_mode::vision)
+        else if (cfg.llm.mode == llm_mode::chat_completions)
         {
-            return params.parse_response_for_vision(response.body());
+            return params.parse_response_for_chat_completions(response.body());
         }
         llmcpp::throw_exception(logic_error{});
     }
@@ -4473,12 +4500,12 @@ namespace llmcpp
         return response_json.at("length").get<int>();
     }
 
-    std::string tg_completions_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
+    std::string tg_completions_parameters::get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const
     {
         return {};
     }
 
-    std::string tg_completions_parameters::parse_response_for_vision(const std::string& response) const
+    std::string tg_completions_parameters::parse_response_for_chat_completions(const std::string& response) const
     {
         return {};
     }
@@ -4555,7 +4582,7 @@ namespace llmcpp
         return response_json.at("value").get<int>();
     }
 
-    std::string kc_generation_parameters::get_request_body_for_vision(std::string_view prompt, int max_tokens, std::string_view base64_image, std::string_view mime_type) const
+    std::string kc_generation_parameters::get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4596,24 +4623,24 @@ namespace llmcpp
         json["banned_tokens"] = banned_tokens;
         json["logprobs"] = logprobs;
 
-        std::string url{ "data:image/" };
-        url.reserve(19 + mime_type.size() + base64_image.size());
-        url += mime_type;
-        url += ";base64,";
-        url += base64_image;
+        nlohmann::json content{ nlohmann::json::array() };
+        content.push_back({
+            { "type", "text" },
+            { "text", prompt }
+            });
+
+        if (ctx.image_info)
+        {
+            const std::string url{ base64_image_to_url(ctx.image_info->base64_image, ctx.image_info->mime_type) };
+            content.push_back({
+                { "type", "image_url" },
+                { "image_url", { { "url", url } } }
+                });
+        }
 
         nlohmann::json message{
             { "role", "user" },
-            { "content", nlohmann::json::array({
-                {
-                    { "type", "text" },
-                    { "text", prompt }
-                },
-                {
-                    { "type", "image_url" },
-                    { "image_url", { { "url", url } } }
-                }
-            })}
+            { "content", std::move(content) }
         };
 
         json["messages"] = nlohmann::json::array({ message });
@@ -4621,7 +4648,7 @@ namespace llmcpp
         return json.dump();
     }
 
-    std::string kc_generation_parameters::parse_response_for_vision(const std::string& response) const
+    std::string kc_generation_parameters::parse_response_for_chat_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("choices").at(0).at("message").at("content").get<std::string>();
@@ -4795,7 +4822,7 @@ namespace llmcpp
         return generated;
     }
 
-    std::string vision_image(
+    std::string chat_completions(
         const config& cfg,
         std::string_view prompt,
         const context& ctx
@@ -5131,6 +5158,10 @@ namespace llmcpp
             {
                 cfg.llm.token_count_target = "/v1/internal/token-count";
             }
+            if (cfg.llm.chat_completions_target.empty())
+            {
+                cfg.llm.chat_completions_target = "/v1/chat/completions";
+            }
         }
         else if (cfg.command_mode == command_mode::kc)
         {
@@ -5143,9 +5174,9 @@ namespace llmcpp
             {
                 cfg.llm.token_count_target = "/api/extra/tokencount";
             }
-            if (cfg.llm.vision_target.empty())
+            if (cfg.llm.chat_completions_target.empty())
             {
-                cfg.llm.vision_target = "/api/v1/chat/completions";
+                cfg.llm.chat_completions_target = "/v1/chat/completions";
             }
         }
     }
@@ -5381,14 +5412,14 @@ namespace llmcpp
                 ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
                 ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
                 ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
-                ("llm-vision-target", po::value<std::string>(&cfg.llm.vision_target)->default_value(""), "LLM vision target")
+                ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
                 ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
                 ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
                 ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
                 ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
                 ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
 
-                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | vision)")
+                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
 
                 ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
                 ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
@@ -5763,11 +5794,11 @@ namespace llmcpp
         write_code_block(cfg, response);
     }
 
-    void vision_image_and_write(const config& cfg, std::string_view prompt, const context& ctx)
+    void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
     {
         const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
 
-        std::string response{ vision_image(cfg, truncated_prompt, ctx) };
+        std::string response{ chat_completions(cfg, truncated_prompt, ctx) };
 
         write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
@@ -5797,10 +5828,10 @@ namespace llmcpp
                 const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
                 generate_text_and_write(cfg, prompt, cfg.ctx);
             }
-            else if (cfg.llm.mode == llm_mode::vision)
+            else if (cfg.llm.mode == llm_mode::chat_completions)
             {
                 const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
-                vision_image_and_write(cfg, prompt, cfg.ctx);
+                chat_completions_and_write_file(cfg, prompt, cfg.ctx);
             }
         }
         else if (cfg.command_mode == command_mode::sd)
