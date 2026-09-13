@@ -3994,7 +3994,7 @@ namespace llmcpp
 
         BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_get_json_request(host, target.buffer()) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ make_get_json_request(host, target.encoded_target()) };
 
         tcp.send(request);
         return tcp.recieve().body();
