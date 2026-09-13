@@ -900,33 +900,21 @@ namespace llmcpp
 
     std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string send_automatic1111_txt2img_request(
-        const config& cfg,
-        std::string_view prompt,
-        std::string_view negative_prompt
-    );
+    std::string send_automatic1111_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string send_style_bert_voice_request(
-        const config& cfg,
-        std::string_view text
-    );
+    std::string send_style_bert_voice_request(const config& cfg, std::string_view text);
 
     std::string generate_boundary();
 
-    std::string upload_image_to_comfy_ui(
-        const config& cfg,
-        std::string_view image_path,
-        bool overwrite = true
-    );
+    std::string upload_image_to_comfy_ui(const config& cfg, std::string_view image_path, bool overwrite = true);
 
-    void send_comfy_ui_prompt(
-        const config& cfg,
-        std::string_view workflow
-    );
+    void send_comfy_ui_prompt(const config& cfg, std::string_view workflow);
 
     std::vector<item> parse_item_list(std::string_view str);
 
     void write_item_list(const config& cfg, std::string_view task);
+
+    std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens);
 
     int send_token_count_request(const config& cfg, std::string_view prompt);
 
@@ -945,7 +933,9 @@ namespace llmcpp
     void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& ctx);
 
     void init_logging_with_nowide_cout();
+
     void init_logging_with_nowide_file_log(const std::filesystem::path& log);
+
     void init_logging(const config& cfg);
 
     class log_stream
@@ -996,24 +986,13 @@ namespace llmcpp
 
     void init_chat_mode(config& cfg);
 
-    void set_phase_variables(
-        const std::vector<std::string>& phases,
-        std::size_t phase_index,
-        const context& ctx
-    );
+    void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
 
-    void set_static_builtin_variables(
-        config& cfg
-    );
+    void set_static_builtin_variables(config& cfg);
 
-    void set_dynamic_builtin_variables(
-        config& cfg
-    );
+    void set_dynamic_builtin_variables(config& cfg);
 
-    void set_paragraphs_to_phases(
-        const std::vector<item>& paragraphs,
-        std::vector<std::string>& phases
-    );
+    void set_paragraphs_to_phases(const std::vector<item>& paragraphs, std::vector<std::string>& phases);
 
     void init_llm_mode(config& cfg);
 
@@ -1031,11 +1010,7 @@ namespace llmcpp
 
     std::vector<std::string> parse_command_line_args(std::string_view args);
 
-    int parse_command_line(
-        int argc,
-        char** argv,
-        config& cfg
-    );
+    int parse_command_line(int argc, char** argv, config& cfg);
 
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
@@ -1047,11 +1022,7 @@ namespace llmcpp
 
     void generate_text_and_write(const config& cfg, std::string_view prompt, const context& ctx);
 
-    std::string prompt_from_string_or_file_path(
-        std::string_view string,
-        std::string_view file_path,
-        const config& cfg
-    );
+    std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
 
     void generate_and_output(const config& cfg);
 
@@ -3780,11 +3751,7 @@ namespace llmcpp
         return oss.str();
     }
 
-    std::string send_automatic1111_txt2img_request(
-        const config& cfg,
-        std::string_view prompt,
-        std::string_view negative_prompt
-    )
+    std::string send_automatic1111_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
     {
         const std::string_view host{ cfg.sd.host };
         const std::string_view port{ cfg.sd.port };
@@ -3970,10 +3937,7 @@ namespace llmcpp
         return decoded_image;
     }
 
-    std::string send_style_bert_voice_request(
-        const config& cfg,
-        std::string_view text
-    )
+    std::string send_style_bert_voice_request(const config& cfg, std::string_view text)
     {
         const std::string_view host{ cfg.sb.host };
         const std::string_view port{ cfg.sb.port };
@@ -4103,10 +4067,7 @@ namespace llmcpp
         return response_json.at("name").get<std::string>();
     }
 
-    void upload_images_to_comfy_ui(
-        const config& cfg,
-        context& ctx
-    )
+    void upload_images_to_comfy_ui(const config& cfg, context& ctx)
     {
         for (const std::string& key_value_pair : cfg.cu.upload_images)
         {
@@ -4129,10 +4090,7 @@ namespace llmcpp
         }
     }
 
-    void send_comfy_ui_prompt(
-        const config& cfg,
-        std::string_view prompt
-    )
+    void send_comfy_ui_prompt(const config& cfg, std::string_view prompt)
     {
         struct generated_file_info
         {
@@ -4340,11 +4298,7 @@ namespace llmcpp
         }
     }
 
-    std::string send_completions_request(
-        const config& cfg,
-        std::string_view prompt,
-        const text_generation_parameters& params,
-        int max_tokens
+    std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens
     )
     {
         const std::string_view host{ cfg.llm.host };
@@ -5074,11 +5028,7 @@ namespace llmcpp
         }
     }
 
-    void set_phase_variables(
-        const std::vector<std::string>& phases,
-        std::size_t phase_index,
-        context& ctx
-    )
+    void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, context& ctx)
     {
         if (phase_index >= phases.size())
         {
@@ -5098,26 +5048,19 @@ namespace llmcpp
         }
     }
 
-    void set_static_builtin_variables(
-        config& cfg
-    )
+    void set_static_builtin_variables(config& cfg)
     {
         cfg.ctx.set("stdin", builtin::stdin_(cfg));
     }
 
-    void set_dynamic_builtin_variables(
-        config& cfg
-    )
+    void set_dynamic_builtin_variables(config& cfg)
     {
         cfg.ctx.set("date", builtin::date());
         cfg.ctx.set("time", builtin::time());
         cfg.ctx.set("datetime", builtin::datetime());
     }
 
-    void set_paragraphs_to_phases(
-        const std::vector<item>& paragraphs,
-        std::vector<std::string>& phases
-    )
+    void set_paragraphs_to_phases(const std::vector<item>& paragraphs, std::vector<std::string>& phases)
     {
         for (const item& paragraph : paragraphs)
         {
@@ -5329,11 +5272,7 @@ namespace llmcpp
         return result;
     }
 
-    int parse_command_line(
-        int argc,
-        char** argv,
-        config& cfg
-    )
+    int parse_command_line(int argc, char** argv, config& cfg)
     {
         namespace po = boost::program_options;
 
@@ -5804,11 +5743,7 @@ namespace llmcpp
         write_code_block(cfg, response);
     }
 
-    std::string prompt_from_string_or_file_path(
-        std::string_view string,
-        std::string_view file_path,
-        const config& cfg
-    )
+    std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg)
     {
         return string.empty() ? read_text_file_to_string(file_path, cfg) : std::string{ string };
     }
