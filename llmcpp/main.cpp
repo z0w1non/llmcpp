@@ -929,6 +929,7 @@ namespace llmcpp
     void write_item_list(const config& cfg, std::string_view task);
 
     int send_token_count_request(const config& cfg, std::string_view prompt);
+
     int get_tokens_from_cache(const config& cfg, std::string_view str);
 
     std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx);
@@ -1647,11 +1648,9 @@ namespace llmcpp
                 prefix_expression_node = prefix_operator_ >> prefix_expression;
                 suffix_expression = parentheses_expression >> *suffix_operator_;
                 parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
-
                 macro_expression = macro_expression_node | primary;
                 macro_expression_node = name >> arguments;
                 arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
-
                 primary = variable | primitive;
                 variable = name;
                 primitive = bool_ | character | int_ | double_ | string;
@@ -1692,7 +1691,6 @@ namespace llmcpp
             skipped_rule<parentheses_expression_type()> parentheses_expression;
             skipped_rule<macro_expression_type()> macro_expression;
             skipped_rule<macro_expression_node_type()> macro_expression_node;
-
             skipped_rule<primary_type()> primary;
             skipped_rule<variable_type()> variable;
             skipped_rule<primitive_type()> primitive;
