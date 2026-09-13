@@ -1020,7 +1020,7 @@ namespace llmcpp
 
     void write_code_block(const config& cfg, std::string_view markdown);
 
-    void generate_text_and_write(const config& cfg, std::string_view prompt, const context& ctx);
+    void generate_text_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
 
     std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
 
@@ -4011,11 +4011,7 @@ namespace llmcpp
         return oss.str();
     }
 
-    std::string upload_image_to_comfy_ui(
-        const config& cfg,
-        std::string_view image_path,
-        bool overwrite
-    )
+    std::string upload_image_to_comfy_ui(const config& cfg, std::string_view image_path, bool overwrite)
     {
         const std::string image_data{ read_binary_file_to_string(image_path, cfg) };
         const std::string boundary{ generate_boundary() };
@@ -5701,7 +5697,7 @@ namespace llmcpp
         }
     }
 
-    void generate_text_and_write(const config& cfg, std::string_view prompt, const context& ctx)
+    void generate_text_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
     {
         const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
 
@@ -5747,7 +5743,7 @@ namespace llmcpp
             if (cfg.llm.mode == llm_mode::completions)
             {
                 const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
-                generate_text_and_write(cfg, prompt, cfg.ctx);
+                generate_text_and_write_file(cfg, prompt, cfg.ctx);
             }
             else if (cfg.llm.mode == llm_mode::chat_completions)
             {
