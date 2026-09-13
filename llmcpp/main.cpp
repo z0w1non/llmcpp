@@ -4064,11 +4064,9 @@ namespace llmcpp
 
         body += "--";
         body += boundary;
-        body += "\r\n";
-        body += "Content-Disposition: form-data; name=\"image\"; filename=\"";
+        body += "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"";
         body += filename;
-        body += "\"\r\n";
-        body += "Content-Type: image/png\r\n\r\n";
+        body += "\"\r\nContent-Type: image/png\r\n\r\n";
 
         body += image_data;
         body += "\r\n";
@@ -4077,9 +4075,7 @@ namespace llmcpp
         {
             body += "--";
             body += boundary;
-            body += "\r\n";
-            body += "Content-Disposition: form-data; name=\"overwrite\"\r\n\r\n";
-            body += "true\r\n";
+            body += "\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n";
         }
 
         body += "--";
