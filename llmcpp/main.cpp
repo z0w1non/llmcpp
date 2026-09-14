@@ -1279,7 +1279,8 @@ namespace llmcpp
         primitive_type tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type env(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
         primitive_type choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
@@ -2910,7 +2911,8 @@ namespace llmcpp
             {"tail", tail},
             {"head_tail", head_tail},
             {"json_literal", json_literal},
-            {"env", env},
+            {"getenv", getenv},
+            {"setenv", setenv},
             {"generated", generated},
             {"random", random},
             {"choice", choice},
@@ -3054,18 +3056,36 @@ namespace llmcpp
         return json_escape_string(get_or_throw<std::string>(arguments[0]));
     }
 
-    primitive_type builtin::env(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    primitive_type builtin::getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
     {
         if (arguments.size() < 1)
         {
             llmcpp::throw_exception(macro_exception{});
         }
 
-        const std::string& name{ get_or_throw<std::string>(arguments[0]) };
+        const std::string& key{ get_or_throw<std::string>(arguments[0]) };
 
-        if (const char* env{ boost::nowide::getenv(name.c_str()) }; env)
+        if (const char* env{ boost::nowide::getenv(key.c_str()) }; env)
         {
             return std::string{ env };
+        }
+
+        return std::string{};
+    }
+
+    primitive_type builtin::setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    {
+        if (arguments.size() < 2)
+        {
+            llmcpp::throw_exception(macro_exception{});
+        }
+
+        const std::string& key{ get_or_throw<std::string>(arguments[0]) };
+        const std::string& value{ get_or_throw<std::string>(arguments[1]) };
+
+        if (int result{ boost::nowide::setenv(key.c_str(), value.c_str(), 1) }; result == 0)
+        {
+            return std::string{};
         }
 
         return std::string{};
