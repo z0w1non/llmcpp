@@ -3213,7 +3213,7 @@ namespace llmcpp
         {
             context pushed{ ctx.make_pushed() };
             pushed.set("target", target);
-            pushed.set("max_token", std::to_string(max_token));
+            pushed.set("max_tokens", std::to_string(max_token));
             output = completions(cfg, prompt, pushed);
             output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
         }

@@ -307,7 +307,7 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 exit_code={{exit_code}}
 ```
 
-### `summary(prompt, target, max_token)`
+### `summary(prompt, target, max_tokens)`
 文字列を最大トークン数以下に要約する。
 
 ```
@@ -319,7 +319,7 @@ exit_code={{exit_code}}
 ```
 <|turn>system
 <|think|>
-Summarize the following text in {{max_token}} tokens or fewer. Output only the summary with no introductory text, markdown formatting, or additional commentary.
+Summarize the following text in {{max_tokens}} tokens or fewer. Output only the summary with no introductory text, markdown formatting, or additional commentary.
 <turn|>
 <|turn>user
 {{target}}
@@ -327,7 +327,7 @@ Summarize the following text in {{max_token}} tokens or fewer. Output only the s
 <|turn>model
 ```
 
-`{{target}}`, `{{max_token}}` は `prompt` の実行中のみ設定される。展開語の文字列のトークン数は `max_token` に切り詰められる。
+`{{target}}`, `{{max_tokens}}` は `prompt` の実行中のみ設定される。展開語の文字列のトークン数は `max_tokens` に切り詰められる。
 
 
 ### `random(min, max)`
