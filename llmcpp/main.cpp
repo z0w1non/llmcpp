@@ -1038,6 +1038,10 @@ namespace llmcpp
 
     void generate_text_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
 
+    std::string generate_uuid_v4();
+
+    std::string generate_chat_filename();
+
     std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
 
     void generate_and_output(const config& cfg);
