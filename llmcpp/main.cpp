@@ -222,27 +222,44 @@ namespace llmcpp
 
     struct text_generation_parameters
     {
-        struct chat_completions_context
+        struct chat_completions_arguments
         {
             struct image_info_type
             {
-                std::string_view base64_image;
-                std::string_view mime_type;
+                std::string base64_image;
+                std::string mime_type;
+
+                static image_info_type from_file(std::string_view path, const config& cfg);
             };
+
+            struct message_type
+            {
+                std::string role;
+                nlohmann::json content;
+            };
+
+            using messages_type = std::vector<message_type>;
+
+            std::string_view prompt;
+            messages_type messages;
             std::optional<image_info_type> image_info;
         };
         virtual ~text_generation_parameters() {}
-        virtual std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const = 0;
-        virtual std::string parse_response_for_text_completions(const std::string& response) const = 0;
+        virtual std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const = 0;
+        virtual std::string parse_response_for_completions(const std::string& response) const = 0;
         virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
         virtual int parse_response_for_token_count(const std::string& response) const = 0;
-        virtual std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const = 0;
+        virtual std::string get_request_body_for_chat_completions(const chat_completions_arguments& ctx) const = 0;
         virtual std::string parse_response_for_chat_completions(const std::string& response) const = 0;
         virtual int get_max_tokens() const = 0;
         virtual int get_truncation_length() const = 0;
     };
 
-    enum class llm_mode
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
+        text_generation_parameters::chat_completions_arguments::message_type,
+        role, content
+    )
+        enum class llm_mode
     {
         completions, chat_completions
     };
@@ -256,6 +273,7 @@ namespace llmcpp
         std::string prompt;
         std::string prompt_file;
         std::string output_file;
+        std::string chat_file;
         std::string generation_prefix;
         std::string generation_suffix;
         std::string paragraphs_file;
@@ -344,11 +362,11 @@ namespace llmcpp
         std::string dry_sequence_breakers;
         std::string grammar_string;
 
-        std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
-        std::string parse_response_for_text_completions(const std::string& response) const override;
+        std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
+        std::string parse_response_for_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const override;
+        std::string get_request_body_for_chat_completions(const chat_completions_arguments& ctx) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
@@ -408,11 +426,11 @@ namespace llmcpp
         bool logprobs{};
         bool replace_instruct_placeholders{};
 
-        std::string get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const override;
-        std::string parse_response_for_text_completions(const std::string& response) const override;
+        std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
+        std::string parse_response_for_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const override;
+        std::string get_request_body_for_chat_completions(const chat_completions_arguments& ctx) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
@@ -918,9 +936,9 @@ namespace llmcpp
 
     int get_tokens_from_cache(const config& cfg, std::string_view str);
 
-    std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx);
+    std::string completions(const config& cfg, std::string_view prompt, const context& ctx);
 
-    std::string chat_completions(const config& cfg, std::string_view prompt, const context& ctx);
+    std::string chat_completions(const config& cfg, const context& ctx, const text_generation_parameters::chat_completions_arguments& arguments);
 
     std::string unescape_string(std::string_view str);
 
@@ -3065,7 +3083,7 @@ namespace llmcpp
         std::string result;
         {
             context pushed{ ctx.make_pushed() };
-            result = generate_text(cfg, prompt, pushed);
+            result = completions(cfg, prompt, pushed);
         }
         return result;
     }
@@ -3176,7 +3194,7 @@ namespace llmcpp
             context pushed{ ctx.make_pushed() };
             pushed.set("target", target);
             pushed.set("max_token", std::to_string(max_token));
-            output = generate_text(cfg, prompt, pushed);
+            output = completions(cfg, prompt, pushed);
             output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
         }
 
@@ -4292,40 +4310,26 @@ namespace llmcpp
         }
     }
 
+    text_generation_parameters::chat_completions_arguments::image_info_type text_generation_parameters::chat_completions_arguments::image_info_type::from_file(std::string_view path, const config& cfg)
+    {
+        const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
+        const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
+        return image_info_type{ base64_image, mime_type };
+    }
+
     std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens
     )
     {
         const std::string_view host{ cfg.llm.host };
         const std::string_view port{ cfg.llm.port };
-        const std::string target{ llm_mode_to_target(cfg.llm.mode, cfg) };
+        const std::string_view target{ cfg.llm.completions_target };
 
         tcp tcp;
         tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
         tcp.connect(host, port);
 
-        std::string request_body;
-        if (cfg.llm.mode == llm_mode::completions)
-        {
-            request_body = params.get_request_body_for_text_completions(prompt, max_tokens);
-            BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
-        }
-        else if (cfg.llm.mode == llm_mode::chat_completions)
-        {
-            text_generation_parameters::chat_completions_context ctx;
-            if (!cfg.llm.image_file.empty())
-            {
-                const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
-                const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
-                ctx.image_info = { base64_image, mime_type };
-            }
-
-            request_body = params.get_request_body_for_chat_completions(prompt, max_tokens, ctx);
-            BOOST_LOG_TRIVIAL(info) << "Send JSON";
-        }
-        else
-        {
-            llmcpp::throw_exception(logic_error{});
-        }
+        const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens) };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
@@ -4338,18 +4342,37 @@ namespace llmcpp
         boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
-        if (cfg.llm.mode == llm_mode::completions)
-        {
-            return params.parse_response_for_text_completions(response.body());
-        }
-        else if (cfg.llm.mode == llm_mode::chat_completions)
-        {
-            return params.parse_response_for_chat_completions(response.body());
-        }
-        llmcpp::throw_exception(logic_error{});
+        return params.parse_response_for_completions(response.body());
     }
 
-    std::string tg_completions_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
+    std::string send_chat_completions_request(const config& cfg, const text_generation_parameters& params, const text_generation_parameters::chat_completions_arguments& arguments)
+    {
+        const std::string_view host{ cfg.llm.host };
+        const std::string_view port{ cfg.llm.port };
+        const std::string_view target{ cfg.llm.chat_completions_target };
+
+        tcp tcp;
+        tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
+        tcp.connect(host, port);
+
+        const std::string request_body{ params.get_request_body_for_chat_completions(arguments) };
+        BOOST_LOG_TRIVIAL(info) << "Send JSON";
+
+        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+
+        if (!cfg.llm.api_key.empty())
+        {
+            request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
+        }
+
+        tcp.send(request);
+        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
+        return params.parse_response_for_chat_completions(response.body());
+    }
+
+    std::string tg_completions_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4423,7 +4446,7 @@ namespace llmcpp
         return json.dump();
     }
 
-    std::string tg_completions_parameters::parse_response_for_text_completions(const std::string& response) const
+    std::string tg_completions_parameters::parse_response_for_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("choices").at(0).at("text").get<std::string>();
@@ -4442,7 +4465,7 @@ namespace llmcpp
         return response_json.at("length").get<int>();
     }
 
-    std::string tg_completions_parameters::get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const
+    std::string tg_completions_parameters::get_request_body_for_chat_completions(const chat_completions_arguments& ctx) const
     {
         return {};
     }
@@ -4452,7 +4475,7 @@ namespace llmcpp
         return {};
     }
 
-    std::string kc_generation_parameters::get_request_body_for_text_completions(std::string_view prompt, int max_tokens) const
+    std::string kc_generation_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4505,7 +4528,7 @@ namespace llmcpp
         return json.dump();
     }
 
-    std::string kc_generation_parameters::parse_response_for_text_completions(const std::string& response) const
+    std::string kc_generation_parameters::parse_response_for_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("results").at(0).at("text").get<std::string>();
@@ -4524,12 +4547,12 @@ namespace llmcpp
         return response_json.at("value").get<int>();
     }
 
-    std::string kc_generation_parameters::get_request_body_for_chat_completions(std::string_view prompt, int max_tokens, const chat_completions_context& ctx) const
+    std::string kc_generation_parameters::get_request_body_for_chat_completions(const chat_completions_arguments& ctx) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
         //json["max_length"] = max_tokens;
-        json["max_tokens"] = max_tokens;
+        json["max_tokens"] = get_max_tokens();
         json["rep_pen"] = rep_pen;
         json["rep_pen_range"] = rep_pen_range;
         json["sampler_order"] = sampler_order;
@@ -4565,10 +4588,20 @@ namespace llmcpp
         json["banned_tokens"] = banned_tokens;
         json["logprobs"] = logprobs;
 
+        nlohmann::json messages{ nlohmann::json::array() };
+
+        for (const auto& [role, content] : ctx.messages)
+        {
+            messages.push_back({
+                { "role", role },
+                { "content", content }
+                });
+        }
+
         nlohmann::json content{ nlohmann::json::array() };
         content.push_back({
             { "type", "text" },
-            { "text", prompt }
+            { "text", ctx.prompt }
             });
 
         if (ctx.image_info)
@@ -4580,12 +4613,12 @@ namespace llmcpp
                 });
         }
 
-        nlohmann::json message{
+        messages.push_back({
             { "role", "user" },
             { "content", std::move(content) }
-        };
+            });
 
-        json["messages"] = nlohmann::json::array({ message });
+        json["messages"] = messages;
 
         return json.dump();
     }
@@ -4704,7 +4737,7 @@ namespace llmcpp
         }
     }
 
-    std::string generate_text(const config& cfg, std::string_view prompt, const context& ctx)
+    std::string completions(const config& cfg, std::string_view prompt, const context& ctx)
     {
         std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
         const std::string expanded_prefix{ expand_macro(cfg.llm.generation_prefix, cfg, ctx) };
@@ -4760,29 +4793,11 @@ namespace llmcpp
         return generated;
     }
 
-    std::string chat_completions(const config& cfg, std::string_view prompt, const context& ctx)
+    std::string chat_completions(const config& cfg, const context& ctx, const text_generation_parameters::chat_completions_arguments& arguments)
     {
-        const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
-
-        const int prompt_tokens{ send_token_count_request(cfg, expanded_prompt) };
-
+        const std::string expanded_prompt{ expand_macro(arguments.prompt, cfg, ctx) };
         BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
-
-        const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - prompt_tokens };
-        if (remaining_tokens <= 0)
-        {
-            BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens";
-            return std::string{};
-        }
-
-        const int max_tokens{ std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens) };
-        if (max_tokens <= 0)
-        {
-            BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
-            return std::string{};
-        }
-
-        return send_completions_request(cfg, expanded_prompt, *cfg.llm.backend, max_tokens);
+        return send_chat_completions_request(cfg, *cfg.llm.backend, arguments);
     }
 
     std::string unescape_string(std::string_view str)
@@ -5322,6 +5337,7 @@ namespace llmcpp
                 ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
                 ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
                 ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
+                ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
                 ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
                 ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
                 ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
@@ -5699,7 +5715,7 @@ namespace llmcpp
     {
         const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
 
-        std::string response{ generate_text(cfg, truncated_prompt, ctx) };
+        std::string response{ completions(cfg, truncated_prompt, ctx) };
         response = remove_reasoning(response, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
         response += cfg.llm.generation_suffix;
 
@@ -5715,9 +5731,22 @@ namespace llmcpp
 
     void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
     {
-        const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
+        const std::string chat_file_content{ read_text_file_to_string(cfg.llm.chat_file, cfg) };
+        text_generation_parameters::chat_completions_arguments arguments;
+        arguments.prompt = prompt;
+        if (!chat_file_content.empty())
+        {
+            arguments.messages = nlohmann::json::parse(chat_file_content);
+        }
+        if (!cfg.llm.image_file.empty())
+        {
+            arguments.image_info = text_generation_parameters::chat_completions_arguments::image_info_type::from_file(cfg.llm.image_file, cfg);
+        }
 
-        const std::string response{ chat_completions(cfg, truncated_prompt, ctx) };
+        const std::string response{ chat_completions(cfg, ctx, arguments) };
+        arguments.messages.emplace_back("user", prompt);
+        arguments.messages.emplace_back("assistant", response);
+        write_file(cfg, nlohmann::json{ arguments.messages }.dump(), cfg.llm.chat_file, std::ios::app);
 
         write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
