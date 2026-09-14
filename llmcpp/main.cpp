@@ -3527,10 +3527,7 @@ namespace llmcpp
             append_uint32_be(static_cast<std::uint32_t>(data.size()), chunk);
 
             const std::size_t crc_start{ chunk.size() };
-            chunk.push_back('t');
-            chunk.push_back('E');
-            chunk.push_back('X');
-            chunk.push_back('t');
+            chunk.push_back('t'); chunk.push_back('E'); chunk.push_back('X'); chunk.push_back('t');
             chunk.insert(chunk.end(), data.begin(), data.end());
 
             const std::uint32_t crc{ calculate_crc32(&chunk[crc_start], chunk.size() - crc_start) };
