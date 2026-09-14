@@ -5788,6 +5788,7 @@ namespace llmcpp
         arguments.messages.emplace_back("user", prompt);
         arguments.messages.emplace_back("assistant", response);
         write_file(cfg, nlohmann::json{ arguments.messages }.dump(), chat_file, std::ios::app);
+        boost::nowide::setenv("chat_file", chat_file.c_str(), true);
 
         write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
