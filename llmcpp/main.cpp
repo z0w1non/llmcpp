@@ -3269,7 +3269,6 @@ namespace llmcpp
         return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.extension().string();
     }
 
-
     std::string builtin::date()
     {
         const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
