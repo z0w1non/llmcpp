@@ -3083,7 +3083,7 @@ namespace llmcpp
         const std::string& key{ get_or_throw<std::string>(arguments[0]) };
         const std::string& value{ get_or_throw<std::string>(arguments[1]) };
 
-        if (int result{ boost::nowide::setenv(key.c_str(), value.c_str(), 1) }; result == 0)
+        if (int result{ boost::nowide::setenv(key.c_str(), value.c_str(), true) }; result == 0)
         {
             return std::string{};
         }
