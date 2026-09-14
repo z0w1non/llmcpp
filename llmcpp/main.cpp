@@ -3471,7 +3471,6 @@ namespace llmcpp
         {
             const std::filesystem::path base_path{ expand_macro(cfg.base_path, cfg, cfg.ctx) };
             return base_path / file_path;
-
         }
         return file_path;
     }
