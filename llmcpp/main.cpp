@@ -3206,21 +3206,21 @@ namespace llmcpp
 
         const std::string_view prompt{ get_or_throw<std::string>(arguments[0]) };
         const std::string& target{ get_or_throw<std::string>(arguments[1]) };
-        const int max_token{ get_or_throw<int>(arguments[2]) };
+        const int max_tokens{ get_or_throw<int>(arguments[2]) };
 
         std::string output;
 
         {
             context pushed{ ctx.make_pushed() };
             pushed.set("target", target);
-            pushed.set("max_tokens", std::to_string(max_token));
+            pushed.set("max_tokens", std::to_string(max_tokens));
             output = completions(cfg, prompt, pushed);
             output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
         }
 
         std::string truncated;
         int tokens{};
-        truncate_by_tokens(output, max_token, cfg, false, truncated, tokens);
+        truncate_by_tokens(output, max_tokens, cfg, false, truncated, tokens);
 
         return truncated;
     }
@@ -5746,6 +5746,29 @@ namespace llmcpp
         write_code_block(cfg, response);
     }
 
+    std::string generate_uuid_v4()
+    {
+        std::ostringstream oss;
+        oss << std::hex << std::setfill('0');
+        oss << std::setw(8) << (random<std::uint32_t>() & 0xFFFFFFFF) << '-'
+            << std::setw(4) << (random<std::uint32_t>() & 0xFFFF) << '-'
+            << '4' << std::setw(3) << (random<std::uint32_t>() & 0xFFF) << '-'
+            << std::setw(4) << ((random<std::uint32_t>() & 0x3FFF) | 0x8000) << '-'
+            << std::setw(12) << (random<std::uint64_t>() & 0xFFFFFFFFFFFFULL)
+            ;
+        return oss.str();
+    }
+
+    std::string generate_chat_filename()
+    {
+        const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+        const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d_%H%M%S") };
+        std::ostringstream oss;
+        oss.imbue(std::locale(oss.getloc(), facet));
+        oss << "chat_" << local_time << "_" << generate_uuid_v4() << ".json";
+        return oss.str();
+    }
+
     void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
     {
         const std::string chat_file_content{ read_text_file_to_string(cfg.llm.chat_file, cfg) };
@@ -5760,10 +5783,11 @@ namespace llmcpp
             arguments.image_info = text_generation_parameters::chat_completions_arguments::image_info_type::from_file(cfg.llm.image_file, cfg);
         }
 
+        const std::string chat_file{ cfg.llm.chat_file.empty() ? generate_chat_filename() : cfg.llm.chat_file };
         const std::string response{ chat_completions(cfg, ctx, arguments) };
         arguments.messages.emplace_back("user", prompt);
         arguments.messages.emplace_back("assistant", response);
-        write_file(cfg, nlohmann::json{ arguments.messages }.dump(), cfg.llm.chat_file, std::ios::app);
+        write_file(cfg, nlohmann::json{ arguments.messages }.dump(), chat_file, std::ios::app);
 
         write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
