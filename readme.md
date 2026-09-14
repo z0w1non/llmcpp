@@ -278,11 +278,14 @@ litagin02/Style-Bert-VITS2 (https://github.com/litagin02/Style-Bert-VITS2) を�
 { "key": "{{json_literal(file("filename"))}}" }
 ```
 
-### `env(var)`
-環境変数 `var` の値に展開される。
+### `getenv(key)`
+環境変数 `key` の値に展開される。
 ```
 {{env("path")}}
 ```
+
+### `setenv(key, value)`
+環境変数 `key` の値を `value` に設定し、空文字に展開される。
 
 ### `datetime`
 `yyyyMMddhhmmss` 形式で表現された実行時点の時刻に展開される。主に生成したテキストを生成単位で出力する目的で使用する。
