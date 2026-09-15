@@ -5837,9 +5837,9 @@ namespace llmcpp
     {
         if (cfg.seed == -1)
         {
-            cfg.tg.seed = random<int>(0);
-            cfg.kc.sampler_seed = random<int>(0, 999999);
-            cfg.sd.seed = random<int>(0);
+            cfg.tg.seed = random<std::uint32_t>(0);
+            cfg.kc.sampler_seed = random<std::uint32_t>(0, 999999);
+            cfg.sd.seed = random<std::uint32_t>(0);
         }
         else
         {
