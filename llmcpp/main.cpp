@@ -669,44 +669,11 @@ namespace llmcpp
 
     using vr_primitive_type = value_and_reference_variant<int, bool, char, double, std::string>;
 
-    struct unwrap_impl
-    {
-        template<typename T>
-        decltype(auto) operator()(T&& value)
-        {
-            return std::forward<T>(value);
-        }
-
-        template<typename T>
-        T& operator()(std::reference_wrapper<T> ref)
-        {
-            return ref.get();
-        }
-
-        template<typename T>
-        const T& operator()(std::reference_wrapper<const T> ref)
-        {
-            return ref.get();
-        }
-    };
+    template<typename T>
+    decltype(auto) unwrap(T&& arg);
 
     template<typename T>
-    decltype(auto) unwrap(T&& arg)
-    {
-        return unwrap_impl{}(std::forward<T>(arg));
-    }
-
-    template<typename T>
-    struct unwrap_type_impl
-    {
-        using type = T;
-    };
-
-    template<typename T>
-    struct unwrap_type_impl<std::reference_wrapper<T>>
-    {
-        using type = T;
-    };
+    struct unwrap_type_impl;
 
     template <typename T>
     using unwrap_type_t = typename unwrap_type_impl<std::decay_t<T>>::type;
@@ -1347,6 +1314,45 @@ namespace llmcpp
             BOOST_LOG_TRIVIAL(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
             llmcpp::throw_exception(macro_exception{});
         }
+    };
+
+    struct unwrap_impl
+    {
+        template<typename T>
+        decltype(auto) operator()(T&& value)
+        {
+            return std::forward<T>(value);
+        }
+
+        template<typename T>
+        T& operator()(std::reference_wrapper<T> ref)
+        {
+            return ref.get();
+        }
+
+        template<typename T>
+        const T& operator()(std::reference_wrapper<const T> ref)
+        {
+            return ref.get();
+        }
+    };
+
+    template<typename T>
+    decltype(auto) unwrap(T&& arg)
+    {
+        return unwrap_impl{}(std::forward<T>(arg));
+    }
+
+    template<typename T>
+    struct unwrap_type_impl
+    {
+        using type = T;
+    };
+
+    template<typename T>
+    struct unwrap_type_impl<std::reference_wrapper<T>>
+    {
+        using type = T;
     };
 
     std::string primitive_to_string(const primitive_type& primitive)
