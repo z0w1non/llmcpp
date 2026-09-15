@@ -4322,8 +4322,7 @@ namespace llmcpp
         return image_info_type{ base64_image, mime_type };
     }
 
-    std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens
-    )
+    std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens)
     {
         const std::string_view host{ cfg.llm.host };
         const std::string_view port{ cfg.llm.port };
