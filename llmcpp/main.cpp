@@ -711,54 +711,15 @@ namespace llmcpp
     template <typename T>
     using unwrap_type_t = typename unwrap_type_impl<std::decay_t<T>>::type;
 
-    struct x_primitive_to_string_visitor
-    {
-        template<typename T>
-        std::string operator ()(const T& value) const
-        {
-            if constexpr (std::is_same_v<unwrap_type_t<T>, std::string>)
-            {
-                return unwrap(value);
-            }
-            return boost::lexical_cast<std::string>(unwrap(value));
-        }
+    std::string primitive_to_string(const primitive_type& primitive);
 
-        [[noreturn]] std::string operator ()(const undefined_variable_type& undefined_variable) const
-        {
-            BOOST_LOG_TRIVIAL(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
-            llmcpp::throw_exception(macro_exception{});
-        }
-    };
-
-    std::string primitive_to_string(const primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
-
-    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
+    std::string vr_primitive_to_string(const vr_primitive_type& primitive);
 
     template<typename Result, typename Exception = macro_exception>
-    const Result& get_or_throw(const primitive_type& value)
-    {
-        if (const Result* ptr{ boost::get<Result>(&value) }; ptr)
-        {
-            return *ptr;
-        }
-        llmcpp::throw_exception(Exception{});
-    }
+    const Result& get_or_throw(const primitive_type& value);
 
     template<typename Result>
-    std::optional<Result> get_optional(const primitive_type& value)
-    {
-        if (const Result* ptr{ boost::get<Result>(&value) }; ptr)
-        {
-            return *ptr;
-        }
-        return std::nullopt;
-    }
+    std::optional<Result> get_optional(const primitive_type& value);
 
     class context
         : private boost::noncopyable
@@ -855,6 +816,295 @@ namespace llmcpp
         mutable lru_cache lru_cache;
         context ctx;
     };
+
+    namespace builtin
+    {
+        using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
+        std::optional<macro_type> get_macro(std::string_view name);
+
+        primitive_type int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+
+        primitive_type file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type head(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+        primitive_type extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
+
+
+        std::string date();
+        std::string time();
+        std::string datetime();
+        std::string stdin_(const config& cfg);
+    } // namespace builtin
+
+    namespace parser
+    {
+        enum class assignment_operator
+        {
+            assign,             // =
+            plus_assign,        // +=
+            minus_assign,       // -=
+            multiplies_assign,  // *=
+            divides_assign,     // /=
+            modulus_assign,     // %=
+            shift_left_assign,  // <<=
+            shift_right_assign, // >>=
+            and_assign,         // &=
+            xor_assign,         // ^=
+            or_assign           // |=
+        };
+
+        enum class equality_operator
+        {
+            equal,    // ==
+            not_equal // !=
+        };
+
+        enum class relational_operator
+        {
+            less,         // <
+            greater,      // >
+            less_equal,   // <=
+            greater_equal // >=
+        };
+
+        enum class shift_operator
+        {
+            shift_left, // <<
+            shift_right // >>
+        };
+
+        enum class additive_operator
+        {
+            plus, // +
+            minus // -
+        };
+
+        enum class multiplicative_operator
+        {
+            multiplies, // *
+            divides,    // /
+            modulus     // %
+        };
+
+        enum class prefix_operator
+        {
+            prefix_increment, // ++a
+            prefix_decrement, // --a
+            prefix_plus,      // +a
+            prefix_minus,     // -a
+            logical_not,      // !
+            bitwise_not       // ~
+        };
+
+        enum class suffix_operator
+        {
+            suffix_increment, // ++
+            suffix_decrement  // --
+        };
+
+        struct variable_type
+        {
+            std::string name;
+        };
+        using primary_type = boost::variant<primitive_type, variable_type>;
+
+        template<typename Operand, typename Operator>
+        struct operator_operand_pair
+        {
+            using operand_type = Operand;
+            using operator_type = Operator;
+            operator_type operator_;
+            operand_type operand;
+        };
+
+        template<typename LowerExpression, typename Operator>
+        struct basic_variadic_binary_expression
+        {
+            using lower_expression_type = LowerExpression;
+            using operator_type = Operator;
+            lower_expression_type first;
+            std::vector<operator_operand_pair<lower_expression_type, operator_type>> rest;
+        };
+
+        struct macro_expression_node_type;
+        using macro_expression_type = boost::variant<primary_type, boost::recursive_wrapper<macro_expression_node_type>>;
+        struct expression_type;
+        using parentheses_expression_type = boost::variant<macro_expression_type, boost::recursive_wrapper<expression_type>>;
+
+        struct suffix_expression_type
+        {
+            parentheses_expression_type operand;
+            std::vector<suffix_operator> operators;
+        };
+
+        struct prefix_expression_node_type;
+        using prefix_expression_type = boost::make_recursive_variant<suffix_expression_type, prefix_expression_node_type, boost::recursive_variant_>::type;
+        struct prefix_expression_node_type
+        {
+            prefix_operator operator_;
+            boost::recursive_wrapper<prefix_expression_type> operand;
+        };
+
+        using multiplicative_expression_type = basic_variadic_binary_expression<prefix_expression_type, multiplicative_operator>;
+        using additive_expression_type = basic_variadic_binary_expression<multiplicative_expression_type, additive_operator>;
+        using shift_expression_type = basic_variadic_binary_expression<additive_expression_type, shift_operator>;
+        using relational_expression_type = basic_variadic_binary_expression<shift_expression_type, relational_operator>;
+        using equality_expression_type = basic_variadic_binary_expression<relational_expression_type, equality_operator>;
+        using and_expression_type = std::vector<equality_expression_type>;
+        using xor_expression_type = std::vector<and_expression_type>;
+        using or_expression_type = std::vector<xor_expression_type>;
+        using logical_and_expression_type = std::vector<or_expression_type>;
+        using logical_or_expression_type = std::vector<logical_and_expression_type>;
+
+        struct conditional_expression_node_type;
+        using conditional_expression_type = boost::variant<logical_or_expression_type, boost::recursive_wrapper<conditional_expression_node_type>>;
+        struct conditional_expression_node_type
+        {
+            logical_or_expression_type condition;
+            boost::recursive_wrapper<expression_type> then_expr;
+            conditional_expression_type else_expr;
+        };
+
+        struct assignment_expression_node_type;
+        using assignment_expression_type = boost::variant<conditional_expression_type, boost::recursive_wrapper<assignment_expression_node_type>>;
+        struct assignment_expression_node_type
+        {
+            conditional_expression_type lhs;
+            assignment_operator operator_;
+            assignment_expression_type rhs;
+        };
+
+        struct macro_expression_node_type
+        {
+            std::string name;
+            std::vector<assignment_expression_type> arguments;
+        };
+
+        struct expression_type
+        {
+            std::vector<assignment_expression_type> expressions;
+            bool terminated{};
+        };
+
+        struct statement_type
+            : std::vector<expression_type>
+        {
+            using std::vector<expression_type>::vector;
+        };
+
+        struct placeholder_type
+        {
+            expression_type expression;
+        };
+
+        using node_type = boost::variant<std::string, placeholder_type>;
+
+        struct assignment_symbols;
+        struct equality_symbols;
+        struct relational_symbols;
+        struct shift_symbols;
+        struct additive_symbols;
+        struct multiplicative_symbols;
+        struct prefix_symbols;
+        struct suffix_symbols;
+        struct escaped_chars;
+
+        template<typename Iterator>
+        struct document_grammar
+            : boost::spirit::qi::grammar<Iterator, std::vector<node_type>()>
+        {
+            document_grammar();
+
+            template<typename ... Args>
+            using rule = boost::spirit::qi::rule<Iterator, Args ...>;
+
+            template<typename ... Args>
+            using skipped_rule = boost::spirit::qi::rule<Iterator, boost::spirit::qi::space_type, Args ...>;
+
+            rule<std::vector<node_type>()> document;
+            rule<node_type()> node;
+            rule<std::string()> plain_text;
+            rule<placeholder_type()> placeholder;
+
+            skipped_rule<expression_type()> expression;
+            skipped_rule<assignment_expression_type()> assignment_expression;
+            skipped_rule<assignment_expression_node_type()> assignment_expression_node;
+            skipped_rule<conditional_expression_type()> conditional_expression;
+            skipped_rule<conditional_expression_node_type()> conditional_expression_node;
+            skipped_rule<logical_or_expression_type()> logical_or_expression;
+            skipped_rule<logical_and_expression_type()> logical_and_expression;
+            skipped_rule<or_expression_type()> or_expression;
+            skipped_rule<xor_expression_type()> xor_expression;
+            skipped_rule<and_expression_type()> and_expression;
+            skipped_rule<equality_expression_type()> equality_expression;
+            skipped_rule<relational_expression_type()> relational_expression;
+            skipped_rule<shift_expression_type()> shift_expression;
+            skipped_rule<additive_expression_type()> additive_expression;
+            skipped_rule<multiplicative_expression_type()> multiplicative_expression;
+            skipped_rule<prefix_expression_type()> prefix_expression;
+            skipped_rule<prefix_expression_node_type()> prefix_expression_node;
+            skipped_rule<suffix_expression_type()> suffix_expression;
+            skipped_rule<parentheses_expression_type()> parentheses_expression;
+            skipped_rule<macro_expression_type()> macro_expression;
+            skipped_rule<macro_expression_node_type()> macro_expression_node;
+            skipped_rule<primary_type()> primary;
+            skipped_rule<variable_type()> variable;
+            skipped_rule<primitive_type()> primitive;
+            skipped_rule<vr_primitive_type()> vr_primitive;
+            skipped_rule<std::string()> name;
+            skipped_rule<std::vector<assignment_expression_type>()> arguments;
+            skipped_rule<char()> character;
+            skipped_rule<std::string()> string;
+        };
+
+        using grammar = document_grammar<std::string_view::const_iterator>;
+
+        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
+        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
+        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx);
+
+        vr_primitive_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_primary(const primary_type& primary, const config& cfg, context& ctx);
+        vr_primitive_type evaluate_variable(const variable_type& symbol, const config& cfg, context& ctx);
+        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive);
+        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive);
+        primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
+    } // namespace parser
 
     std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
 
@@ -1057,7 +1307,57 @@ namespace llmcpp
     void iterate(config& cfg);
 
     int exception_safe_main(int argc, char** argv);
+} // namespace llmcpp
 
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::suffix_expression_type,
+    operand, operators
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::prefix_expression_node_type,
+    operator_, operand
+)
+
+BOOST_FUSION_ADAPT_TPL_STRUCT(
+    (Operand)(Operator),
+    (llmcpp::parser::operator_operand_pair)(Operand)(Operator),
+    operator_, operand
+)
+
+BOOST_FUSION_ADAPT_TPL_STRUCT(
+    (LowerExpression)(Operator),
+    (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
+    first, rest
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::conditional_expression_node_type,
+    condition, then_expr, else_expr
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::macro_expression_node_type,
+    name, arguments
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::variable_type,
+    name
+);
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::assignment_expression_node_type,
+    lhs, operator_, rhs
+)
+
+BOOST_FUSION_ADAPT_STRUCT(
+    llmcpp::parser::expression_type,
+    expressions, terminated
+)
+
+namespace llmcpp
+{
     command_mode string_to_command_mode(std::string_view str)
     {
         static const std::unordered_map<std::string_view, command_mode> map
@@ -1074,6 +1374,55 @@ namespace llmcpp
             return iter->second;
         }
         llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ str } });
+    }
+
+    struct x_primitive_to_string_visitor
+    {
+        template<typename T>
+        std::string operator ()(const T& value) const
+        {
+            if constexpr (std::is_same_v<unwrap_type_t<T>, std::string>)
+            {
+                return unwrap(value);
+            }
+            return boost::lexical_cast<std::string>(unwrap(value));
+        }
+
+        [[noreturn]] std::string operator ()(const undefined_variable_type& undefined_variable) const
+        {
+            BOOST_LOG_TRIVIAL(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
+            llmcpp::throw_exception(macro_exception{});
+        }
+    };
+
+    std::string primitive_to_string(const primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    template<typename Result, typename Exception>
+    const Result& get_or_throw(const primitive_type& value)
+    {
+        if (const Result* ptr{ boost::get<Result>(&value) }; ptr)
+        {
+            return *ptr;
+        }
+        llmcpp::throw_exception(Exception{});
+    }
+
+    template<typename Result>
+    std::optional<Result> get_optional(const primitive_type& value)
+    {
+        if (const Result* ptr{ boost::get<Result>(&value) }; ptr)
+        {
+            return *ptr;
+        }
+        return std::nullopt;
     }
 
     context::context()
@@ -1268,204 +1617,8 @@ namespace llmcpp
         return distribution(random_engine);
     }
 
-    namespace builtin
-    {
-        using macro_type = std::function<primitive_type(const std::vector<primitive_type>&, const config&, context&)>;
-        std::optional<macro_type> get_macro(std::string_view name);
-
-        primitive_type int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-
-        primitive_type file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type head(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-        primitive_type extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx);
-
-
-        std::string date();
-        std::string time();
-        std::string datetime();
-        std::string stdin_(const config& cfg);
-    } // namespace builtin
-
     namespace parser
     {
-        enum class assignment_operator
-        {
-            assign,             // =
-            plus_assign,        // +=
-            minus_assign,       // -=
-            multiplies_assign,  // *=
-            divides_assign,     // /=
-            modulus_assign,     // %=
-            shift_left_assign,  // <<=
-            shift_right_assign, // >>=
-            and_assign,         // &=
-            xor_assign,         // ^=
-            or_assign           // |=
-        };
-
-        enum class equality_operator
-        {
-            equal,    // ==
-            not_equal // !=
-        };
-
-        enum class relational_operator
-        {
-            less,         // <
-            greater,      // >
-            less_equal,   // <=
-            greater_equal // >=
-        };
-
-        enum class shift_operator
-        {
-            shift_left, // <<
-            shift_right // >>
-        };
-
-        enum class additive_operator
-        {
-            plus, // +
-            minus // -
-        };
-
-        enum class multiplicative_operator
-        {
-            multiplies, // *
-            divides,    // /
-            modulus     // %
-        };
-
-        enum class prefix_operator
-        {
-            prefix_increment, // ++a
-            prefix_decrement, // --a
-            prefix_plus,      // +a
-            prefix_minus,     // -a
-            logical_not,      // !
-            bitwise_not       // ~
-        };
-
-        enum class suffix_operator
-        {
-            suffix_increment, // ++
-            suffix_decrement  // --
-        };
-
-        struct variable_type
-        {
-            std::string name;
-        };
-        using primary_type = boost::variant<primitive_type, variable_type>;
-
-        template<typename Operand, typename Operator>
-        struct operator_operand_pair
-        {
-            using operand_type = Operand;
-            using operator_type = Operator;
-            operator_type operator_;
-            operand_type operand;
-        };
-
-        template<typename LowerExpression, typename Operator>
-        struct basic_variadic_binary_expression
-        {
-            using lower_expression_type = LowerExpression;
-            using operator_type = Operator;
-            lower_expression_type first;
-            std::vector<operator_operand_pair<lower_expression_type, operator_type>> rest;
-        };
-
-        struct macro_expression_node_type;
-        using macro_expression_type = boost::variant<primary_type, boost::recursive_wrapper<macro_expression_node_type>>;
-        struct expression_type;
-        using parentheses_expression_type = boost::variant<macro_expression_type, boost::recursive_wrapper<expression_type>>;
-
-        struct suffix_expression_type
-        {
-            parentheses_expression_type operand;
-            std::vector<suffix_operator> operators;
-        };
-
-        struct prefix_expression_node_type;
-        using prefix_expression_type = boost::make_recursive_variant<suffix_expression_type, prefix_expression_node_type, boost::recursive_variant_>::type;
-        struct prefix_expression_node_type
-        {
-            prefix_operator operator_;
-            boost::recursive_wrapper<prefix_expression_type> operand;
-        };
-
-        using multiplicative_expression_type = basic_variadic_binary_expression<prefix_expression_type, multiplicative_operator>;
-        using additive_expression_type = basic_variadic_binary_expression<multiplicative_expression_type, additive_operator>;
-        using shift_expression_type = basic_variadic_binary_expression<additive_expression_type, shift_operator>;
-        using relational_expression_type = basic_variadic_binary_expression<shift_expression_type, relational_operator>;
-        using equality_expression_type = basic_variadic_binary_expression<relational_expression_type, equality_operator>;
-        using and_expression_type = std::vector<equality_expression_type>;
-        using xor_expression_type = std::vector<and_expression_type>;
-        using or_expression_type = std::vector<xor_expression_type>;
-        using logical_and_expression_type = std::vector<or_expression_type>;
-        using logical_or_expression_type = std::vector<logical_and_expression_type>;
-
-        struct conditional_expression_node_type;
-        using conditional_expression_type = boost::variant<logical_or_expression_type, boost::recursive_wrapper<conditional_expression_node_type>>;
-        struct conditional_expression_node_type
-        {
-            logical_or_expression_type condition;
-            boost::recursive_wrapper<expression_type> then_expr;
-            conditional_expression_type else_expr;
-        };
-
-        struct assignment_expression_node_type;
-        using assignment_expression_type = boost::variant<conditional_expression_type, boost::recursive_wrapper<assignment_expression_node_type>>;
-        struct assignment_expression_node_type
-        {
-            conditional_expression_type lhs;
-            assignment_operator operator_;
-            assignment_expression_type rhs;
-        };
-
-        struct macro_expression_node_type
-        {
-            std::string name;
-            std::vector<assignment_expression_type> arguments;
-        };
-
-        struct expression_type
-        {
-            std::vector<assignment_expression_type> expressions;
-            bool terminated{};
-        };
-
-        struct statement_type
-            : std::vector<expression_type>
-        {
-            using std::vector<expression_type>::vector;
-        };
-
-        struct placeholder_type
-        {
-            expression_type expression;
-        };
-
-        using node_type = boost::variant<std::string, placeholder_type>;
-
         struct assignment_symbols
             : boost::spirit::qi::symbols<char, assignment_operator>
         {
@@ -1598,132 +1751,55 @@ namespace llmcpp
         } escaped_char;
 
         template<typename Iterator>
-        struct document_grammar
-            : boost::spirit::qi::grammar<Iterator, std::vector<node_type>()>
+        document_grammar<Iterator>::document_grammar()
+            : document_grammar::base_type(document)
         {
-            document_grammar()
-                : document_grammar::base_type(document)
-            {
-                namespace qi = boost::spirit::qi;
+            namespace qi = boost::spirit::qi;
 
-                using qi::double_;
-                using qi::int_;
-                using qi::char_;
-                using qi::bool_;
-                using qi::lexeme;
-                using qi::lit;
-                using qi::skip;
-                using qi::space;
-                using qi::matches;
+            using qi::double_;
+            using qi::int_;
+            using qi::char_;
+            using qi::bool_;
+            using qi::lexeme;
+            using qi::lit;
+            using qi::skip;
+            using qi::space;
+            using qi::matches;
 
-                document = *node;
-                node = placeholder | plain_text;
-                plain_text = +(!lit("{{") >> char_);
-                placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
+            document = *node;
+            node = placeholder | plain_text;
+            plain_text = +(!lit("{{") >> char_);
+            placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
 
-                expression = (assignment_expression % lit(';')) >> matches[lit(';')];
-                assignment_expression = assignment_expression_node | conditional_expression;
-                assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
-                conditional_expression = conditional_expression_node | logical_or_expression;
-                conditional_expression_node = logical_or_expression >> lit('?') >> expression >> lit(':') >> conditional_expression;
-                logical_or_expression = logical_and_expression % lit("||");
-                logical_and_expression = or_expression % lit("&&");
-                or_expression = xor_expression % lit('|');
-                xor_expression = and_expression % lit('^');
-                and_expression = equality_expression % lit('&');
-                equality_expression = relational_expression >> *(equality_operator_ >> relational_expression);
-                relational_expression = shift_expression >> *(relational_operator_ >> shift_expression);
-                shift_expression = additive_expression >> *(shift_operator_ >> additive_expression);
-                additive_expression = multiplicative_expression >> *(additive_operator_ >> multiplicative_expression);
-                multiplicative_expression = prefix_expression >> *(multiplicative_operator_ >> prefix_expression);
-                prefix_expression = prefix_expression_node | suffix_expression;
-                prefix_expression_node = prefix_operator_ >> prefix_expression;
-                suffix_expression = parentheses_expression >> *suffix_operator_;
-                parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
-                macro_expression = macro_expression_node | primary;
-                macro_expression_node = name >> arguments;
-                arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
-                primary = variable | primitive;
-                variable = name;
-                primitive = bool_ | character | int_ | double_ | string;
-                name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
-                character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
-                string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
-            }
-
-            template<typename ... Args>
-            using rule = boost::spirit::qi::rule<Iterator, Args ...>;
-
-            template<typename ... Args>
-            using skipped_rule = boost::spirit::qi::rule<Iterator, boost::spirit::qi::space_type, Args ...>;
-
-            rule<std::vector<node_type>()> document;
-            rule<node_type()> node;
-            rule<std::string()> plain_text;
-            rule<placeholder_type()> placeholder;
-
-            skipped_rule<expression_type()> expression;
-            skipped_rule<assignment_expression_type()> assignment_expression;
-            skipped_rule<assignment_expression_node_type()> assignment_expression_node;
-            skipped_rule<conditional_expression_type()> conditional_expression;
-            skipped_rule<conditional_expression_node_type()> conditional_expression_node;
-            skipped_rule<logical_or_expression_type()> logical_or_expression;
-            skipped_rule<logical_and_expression_type()> logical_and_expression;
-            skipped_rule<or_expression_type()> or_expression;
-            skipped_rule<xor_expression_type()> xor_expression;
-            skipped_rule<and_expression_type()> and_expression;
-            skipped_rule<equality_expression_type()> equality_expression;
-            skipped_rule<relational_expression_type()> relational_expression;
-            skipped_rule<shift_expression_type()> shift_expression;
-            skipped_rule<additive_expression_type()> additive_expression;
-            skipped_rule<multiplicative_expression_type()> multiplicative_expression;
-            skipped_rule<prefix_expression_type()> prefix_expression;
-            skipped_rule<prefix_expression_node_type()> prefix_expression_node;
-            skipped_rule<suffix_expression_type()> suffix_expression;
-            skipped_rule<parentheses_expression_type()> parentheses_expression;
-            skipped_rule<macro_expression_type()> macro_expression;
-            skipped_rule<macro_expression_node_type()> macro_expression_node;
-            skipped_rule<primary_type()> primary;
-            skipped_rule<variable_type()> variable;
-            skipped_rule<primitive_type()> primitive;
-            skipped_rule<vr_primitive_type()> vr_primitive;
-            skipped_rule<std::string()> name;
-            skipped_rule<std::vector<assignment_expression_type>()> arguments;
-            skipped_rule<char()> character;
-            skipped_rule<std::string()> string;
-        };
-
-        using grammar = document_grammar<std::string_view::const_iterator>;
-
-        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
-        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx);
-
-        vr_primitive_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_assignment_expression_node(const assignment_expression_node_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_conditional_expression(const conditional_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_logical_or_expression(const logical_or_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_logical_and_expression(const logical_and_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_or_expression(const or_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_xor_expression(const xor_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_and_expression(const and_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_equality_expression(const equality_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_relational_expression(const relational_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_shift_expression(const shift_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_additive_expression(const additive_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_multiplicative_expression(const multiplicative_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_prefix_expression(const prefix_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_prefix_expression_node(const prefix_expression_node_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_parentheses_expression(const parentheses_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_macro_expression(const macro_expression_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_macro_expression_node(const macro_expression_node_type& expr, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_primary(const primary_type& primary, const config& cfg, context& ctx);
-        vr_primitive_type evaluate_variable(const variable_type& symbol, const config& cfg, context& ctx);
-        vr_primitive_type primitive_ref_to_vr_primitive(primitive_type& primitive);
-        vr_primitive_type primitive_val_to_vr_primitive(const primitive_type& primitive);
-        primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
+            expression = (assignment_expression % lit(';')) >> matches[lit(';')];
+            assignment_expression = assignment_expression_node | conditional_expression;
+            assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
+            conditional_expression = conditional_expression_node | logical_or_expression;
+            conditional_expression_node = logical_or_expression >> lit('?') >> expression >> lit(':') >> conditional_expression;
+            logical_or_expression = logical_and_expression % lit("||");
+            logical_and_expression = or_expression % lit("&&");
+            or_expression = xor_expression % lit('|');
+            xor_expression = and_expression % lit('^');
+            and_expression = equality_expression % lit('&');
+            equality_expression = relational_expression >> *(equality_operator_ >> relational_expression);
+            relational_expression = shift_expression >> *(relational_operator_ >> shift_expression);
+            shift_expression = additive_expression >> *(shift_operator_ >> additive_expression);
+            additive_expression = multiplicative_expression >> *(additive_operator_ >> multiplicative_expression);
+            multiplicative_expression = prefix_expression >> *(multiplicative_operator_ >> prefix_expression);
+            prefix_expression = prefix_expression_node | suffix_expression;
+            prefix_expression_node = prefix_operator_ >> prefix_expression;
+            suffix_expression = parentheses_expression >> *suffix_operator_;
+            parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
+            macro_expression = macro_expression_node | primary;
+            macro_expression_node = name >> arguments;
+            arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
+            primary = variable | primitive;
+            variable = name;
+            primitive = bool_ | character | int_ | double_ | string;
+            name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
+            character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
+            string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
+        }
 
         namespace detail
         {
@@ -2415,53 +2491,6 @@ namespace llmcpp
     } // namespace paraser
 } // namespace llmcpp
 
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::suffix_expression_type,
-    operand, operators
-)
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::prefix_expression_node_type,
-    operator_, operand
-)
-
-BOOST_FUSION_ADAPT_TPL_STRUCT(
-    (Operand)(Operator),
-    (llmcpp::parser::operator_operand_pair)(Operand)(Operator),
-    operator_, operand
-)
-
-BOOST_FUSION_ADAPT_TPL_STRUCT(
-    (LowerExpression)(Operator),
-    (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
-    first, rest
-)
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::conditional_expression_node_type,
-    condition, then_expr, else_expr
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::macro_expression_node_type,
-    name, arguments
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::variable_type,
-    name
-);
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::assignment_expression_node_type,
-    lhs, operator_, rhs
-)
-
-BOOST_FUSION_ADAPT_STRUCT(
-    llmcpp::parser::expression_type,
-    expressions, terminated
-)
-
 namespace llmcpp
 {
     std::string expand_macro(std::string_view input, const config& cfg, const context& ctx);
@@ -2961,359 +2990,362 @@ namespace llmcpp
         return cast_to<T>(arguments[0]);
     }
 
-    primitive_type builtin::int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+    namespace builtin
     {
-        return cast_to<int>(arguments);
-    }
-
-    primitive_type builtin::double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        return cast_to<double>(arguments);
-    }
-
-    primitive_type builtin::char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        return cast_to<char>(arguments);
-    }
-
-    primitive_type builtin::string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        return cast_to<std::string>(arguments);
-    }
-
-    primitive_type builtin::file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
+        primitive_type int_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            return cast_to<int>(arguments);
         }
 
-        const std::string_view filename{ get_or_throw<std::string>(arguments[0]) };
-
-        return read_text_file_to_string(filename, cfg);
-    }
-
-    primitive_type head_tail_impl(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx, bool reverse)
-    {
-        if (arguments.size() < 2)
+        primitive_type double_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            return cast_to<double>(arguments);
         }
 
-        const std::string_view str{ get_or_throw<std::string>(arguments[0]) };
-        const int max_tokens{ get_or_throw<int>(arguments[1]) };
-
-        std::string result;
-        int tokens{};
-        truncate_by_tokens(str, max_tokens, cfg, reverse, result, tokens);
-
-        return result;
-    }
-
-    primitive_type builtin::head(const std::vector< primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        return head_tail_impl(arguments, cfg, ctx, false);
-    }
-
-    primitive_type builtin::tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        return head_tail_impl(arguments, cfg, ctx, true);
-    }
-
-    primitive_type builtin::head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 3)
+        primitive_type char_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            return cast_to<char>(arguments);
         }
 
-        const std::string_view str{ get_or_throw<std::string>(arguments[0]) };
-        const int head_max_tokens{ get_or_throw<int>(arguments[1]) };
-        const int tail_max_tokens{ get_or_throw<int>(arguments[2]) };
-
-        const std::string_view ellipsis{ "..." };
-        const int ellipsis_tokens{ get_tokens_from_cache(cfg, ellipsis) };
-
-        const int total_tokens{ get_tokens_from_cache(cfg, str) };
-
-        if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
+        primitive_type string_(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            return std::string{ str };
+            return cast_to<std::string>(arguments);
         }
 
-        std::string result;
-        int tokens{};
-        truncate_by_tokens(str, head_max_tokens, cfg, false, result, tokens);
-        result.append(ellipsis);
-        truncate_by_tokens(str, tail_max_tokens, cfg, true, result, tokens);
-
-        return result;
-    }
-
-    primitive_type builtin::json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 1)
+        primitive_type file(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view filename{ get_or_throw<std::string>(arguments[0]) };
+
+            return read_text_file_to_string(filename, cfg);
         }
 
-        return json_escape_string(get_or_throw<std::string>(arguments[0]));
-    }
-
-    primitive_type builtin::getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 1)
+        primitive_type head_tail_impl(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx, bool reverse)
         {
-            llmcpp::throw_exception(macro_exception{});
+            if (arguments.size() < 2)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view str{ get_or_throw<std::string>(arguments[0]) };
+            const int max_tokens{ get_or_throw<int>(arguments[1]) };
+
+            std::string result;
+            int tokens{};
+            truncate_by_tokens(str, max_tokens, cfg, reverse, result, tokens);
+
+            return result;
         }
 
-        const std::string& key{ get_or_throw<std::string>(arguments[0]) };
-
-        if (const char* env{ boost::nowide::getenv(key.c_str()) }; env)
+        primitive_type head(const std::vector< primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            return std::string{ env };
+            return head_tail_impl(arguments, cfg, ctx, false);
         }
 
-        return std::string{};
-    }
-
-    primitive_type builtin::setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 2)
+        primitive_type tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            return head_tail_impl(arguments, cfg, ctx, true);
         }
 
-        const std::string& key{ get_or_throw<std::string>(arguments[0]) };
-        const std::string& value{ get_or_throw<std::string>(arguments[1]) };
-
-        if (int result{ boost::nowide::setenv(key.c_str(), value.c_str(), true) }; result == 0)
+        primitive_type head_tail(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
+            if (arguments.size() < 3)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view str{ get_or_throw<std::string>(arguments[0]) };
+            const int head_max_tokens{ get_or_throw<int>(arguments[1]) };
+            const int tail_max_tokens{ get_or_throw<int>(arguments[2]) };
+
+            const std::string_view ellipsis{ "..." };
+            const int ellipsis_tokens{ get_tokens_from_cache(cfg, ellipsis) };
+
+            const int total_tokens{ get_tokens_from_cache(cfg, str) };
+
+            if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
+            {
+                return std::string{ str };
+            }
+
+            std::string result;
+            int tokens{};
+            truncate_by_tokens(str, head_max_tokens, cfg, false, result, tokens);
+            result.append(ellipsis);
+            truncate_by_tokens(str, tail_max_tokens, cfg, true, result, tokens);
+
+            return result;
+        }
+
+        primitive_type json_literal(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+        {
+            if (arguments.size() < 1)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return json_escape_string(get_or_throw<std::string>(arguments[0]));
+        }
+
+        primitive_type getenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
+        {
+            if (arguments.size() < 1)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string& key{ get_or_throw<std::string>(arguments[0]) };
+
+            if (const char* env{ boost::nowide::getenv(key.c_str()) }; env)
+            {
+                return std::string{ env };
+            }
+
             return std::string{};
         }
 
-        return std::string{};
-    }
-
-    primitive_type builtin::generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 1)
+        primitive_type setenv(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            if (arguments.size() < 2)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string& key{ get_or_throw<std::string>(arguments[0]) };
+            const std::string& value{ get_or_throw<std::string>(arguments[1]) };
+
+            if (int result{ boost::nowide::setenv(key.c_str(), value.c_str(), true) }; result == 0)
+            {
+                return std::string{};
+            }
+
+            return std::string{};
         }
 
-        const std::string_view prompt{ get_or_throw<std::string>(arguments[0]) };
-
-        std::string result;
+        primitive_type generated(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            context pushed{ ctx.make_pushed() };
-            result = completions(cfg, prompt, pushed);
-        }
-        return result;
-    }
+            if (arguments.size() < 1)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
 
-    primitive_type builtin::random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        const std::optional<int> optional_min{ arguments.size() > 0 ? get_optional<int>(arguments[0]) : std::nullopt };
-        const std::optional<int> optional_max{ arguments.size() > 1 ? get_optional<int>(arguments[1]) : std::nullopt };
+            const std::string_view prompt{ get_or_throw<std::string>(arguments[0]) };
 
-        const std::int64_t min{ optional_min ? *optional_min : 0 };
-        const std::int64_t max{ optional_max ? *optional_max : static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()) };
-
-        return std::to_string(llmcpp::random<std::int64_t>(min, max));
-    }
-
-    primitive_type builtin::choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
-        {
-            llmcpp::throw_exception(macro_exception{});
+            std::string result;
+            {
+                context pushed{ ctx.make_pushed() };
+                result = completions(cfg, prompt, pushed);
+            }
+            return result;
         }
 
-        return arguments[llmcpp::random<std::size_t>(0, arguments.size() - 1)];
-    }
-
-    primitive_type builtin::exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        namespace process = boost::process::v2;
-        namespace asio = boost::asio;
-
-        if (arguments.empty())
+        primitive_type random(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            const std::optional<int> optional_min{ arguments.size() > 0 ? get_optional<int>(arguments[0]) : std::nullopt };
+            const std::optional<int> optional_max{ arguments.size() > 1 ? get_optional<int>(arguments[1]) : std::nullopt };
+
+            const std::int64_t min{ optional_min ? *optional_min : 0 };
+            const std::int64_t max{ optional_max ? *optional_max : static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()) };
+
+            return std::to_string(llmcpp::random<std::int64_t>(min, max));
         }
 
-        const std::string_view exe_name{ get_or_throw<std::string>(arguments[0]) };
-        std::vector<std::string> args;
-        args.reserve(arguments.size());
-
-        for (std::size_t i{ 1 }; i < arguments.size(); ++i)
+        primitive_type choice(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            args.push_back(get_or_throw<std::string>(arguments[i]));
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return arguments[llmcpp::random<std::size_t>(0, arguments.size() - 1)];
         }
 
-        const auto exe_path{ process::environment::find_executable(exe_name) };
-        if (exe_path.empty())
+        primitive_type exec(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            namespace process = boost::process::v2;
+            namespace asio = boost::asio;
+
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view exe_name{ get_or_throw<std::string>(arguments[0]) };
+            std::vector<std::string> args;
+            args.reserve(arguments.size());
+
+            for (std::size_t i{ 1 }; i < arguments.size(); ++i)
+            {
+                args.push_back(get_or_throw<std::string>(arguments[i]));
+            }
+
+            const auto exe_path{ process::environment::find_executable(exe_name) };
+            if (exe_path.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            asio::io_context ioctx;
+            asio::readable_pipe pipe{ ioctx };
+            int exit_code{};
+
+            {
+                process::process_stdio pstdio{ nullptr, pipe, {} };
+                process::process child{ ioctx, exe_path, args,  pstdio };
+                exit_code = child.wait();
+            }
+
+            std::string output;
+            boost::system::error_code error_code;
+            asio::read(pipe, asio::dynamic_buffer(output), error_code);
+
+            if (error_code && error_code != asio::error::eof && error_code != asio::error::broken_pipe)
+            {
+                llmcpp::throw_exception(macro_exception{} << error_info::system::error_code{ error_code });
+            }
+
+            ctx.set("exit_code", exit_code);
+
+            return console_string_to_u8string(output);
         }
 
-        asio::io_context ioctx;
-        asio::readable_pipe pipe{ ioctx };
-        int exit_code{};
-
+        primitive_type code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            process::process_stdio pstdio{ nullptr, pipe, {} };
-            process::process child{ ioctx, exe_path, args,  pstdio };
-            exit_code = child.wait();
+            if (arguments.size() < 2)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view markdown{ get_or_throw<std::string>(arguments[0]) };
+            const std::string_view code_block{ get_or_throw<std::string>(arguments[1]) };
+
+            const code_blocks map{ extract_code_block_from_markdown(markdown) };
+            if (const code_blocks::const_iterator iter{ map.find(code_block) }; iter != map.end())
+            {
+                return iter->second;
+            }
+
+            return std::string{};
         }
 
-        std::string output;
-        boost::system::error_code error_code;
-        asio::read(pipe, asio::dynamic_buffer(output), error_code);
-
-        if (error_code && error_code != asio::error::eof && error_code != asio::error::broken_pipe)
+        primitive_type summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{} << error_info::system::error_code{ error_code });
+            if (arguments.size() < 3)
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            const std::string_view prompt{ get_or_throw<std::string>(arguments[0]) };
+            const std::string& target{ get_or_throw<std::string>(arguments[1]) };
+            const int max_tokens{ get_or_throw<int>(arguments[2]) };
+
+            std::string output;
+
+            {
+                context pushed{ ctx.make_pushed() };
+                pushed.set("target", target);
+                pushed.set("max_tokens", std::to_string(max_tokens));
+                output = completions(cfg, prompt, pushed);
+                output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
+            }
+
+            std::string truncated;
+            int tokens{};
+            truncate_by_tokens(output, max_tokens, cfg, false, truncated, tokens);
+
+            return truncated;
         }
 
-        ctx.set("exit_code", exit_code);
-
-        return console_string_to_u8string(output);
-    }
-
-    primitive_type builtin::code_block(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 2)
+        primitive_type root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.root_path().string();
         }
 
-        const std::string_view markdown{ get_or_throw<std::string>(arguments[0]) };
-        const std::string_view code_block{ get_or_throw<std::string>(arguments[1]) };
-
-        const code_blocks map{ extract_code_block_from_markdown(markdown) };
-        if (const code_blocks::const_iterator iter{ map.find(code_block) }; iter != map.end())
+        primitive_type parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            return iter->second;
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.relative_path().string();
         }
 
-        return std::string{};
-    }
-
-    primitive_type builtin::summary(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.size() < 3)
+        primitive_type stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            llmcpp::throw_exception(macro_exception{});
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.stem().string();
         }
 
-        const std::string_view prompt{ get_or_throw<std::string>(arguments[0]) };
-        const std::string& target{ get_or_throw<std::string>(arguments[1]) };
-        const int max_tokens{ get_or_throw<int>(arguments[2]) };
-
-        std::string output;
-
+        primitive_type extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
         {
-            context pushed{ ctx.make_pushed() };
-            pushed.set("target", target);
-            pushed.set("max_tokens", std::to_string(max_tokens));
-            output = completions(cfg, prompt, pushed);
-            output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
+            if (arguments.empty())
+            {
+                llmcpp::throw_exception(macro_exception{});
+            }
+
+            return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.extension().string();
         }
 
-        std::string truncated;
-        int tokens{};
-        truncate_by_tokens(output, max_tokens, cfg, false, truncated, tokens);
-
-        return truncated;
-    }
-
-    primitive_type builtin::root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
+        std::string date()
         {
-            llmcpp::throw_exception(macro_exception{});
+            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d") };
+            std::ostringstream oss;
+            oss.imbue(std::locale(oss.getloc(), facet));
+            oss << local_time;
+            return oss.str();
         }
 
-        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.root_path().string();
-    }
-
-    primitive_type builtin::parent(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
+        std::string time()
         {
-            llmcpp::throw_exception(macro_exception{});
+            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%H%M%S") };
+            std::ostringstream oss;
+            oss.imbue(std::locale(oss.getloc(), facet));
+            oss << local_time;
+            return oss.str();
         }
 
-        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.relative_path().string();
-    }
-
-    primitive_type builtin::stem(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
+        std::string datetime()
         {
-            llmcpp::throw_exception(macro_exception{});
+            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d%H%M%S") };
+            std::ostringstream oss;
+            oss.imbue(std::locale(oss.getloc(), facet));
+            oss << local_time;
+            return oss.str();
         }
 
-        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.stem().string();
-    }
-
-    primitive_type builtin::extension(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
-    {
-        if (arguments.empty())
+        std::string stdin_(const config& cfg)
         {
-            llmcpp::throw_exception(macro_exception{});
-        }
-
-        return std::filesystem::path{ get_or_throw<std::string>(arguments[0]) }.extension().string();
-    }
-
-    std::string builtin::date()
-    {
-        const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-        const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d") };
-        std::ostringstream oss;
-        oss.imbue(std::locale(oss.getloc(), facet));
-        oss << local_time;
-        return oss.str();
-    }
-
-    std::string builtin::time()
-    {
-        const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-        const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%H%M%S") };
-        std::ostringstream oss;
-        oss.imbue(std::locale(oss.getloc(), facet));
-        oss << local_time;
-        return oss.str();
-    }
-
-    std::string builtin::datetime()
-    {
-        const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-        const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d%H%M%S") };
-        std::ostringstream oss;
-        oss.imbue(std::locale(oss.getloc(), facet));
-        oss << local_time;
-        return oss.str();
-    }
-
-    std::string builtin::stdin_(const config& cfg)
-    {
 #ifdef _WIN32
-        bool is_terminal = (_isatty(0) != 0);
+            bool is_terminal = (_isatty(0) != 0);
 #else
-        bool is_terminal = (isatty() != 0);
+            bool is_terminal = (isatty() != 0);
 #endif
 
-        if (is_terminal)
-        {
-            return std::string{};
-        }
+            if (is_terminal)
+            {
+                return std::string{};
+            }
 
-        return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
-    }
+            return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
+        }
+    } // namespace builtin
 
     std::string expand_macro(std::string_view input, const config& cfg, const context& ctx)
     {
