@@ -1204,52 +1204,6 @@ namespace llmcpp
 
     void init_logging(const config& cfg);
 
-    class log_stream
-    {
-    public:
-        log_stream(boost::log::trivial::severity_level level)
-            : level{ level }
-        {
-        }
-
-        ~log_stream()
-        {
-            namespace logging = boost::log::trivial;
-            switch (level)
-            {
-            case logging::trace:
-                BOOST_LOG_TRIVIAL(trace) << oss.str();
-                break;
-            case logging::debug:
-                BOOST_LOG_TRIVIAL(debug) << oss.str();
-                break;
-            case logging::info:
-                BOOST_LOG_TRIVIAL(info) << oss.str();
-                break;
-            case logging::warning:
-                BOOST_LOG_TRIVIAL(warning) << oss.str();
-                break;
-            case logging::error:
-                BOOST_LOG_TRIVIAL(error) << oss.str();
-                break;
-            case logging::fatal:
-                BOOST_LOG_TRIVIAL(fatal) << oss.str();
-                break;
-            }
-        }
-
-        template<typename T>
-        log_stream& operator<<(const T& value)
-        {
-            oss << value;
-            return *this;
-        }
-
-    private:
-        boost::log::trivial::severity_level level;
-        std::ostringstream oss;
-    };
-
     void init_chat_mode(config& cfg);
 
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
