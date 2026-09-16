@@ -3700,7 +3700,20 @@ namespace llmcpp
         template <typename Rep, typename Period>
         tcp& expires_after(std::chrono::duration<Rep, Period> timeout)
         {
-            tcp_stream.expires_after(std::chrono::seconds{ timeout });
+            if (timeout == std::chrono::duration<Rep, Period>::zero())
+            {
+                tcp_stream.expires_never();
+            }
+            else
+            {
+                tcp_stream.expires_after(timeout);
+            }
+            return *this;
+        }
+
+        tcp& expires_never()
+        {
+            tcp_stream.expires_never();
             return *this;
         }
 
@@ -5329,7 +5342,7 @@ namespace llmcpp
                 ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
                 ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
-                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(30), "Time limit from sending the request to completing the receipt of the response.")
+                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
                 ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
                 ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
                 ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
