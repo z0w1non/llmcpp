@@ -1111,29 +1111,6 @@ namespace llmcpp
 
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
 
-    boost::beast::http::request<boost::beast::http::string_body> make_request(
-        boost::beast::http::verb method,
-        std::string_view host,
-        std::string_view target,
-        std::optional<std::string_view> content_type = std::nullopt,
-        std::optional<std::string_view> body = std::nullopt
-    );
-
-    boost::beast::http::request<boost::beast::http::string_body> make_post_json_request(
-        std::string_view host,
-        std::string_view target,
-        std::string_view body
-    );
-
-    template <typename Duration1, typename Duration2>
-    boost::beast::http::response<boost::beast::http::string_body> send_http_get(
-        std::string_view host,
-        std::string_view port,
-        std::string_view target,
-        Duration1 connect_timeout,
-        Duration2 request_timeout
-    );
-
     std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
     std::string send_automatic1111_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
@@ -3711,65 +3688,65 @@ namespace llmcpp
             return *this;
         }
 
+        static request_type make_request(
+            boost::beast::http::verb method,
+            std::string_view host,
+            std::string_view target,
+            std::optional<std::string_view> content_type = std::nullopt,
+            std::optional<std::string_view> body = std::nullopt
+        )
+        {
+            request_type request{ method, target, 11 };
+            request.set(boost::beast::http::field::host, host);
+            request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+            if (content_type)
+            {
+                request.set(boost::beast::http::field::content_type, *content_type);
+            }
+            if (body)
+            {
+                request.body() = *body;
+            }
+            return request;
+        }
+
+        static request_type make_post_json_request(
+            std::string_view host,
+            std::string_view target,
+            std::string_view body
+        )
+        {
+            return make_request(boost::beast::http::verb::post, host, target, "application/json; charset=UTF-8", body);
+        }
+
+        static request_type make_get_json_request(
+            std::string_view host,
+            std::string_view target
+        )
+        {
+            return make_request(boost::beast::http::verb::get, host, target, "application/json; charset=UTF-8", std::nullopt);
+        }
+
+        template <typename Duration1, typename Duration2>
+        static response_type send_http_get(
+            std::string_view host,
+            std::string_view port,
+            std::string_view target,
+            Duration1 connect_timeout,
+            Duration2 request_timeout
+        )
+        {
+            tcp tcp;
+            tcp.expires_after(connect_timeout).connect(host, port);
+            request_type request{ make_request(boost::beast::http::verb::get, host, target) };
+            return tcp.expires_after(request_timeout).request(request);
+        };
+
         boost::beast::error_code error_code;
         boost::asio::io_context ioc;
         boost::asio::ip::tcp::resolver resolver{ ioc };
         boost::beast::tcp_stream tcp_stream{ ioc };
         bool connected{};
-    };
-
-    boost::beast::http::request<boost::beast::http::string_body> make_request(
-        boost::beast::http::verb method,
-        std::string_view host,
-        std::string_view target,
-        std::optional<std::string_view> content_type,
-        std::optional<std::string_view> body
-    )
-    {
-        boost::beast::http::request<boost::beast::http::string_body> request{ method, target, 11 };
-        request.set(boost::beast::http::field::host, host);
-        request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-        if (content_type)
-        {
-            request.set(boost::beast::http::field::content_type, *content_type);
-        }
-        if (body)
-        {
-            request.body() = *body;
-        }
-        return request;
-    }
-
-    boost::beast::http::request<boost::beast::http::string_body> make_post_json_request(
-        std::string_view host,
-        std::string_view target,
-        std::string_view body
-    )
-    {
-        return make_request(boost::beast::http::verb::post, host, target, "application/json; charset=UTF-8", body);
-    }
-
-    boost::beast::http::request<boost::beast::http::string_body> make_get_json_request(
-        std::string_view host,
-        std::string_view target
-    )
-    {
-        return make_request(boost::beast::http::verb::get, host, target, "application/json; charset=UTF-8", std::nullopt);
-    }
-
-    template <typename Duration1, typename Duration2>
-    boost::beast::http::response<boost::beast::http::string_body> send_http_get(
-        std::string_view host,
-        std::string_view port,
-        std::string_view target,
-        Duration1 connect_timeout,
-        Duration2 request_timeout
-    )
-    {
-        tcp tcp;
-        tcp.expires_after(connect_timeout).connect(host, port);
-        tcp::request_type request{ make_request(boost::beast::http::verb::get, host, target) };
-        return tcp.expires_after(request_timeout).request(request);
     };
 
     // unused
@@ -3958,7 +3935,7 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
@@ -4035,7 +4012,7 @@ namespace llmcpp
 
         BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_get_json_request(host, target.encoded_target()) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
 
         return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
     }
@@ -4091,7 +4068,7 @@ namespace llmcpp
         content_type.reserve(30 + boundary.size());
         content_type += "multipart/form-data; boundary=";
         content_type += boundary;
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, body) };
         request.set(boost::beast::http::field::content_type, content_type);
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
@@ -4147,7 +4124,7 @@ namespace llmcpp
         const std::string request_body{ json.dump() };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
@@ -4164,8 +4141,8 @@ namespace llmcpp
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            boost::beast::http::response<boost::beast::http::string_body> history_response{
-                send_http_get(
+            tcp::response_type history_response{
+                tcp::send_http_get(
                     cfg.cu.host,
                     cfg.cu.port,
                     "/history/" + prompt_id,
@@ -4264,7 +4241,7 @@ namespace llmcpp
             view_target += "&type=";
             view_target += file_info.type;
 
-            const boost::beast::http::response<boost::beast::http::string_body> view_response{ send_http_get(
+            const boost::beast::http::response<boost::beast::http::string_body> view_response{ tcp::send_http_get(
                 cfg.cu.host,
                 cfg.cu.port,
                 view_target,
@@ -4352,7 +4329,7 @@ namespace llmcpp
         const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         if (!cfg.llm.api_key.empty())
         {
@@ -4377,7 +4354,7 @@ namespace llmcpp
         const std::string request_body{ params.get_request_body_for_chat_completions(arguments) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         if (!cfg.llm.api_key.empty())
         {
@@ -4659,7 +4636,7 @@ namespace llmcpp
         const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt) };
         BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
+        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
