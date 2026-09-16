@@ -3700,7 +3700,7 @@ namespace llmcpp
         template <typename Rep, typename Period>
         tcp& expires_after(std::chrono::duration<Rep, Period> timeout)
         {
-            if (timeout == std::chrono::duration<Rep, Period>::zero())
+            if (timeout <= std::chrono::duration<Rep, Period>::zero())
             {
                 tcp_stream.expires_never();
             }
