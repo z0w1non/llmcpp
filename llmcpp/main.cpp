@@ -754,8 +754,8 @@ namespace llmcpp
         std::string log_file;
         std::string config_file;
         bool verbose{};
-        unsigned int connect_timeout{};
-        unsigned int request_timeout{};
+        unsigned int timeout_connect{};
+        unsigned int timeout_request{};
         int number_iterations{};
         std::vector<std::string> user_defined_variables;
         std::vector<std::string> phases;
@@ -3792,7 +3792,7 @@ namespace llmcpp
         const std::string_view port{ cfg.sd.port };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         nlohmann::json json;
 
@@ -3953,7 +3953,7 @@ namespace llmcpp
         const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
@@ -3977,7 +3977,7 @@ namespace llmcpp
         const std::string_view port{ cfg.sb.port };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         boost::url target{ cfg.sb.target };
         target.params().set("text", text);
@@ -4030,7 +4030,7 @@ namespace llmcpp
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_get_json_request(host, target.encoded_target()) };
 
-        return tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request).body();
+        return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
     }
 
     std::string generate_boundary()
@@ -4078,7 +4078,7 @@ namespace llmcpp
         const std::string_view target{ cfg.cu.upload_image_target };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         std::string content_type;
         content_type.reserve(30 + boundary.size());
@@ -4087,7 +4087,7 @@ namespace llmcpp
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body) };
         request.set(boost::beast::http::field::content_type, content_type);
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
@@ -4131,7 +4131,7 @@ namespace llmcpp
         const std::string_view target{ cfg.cu.prompt_target };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         nlohmann::json json;
         nlohmann::json prompt_json{ nlohmann::json::parse(prompt) };
@@ -4142,7 +4142,7 @@ namespace llmcpp
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
@@ -4162,8 +4162,8 @@ namespace llmcpp
                     cfg.cu.host,
                     cfg.cu.port,
                     "/history/" + prompt_id,
-                    std::chrono::seconds{ cfg.connect_timeout },
-                    std::chrono::seconds{ cfg.request_timeout }
+                    std::chrono::seconds{ cfg.timeout_connect },
+                    std::chrono::seconds{ cfg.timeout_request }
                 )
             };
 
@@ -4261,8 +4261,8 @@ namespace llmcpp
                 cfg.cu.host,
                 cfg.cu.port,
                 view_target,
-                std::chrono::seconds{ cfg.connect_timeout },
-                std::chrono::seconds{ cfg.request_timeout }
+                std::chrono::seconds{ cfg.timeout_connect },
+                std::chrono::seconds{ cfg.timeout_request }
             ) };
 
             write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
@@ -4340,7 +4340,7 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.completions_target };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
@@ -4352,7 +4352,7 @@ namespace llmcpp
             request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
         }
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_completions(response.body());
@@ -4365,7 +4365,7 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.chat_completions_target };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         const std::string request_body{ params.get_request_body_for_chat_completions(arguments) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON";
@@ -4377,7 +4377,7 @@ namespace llmcpp
             request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
         }
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_chat_completions(response.body());
@@ -4647,14 +4647,14 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.token_count_target };
 
         tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.connect_timeout }).connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
         const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt) };
         BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.request_timeout }).request(request) };
+        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
         return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
@@ -5328,8 +5328,8 @@ namespace llmcpp
                 ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
                 ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
-                ("connect-timeout", po::value<unsigned int>(&cfg.connect_timeout)->default_value(10), "Time limit for establishing the connection (handshake completion)")
-                ("request-timeout", po::value<unsigned int>(&cfg.request_timeout)->default_value(30), "Time limit from sending the request to completing the receipt of the response.")
+                ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
+                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(30), "Time limit from sending the request to completing the receipt of the response.")
                 ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
                 ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
                 ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
