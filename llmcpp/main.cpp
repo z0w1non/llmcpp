@@ -754,8 +754,6 @@ namespace llmcpp
         std::string log_file;
         std::string config_file;
         bool verbose{};
-        unsigned int timeout_connect{};
-        unsigned int timeout_request{};
         int number_iterations{};
         std::vector<std::string> user_defined_variables;
         std::vector<std::string> phases;
@@ -773,6 +771,8 @@ namespace llmcpp
         std::string server_port;
         int server_max_retries;
         int server_wait_ms;
+        unsigned int timeout_connect{};
+        unsigned int timeout_request{};
 
         llm_prompt_parameters llm;
         tg_completions_parameters tg;
@@ -5312,8 +5312,6 @@ namespace llmcpp
                 ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
                 ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
-                ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
-                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
                 ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
                 ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
                 ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
@@ -5328,6 +5326,8 @@ namespace llmcpp
                 ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
                 ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
                 ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
+                ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
+                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
 
                 ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
                 ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
