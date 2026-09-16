@@ -1868,16 +1868,6 @@ namespace llmcpp
             { ~a };
         } && !std::same_as<std::decay_t<A>, bool>;
 
-#define LLMCPP_DEFINE_FUNCTION(opecode)                                                       \
-        struct opecode                                                                        \
-        {                                                                                     \
-            template<typename ... Args>                                                       \
-            decltype(auto) operator()(Args&& ... args) const                                  \
-            {                                                                                 \
-                return boost::apply_visitor(detail::opecode{}, std::forward<Args>(args) ...); \
-            }                                                                                 \
-        };
-
         namespace detail
         {
             struct assign
@@ -1937,6 +1927,16 @@ namespace llmcpp
             {
                 return boost::apply_visitor(detail::assign{ ctx }, a, b);
             }
+        };
+
+#define LLMCPP_DEFINE_FUNCTION(opecode)                                                       \
+        struct opecode                                                                        \
+        {                                                                                     \
+            template<typename ... Args>                                                       \
+            decltype(auto) operator()(Args&& ... args) const                                  \
+            {                                                                                 \
+                return boost::apply_visitor(detail::opecode{}, std::forward<Args>(args) ...); \
+            }                                                                                 \
         };
 
 #define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
