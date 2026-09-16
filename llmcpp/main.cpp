@@ -1074,6 +1074,25 @@ namespace llmcpp
         primitive_type vr_primitive_to_primitive(const vr_primitive_type& primitive);
     } // namespace parser
 
+    struct url_params_setter
+    {
+        url_params_setter(boost::urls::url& url)
+            : url{ url }
+        {
+        }
+
+        template<typename T>
+        url_params_setter& operator()(std::string_view key, T value);
+
+        template<typename T>
+        url_params_setter& set_if(bool condition, std::string_view key, const T& value);
+
+        template<typename T1, typename T2>
+        url_params_setter& set_if_else(bool condition, std::string_view key_true, const T1& value_true, std::string_view key_false, const T2& value_false);
+
+        boost::urls::url& url;
+    };
+
     std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
 
     std::string base64_encode(std::string_view encoded_string);
@@ -1122,6 +1141,12 @@ namespace llmcpp
     std::string upload_image_to_comfy_ui(const config& cfg, std::string_view image_path, bool overwrite = true);
 
     void send_comfy_ui_prompt(const config& cfg, std::string_view workflow);
+
+    struct generated_file_info;
+
+    std::vector<generated_file_info> receive_comfy_ui_generated_file_info(const config& cfg, std::string_view prompt_id);
+
+    void write_comfy_ui_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files);
 
     std::vector<item> parse_item_list(std::string_view str);
 
@@ -3963,52 +3988,32 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        boost::url target{ cfg.sb.target };
-        target.params().set("text", text);
-        //target.params().set("encoding", "utf-8");
-
-        if (!cfg.sb.model_name.empty())
-        {
-            target.params().set("model_name", cfg.sb.model_name);
-        }
-        else
-        {
-            target.params().set("model_id", std::to_string(cfg.sb.model_id));
-        }
-
-        if (!cfg.sb.speaker_name.empty())
-        {
-            target.params().set("speaker_name", cfg.sb.speaker_name);
-        }
-        else
-        {
-            target.params().set("speaker_id", std::to_string(cfg.sb.speaker_id));
-        }
-
-        target.params().set("sdp_ratio", std::to_string(cfg.sb.sdp_ratio));
-        target.params().set("noise", std::to_string(cfg.sb.noise));
-        target.params().set("noisew", std::to_string(cfg.sb.noisew));
-        target.params().set("length", std::to_string(cfg.sb.length));
-        target.params().set("language", cfg.sb.language);
-        target.params().set("auto_split", cfg.sb.auto_split ? "true" : "false");
-        target.params().set("split_interval", std::to_string(cfg.sb.split_interval));
-
-        if (!cfg.sb.assist_text.empty())
-        {
-            target.params().set("assist_text", cfg.sb.assist_text);
-            target.params().set("assist_text_weight", std::to_string(cfg.sb.assist_text_weight));
-        }
-
-        if (!cfg.sb.style.empty())
-        {
-            target.params().set("style", cfg.sb.style);
-            target.params().set("style_weight", std::to_string(cfg.sb.style_weight));
-        }
-
-        if (!cfg.sb.reference_audio_path.empty())
-        {
-            target.params().set("reference_audio_path", cfg.sb.reference_audio_path);
-        }
+        boost::urls::url target{ cfg.sb.target };
+        url_params_setter{ target }
+            ("text", text)
+            ("sdp_ratio", cfg.sb.sdp_ratio)
+            ("noise", cfg.sb.noise)
+            ("noisew", cfg.sb.noisew)
+            ("length", cfg.sb.length)
+            ("language", cfg.sb.language)
+            ("auto_split", cfg.sb.auto_split)
+            ("split_interval", cfg.sb.split_interval)
+            .set_if_else(!cfg.sb.model_name.empty(),
+                "model_name", cfg.sb.model_name,
+                "model_id", cfg.sb.model_id)
+            .set_if_else(!cfg.sb.speaker_name.empty(),
+                "speaker_name", cfg.sb.speaker_name,
+                "speaker_id", cfg.sb.speaker_id)
+            .set_if(!cfg.sb.assist_text.empty(),
+                "assist_text", cfg.sb.assist_text)
+            .set_if(!cfg.sb.assist_text.empty(),
+                "assist_text_weight", cfg.sb.assist_text_weight)
+            .set_if(!cfg.sb.style.empty(),
+                "style", cfg.sb.style)
+            .set_if(!cfg.sb.style.empty(),
+                "style_weight", cfg.sb.style_weight)
+            .set_if(!cfg.sb.reference_audio_path.empty(),
+                "reference_audio_path", cfg.sb.reference_audio_path);
 
         BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
 
@@ -4101,15 +4106,15 @@ namespace llmcpp
         }
     }
 
+    struct generated_file_info
+    {
+        std::string filename;
+        std::string subfolder;
+        std::string type;
+    };
+
     void send_comfy_ui_prompt(const config& cfg, std::string_view prompt)
     {
-        struct generated_file_info
-        {
-            std::string filename;
-            std::string subfolder;
-            std::string type;
-        };
-
         const std::string_view host{ cfg.cu.host };
         const std::string_view port{ cfg.cu.port };
         const std::string_view target{ cfg.cu.prompt_target };
@@ -4135,7 +4140,19 @@ namespace llmcpp
         const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
         BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
 
+        const std::vector<generated_file_info> target_files{ receive_comfy_ui_generated_file_info(cfg, prompt_id) };
+        BOOST_LOG_TRIVIAL(info) << "Generation complete";
+
+        write_comfy_ui_generated_files(cfg, target_files);
+    }
+
+    std::vector<generated_file_info> receive_comfy_ui_generated_file_info(const config& cfg, std::string_view prompt_id)
+    {
         std::vector<generated_file_info> target_files;
+
+        boost::urls::url url;
+        url.set_path("/history");
+        url.path().append(prompt_id);
 
         while (true)
         {
@@ -4145,7 +4162,7 @@ namespace llmcpp
                 tcp::send_http_get(
                     cfg.cu.host,
                     cfg.cu.port,
-                    "/history/" + prompt_id,
+                    url.encoded_path(),
                     std::chrono::seconds{ cfg.timeout_connect },
                     std::chrono::seconds{ cfg.timeout_request }
                 )
@@ -4222,8 +4239,11 @@ namespace llmcpp
             }
         }
 
-        BOOST_LOG_TRIVIAL(info) << "Generation complete";
+        return target_files;
+    }
 
+    void write_comfy_ui_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files)
+    {
         for (const generated_file_info& file_info : target_files)
         {
             std::filesystem::path relative_file_path{ cfg.cu.output_directory };
@@ -4233,18 +4253,16 @@ namespace llmcpp
             }
             relative_file_path /= file_info.filename;
 
-            std::string view_target;
-            view_target += "/view?filename=";
-            view_target += file_info.filename;
-            view_target += "&subfolder=";
-            view_target += file_info.subfolder;
-            view_target += "&type=";
-            view_target += file_info.type;
+            boost::urls::url target;
+            url_params_setter{ target }
+                ("filename", file_info.filename)
+                ("subfolder", file_info.subfolder)
+                ("type", file_info.type);
 
-            const boost::beast::http::response<boost::beast::http::string_body> view_response{ tcp::send_http_get(
+            tcp::response_type view_response{ tcp::send_http_get(
                 cfg.cu.host,
                 cfg.cu.port,
-                view_target,
+                target.encoded_query(),
                 std::chrono::seconds{ cfg.timeout_connect },
                 std::chrono::seconds{ cfg.timeout_request }
             ) };
@@ -5623,6 +5641,53 @@ namespace llmcpp
         }
 
         return 0;
+    }
+
+    template<typename T>
+    url_params_setter& url_params_setter::operator()(std::string_view key, T value)
+    {
+        if constexpr (std::is_convertible_v<T, std::string_view>)
+        {
+            url.params().set(key, value);
+        }
+        else if constexpr (std::is_same_v<std::remove_cvref_t<T>, bool>)
+        {
+            url.params().set(key, value ? "true" : "false");
+        }
+        else if constexpr (std::is_arithmetic_v<T>)
+        {
+            std::array<char, 64> buffer;
+            const auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+            if (ec == std::errc{})
+            {
+                url.params().set(key, std::string_view{ buffer.data(), static_cast<std::size_t>(ptr - buffer.data()) });
+            }
+        }
+        return *this;
+    }
+
+    template<typename T>
+    url_params_setter& url_params_setter::set_if(bool condition, std::string_view key, const T& value)
+    {
+        if (condition)
+        {
+            (*this)(key, value);
+        }
+        return *this;
+    }
+
+    template<typename T1, typename T2>
+    url_params_setter& url_params_setter::set_if_else(bool condition, std::string_view key_true, const T1& value_true, std::string_view key_false, const T2& value_false)
+    {
+        if (condition)
+        {
+            (*this)(key_true, value_true);
+        }
+        else
+        {
+            (*this)(key_false, value_false);
+        }
+        return *this;
     }
 
     std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg)
