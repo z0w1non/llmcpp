@@ -3293,14 +3293,10 @@ namespace llmcpp
         std::string stdin_(const config& cfg)
         {
             boost::nowide::stat_t stat;
-            if (boost::nowide::stat(0, &stat) == 0)
+            if (boost::nowide::stat(0, &stat) == 0 && (stat.st_mode & S_IFMT) == S_IFCHR)
             {
-                if ((stat.st_mode & S_IFMT) == S_IFCHR)
-                {
-                    return std::string{};
-                }
+                return std::string{};
             }
-
             return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
         }
     } // namespace builtin
