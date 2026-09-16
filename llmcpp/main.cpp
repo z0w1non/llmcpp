@@ -3634,6 +3634,10 @@ namespace llmcpp
 
     struct tcp
     {
+        using body_type = boost::beast::http::string_body;
+        using request_type = boost::beast::http::request<body_type>;
+        using response_type = boost::beast::http::response<body_type>;
+
         tcp()
         {
         }
@@ -3650,8 +3654,8 @@ namespace llmcpp
 
         void connect(std::string_view host, std::string_view port)
         {
-            const boost::asio::ip::tcp::resolver::results_type results{ resolver.resolve(host, port) };
-            tcp_stream.connect(results, error_code);
+            const boost::asio::ip::tcp::resolver::results_type endpoints{ resolver.resolve(host, port) };
+            tcp_stream.connect(endpoints, error_code);
             if_error_throw<connect_exception>(error_code);
             connected = true;
         }
@@ -3666,21 +3670,18 @@ namespace llmcpp
             }
         }
 
-        void send(boost::beast::http::request<boost::beast::http::string_body>& request)
+        response_type request(request_type& request)
         {
             request.prepare_payload();
             boost::beast::http::write(tcp_stream, request, error_code);
             if_error_throw<http_send_exception>(error_code);
-        }
 
-        boost::beast::http::response<boost::beast::http::string_body> recieve()
-        {
             boost::beast::flat_buffer buffer;
-            boost::beast::http::response_parser<boost::beast::http::string_body> parser;
+            boost::beast::http::response_parser<body_type> parser;
             parser.body_limit(boost::none);
             boost::beast::http::read(tcp_stream, buffer, parser, error_code);
             if_error_throw<http_receive_exception>(error_code);
-            boost::beast::http::response<boost::beast::http::string_body> response{ parser.release() };
+            const response_type response{ parser.release() };
 
             if (response.result() != boost::beast::http::status::ok)
             {
@@ -3691,6 +3692,13 @@ namespace llmcpp
             }
 
             return response;
+        }
+
+        template <typename Rep, typename Period>
+        tcp& expires_after(std::chrono::duration<Rep, Period> amount)
+        {
+            tcp_stream.expires_after(std::chrono::seconds{ seconds });
+            return *this;
         }
 
         boost::beast::error_code error_code;
@@ -3739,22 +3747,18 @@ namespace llmcpp
         return make_request(boost::beast::http::verb::get, host, target, "application/json; charset=UTF-8", std::nullopt);
     }
 
+    template <typename Rep, typename Period>
     boost::beast::http::response<boost::beast::http::string_body> send_http_get(
         std::string_view host,
         std::string_view port,
         std::string_view target,
-        unsigned int expires_after)
+        std::chrono::duration<Rep, Period> expires_after
+    )
     {
         tcp tcp;
-        tcp.tcp_stream.expires_after(std::chrono::seconds{ expires_after });
-
-        tcp.connect(host, port);
-
-        boost::beast::http::request<boost::beast::http::string_body> request{ make_request(boost::beast::http::verb::get, host, target) };
-
-        tcp.send(request);
-
-        return tcp.recieve();
+        tcp.expires_after(expires_after).connect(host, port);
+        tcp::request_type request{ make_request(boost::beast::http::verb::get, host, target) };
+        return tcp.request(request);
     };
 
     // unused
@@ -3784,7 +3788,7 @@ namespace llmcpp
         const std::string_view port{ cfg.sd.port };
 
         tcp tcp;
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         nlohmann::json json;
 
@@ -3945,8 +3949,7 @@ namespace llmcpp
         const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
 
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
@@ -3970,7 +3973,7 @@ namespace llmcpp
         const std::string_view port{ cfg.sb.port };
 
         tcp tcp;
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         boost::url target{ cfg.sb.target };
         target.params().set("text", text);
@@ -4023,8 +4026,7 @@ namespace llmcpp
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_get_json_request(host, target.encoded_target()) };
 
-        tcp.send(request);
-        return tcp.recieve().body();
+        return tcp.request(request).body();
     }
 
     std::string generate_boundary()
@@ -4072,8 +4074,7 @@ namespace llmcpp
         const std::string_view target{ cfg.cu.upload_image_target };
 
         tcp tcp;
-        tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         std::string content_type;
         content_type.reserve(30 + boundary.size());
@@ -4082,8 +4083,7 @@ namespace llmcpp
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, body) };
         request.set(boost::beast::http::field::content_type, content_type);
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
@@ -4127,7 +4127,7 @@ namespace llmcpp
         const std::string_view target{ cfg.cu.prompt_target };
 
         tcp tcp;
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         nlohmann::json json;
         nlohmann::json prompt_json{ nlohmann::json::parse(prompt) };
@@ -4138,8 +4138,7 @@ namespace llmcpp
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
@@ -4335,8 +4334,7 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.completions_target };
 
         tcp tcp;
-        tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
@@ -4348,8 +4346,7 @@ namespace llmcpp
             request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
         }
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_completions(response.body());
@@ -4362,8 +4359,7 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.chat_completions_target };
 
         tcp tcp;
-        tcp.tcp_stream.expires_after(std::chrono::seconds{ cfg.expires_after });
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         const std::string request_body{ params.get_request_body_for_chat_completions(arguments) };
         BOOST_LOG_TRIVIAL(info) << "Send JSON";
@@ -4375,8 +4371,7 @@ namespace llmcpp
             request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
         }
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
         BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_chat_completions(response.body());
@@ -4646,15 +4641,14 @@ namespace llmcpp
         const std::string_view target{ cfg.llm.token_count_target };
 
         tcp tcp;
-        tcp.connect(host, port);
+        tcp.expires_after(std::chrono::seconds{ cfg.expires_after }).connect(host, port);
 
         const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt) };
         BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ make_post_json_request(host, target, request_body) };
 
-        tcp.send(request);
-        boost::beast::http::response<boost::beast::http::string_body> response{ tcp.recieve() };
+        const tcp::response_type response{ tcp.request(request) };
 
         return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
