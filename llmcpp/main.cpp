@@ -48,6 +48,7 @@
 #include <boost/nowide/fstream.hpp>
 #include <boost/nowide/iostream.hpp>
 #include <boost/nowide/cstdlib.hpp>
+#include <boost/nowide/stat.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/stacktrace.hpp>
@@ -90,12 +91,6 @@
 #undef OUT
 #undef NEAR
 #undef FAR
-#endif
-
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
 #endif
 
 namespace llmcpp
@@ -3297,15 +3292,13 @@ namespace llmcpp
 
         std::string stdin_(const config& cfg)
         {
-#ifdef _WIN32
-            bool is_terminal = (_isatty(0) != 0);
-#else
-            bool is_terminal = (isatty() != 0);
-#endif
-
-            if (is_terminal)
+            boost::nowide::stat_t stat;
+            if (boost::nowide::stat(0, &stat) == 0)
             {
-                return std::string{};
+                if ((stat.st_mode & S_IFMT) == S_IFCHR)
+                {
+                    return std::string{};
+                }
             }
 
             return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
