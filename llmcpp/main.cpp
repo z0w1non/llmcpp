@@ -70,10 +70,11 @@
 #include <boost/variant.hpp>
 #include <boost/optional.hpp>
 #include <boost/spirit/include/qi.hpp>
+#include <boost/predef.h>
 
 #include "json.hpp"
 
-#ifdef _WIN32
+#if BOOST_OS_WINDOWS
 #include <boost/process/v2/windows/creation_flags.hpp>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -92,7 +93,7 @@
 #undef FAR
 #endif
 
-#ifdef _WIN32
+#if BOOST_OS_WINDOWS
 #include <io.h>
 #else
 #include <unistd.h>
@@ -1537,7 +1538,7 @@ namespace llmcpp
 
     std::string console_string_to_u8string(std::string_view input)
     {
-#ifdef _WIN32
+#if BOOST_OS_WINDOWS
         if (input.empty())
         {
             return std::string{};
@@ -3297,7 +3298,7 @@ namespace llmcpp
 
         std::string stdin_(const config& cfg)
         {
-#ifdef _WIN32
+#if BOOST_OS_WINDOWS
             bool is_terminal = (_isatty(0) != 0);
 #else
             bool is_terminal = (isatty() != 0);
@@ -5208,7 +5209,7 @@ namespace llmcpp
     {
         std::size_t terminated_count{};
 
-#ifdef _WIN32
+#if BOOST_OS_WINDOWS
         const HANDLE snapshot{ CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if (snapshot == INVALID_HANDLE_VALUE)
         {
