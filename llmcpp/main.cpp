@@ -5669,7 +5669,8 @@ namespace llmcpp
     void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode)
     {
         const bool is_binary{ (mode & std::ios::binary) != 0 };
-        const std::string complemented{ complement_extension(filepath, ".txt") };
+        const std::string expanded{ expand_macro(filepath, cfg, cfg.ctx) };
+        const std::string complemented{ complement_extension(expanded, ".txt") };
         const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complemented, cfg) };
         create_parent_directories(file_path);
         boost::nowide::ofstream ofs{ file_path, mode };
