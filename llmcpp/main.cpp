@@ -3711,12 +3711,6 @@ namespace llmcpp
             return *this;
         }
 
-        tcp& expires_never()
-        {
-            tcp_stream.expires_never();
-            return *this;
-        }
-
         boost::beast::error_code error_code;
         boost::asio::io_context ioc;
         boost::asio::ip::tcp::resolver resolver{ ioc };
