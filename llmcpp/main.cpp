@@ -4609,8 +4609,6 @@ namespace llmcpp
         json["logprobs"] = logprobs;
         json["messages"] = messages;
 
-        BOOST_LOG_TRIVIAL(info) << "json.dump: " << json.dump();
-
         return json.dump();
     }
 
