@@ -3449,6 +3449,11 @@ namespace llmcpp
 
     std::string complement_codeblock_extension(std::string_view language_identifier)
     {
+        const std::string extension{ language_identifier_to_extension(language_identifier) };
+        if (!extension.empty() && extension.front() != '.')
+        {
+            return extension;
+        }
         return std::string{ language_identifier } + language_identifier_to_extension(language_identifier);
     }
 
