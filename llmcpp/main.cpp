@@ -1110,6 +1110,8 @@ namespace llmcpp
 
     std::string complement_extension(std::string_view filepath, std::string_view extension);
 
+    std::string complement_codeblock_extension(std::string_view language_identifier);
+
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
 
     std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
@@ -1175,6 +1177,8 @@ namespace llmcpp
     using code_blocks = string_unordered_map<std::string>;
 
     code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
+
+    std::string language_identifier_to_extension(std::string_view language_identifier);
 
     bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
 
@@ -3443,6 +3447,11 @@ namespace llmcpp
         return temp.string();
     }
 
+    std::string complement_codeblock_extension(std::string_view language_identifier)
+    {
+        return std::string{ language_identifier } + language_identifier_to_extension(language_identifier);
+    }
+
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg)
     {
         const std::filesystem::path file_path{ expand_macro(path, cfg, cfg.ctx) };
@@ -5108,6 +5117,46 @@ namespace llmcpp
         return result;
     }
 
+    std::string language_identifier_to_extension(std::string_view language_identifier)
+    {
+        static const string_unordered_map<std::string> map
+        {
+            {"python", ".py"},
+            {"javascript", ".js"},
+            {"typescript", ".ts"},
+            {"html", ".html"},
+            {"css", ".css"},
+            {"java", ".java"},
+            {"c", ".c"},
+            {"cpp", ".cpp"},
+            {"csharp", ".cs"},
+            {"go", ".go"},
+            {"rust", ".rs"},
+            {"php", ".php"},
+            {"ruby", ".rb"},
+            {"swift", ".swift"},
+            {"kotlin", ".kt"},
+            {"json", ".json"},
+            {"yaml", ".yaml"},
+            {"xml", ".xml"},
+            {"markdown", ".md"},
+            {"sql", ".sql"},
+            {"ini", ".ini"},
+            {"toml", ".toml"},
+            {"bash", ".sh"},
+            {"zsh", ".zsh"},
+            {"powershell", ".ps1"},
+            {"dockerfile", "Dockerfile"},
+            {"diff", ".diff"},
+            {"plaintext", ".txt"}
+        };
+        if (const auto iter{ map.find(language_identifier) }; iter != map.end())
+        {
+            return iter->second;
+        }
+        return std::string{};
+    }
+
     bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms)
     {
         boost::system::error_code error_code;
@@ -5717,7 +5766,7 @@ namespace llmcpp
                 }
                 else
                 {
-                    write_file(cfg, code, name, 0);
+                    write_file(cfg, code, complement_codeblock_extension(name), 0);
                 }
             }
         }
