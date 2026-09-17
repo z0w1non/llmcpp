@@ -192,6 +192,9 @@ namespace llmcpp
     template<typename T>
     using string_map = std::map<std::string, T, std::less<>>;
 
+    template<typename T>
+    using string_view_map = std::map<std::string_view, T, std::less<>>;
+
     template<typename Key, typename T, typename Allocator = std::allocator<std::pair<const Key, T> >>
     using transparent_unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<>, Allocator>;
 
@@ -218,6 +221,9 @@ namespace llmcpp
 
     template<typename T>
     using string_unordered_map = std::unordered_map<std::string, T, string_hash, std::equal_to<>>;
+
+    template<typename T>
+    using string_view_unordered_map = std::unordered_map<std::string_view, T, string_hash, std::equal_to<>>;
 
     struct config;
 
@@ -1106,7 +1112,7 @@ namespace llmcpp
     template<typename Integer>
     Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
 
-    std::string extension_to_mime_type(std::string_view extension);
+    std::string_view extension_to_mime_type(std::string_view extension);
 
     std::string complement_extension(std::string_view filepath, std::string_view extension);
 
@@ -1178,7 +1184,7 @@ namespace llmcpp
 
     code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
 
-    std::string language_identifier_to_extension(std::string_view language_identifier);
+    std::string_view language_identifier_to_extension(std::string_view language_identifier);
 
     bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
 
@@ -2884,7 +2890,7 @@ namespace llmcpp
 
     std::optional<builtin::macro_type> builtin::get_macro(std::string_view name)
     {
-        static const string_unordered_map<macro_type> macros
+        static const string_view_unordered_map<macro_type> macros
         {
             {"int", int_},
             {"double", double_},
@@ -3414,9 +3420,9 @@ namespace llmcpp
         return url;
     }
 
-    std::string extension_to_mime_type(std::string_view extension)
+    std::string_view extension_to_mime_type(std::string_view extension)
     {
-        static const string_unordered_map<std::string> map
+        static const string_view_unordered_map<std::string_view> map
         {
             { ".jpg", "jpg" },
             { ".jpeg", "jpg" },
@@ -3449,12 +3455,17 @@ namespace llmcpp
 
     std::string complement_codeblock_extension(std::string_view language_identifier)
     {
-        const std::string extension{ language_identifier_to_extension(language_identifier) };
+        const std::string_view extension{ language_identifier_to_extension(language_identifier) };
         if (!extension.empty() && extension.front() != '.')
         {
-            return extension;
+            return std::string{ extension };
         }
-        return std::string{ language_identifier } + language_identifier_to_extension(language_identifier);
+
+        std::string result;
+        result.reserve(language_identifier.size() + extension.size());
+        result += language_identifier;
+        result += extension;
+        return result;
     }
 
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg)
@@ -5122,9 +5133,9 @@ namespace llmcpp
         return result;
     }
 
-    std::string language_identifier_to_extension(std::string_view language_identifier)
+    std::string_view language_identifier_to_extension(std::string_view language_identifier)
     {
-        static const string_unordered_map<std::string> map
+        static const string_view_unordered_map<std::string_view> map
         {
             {"assembly", ".asm"},
             {"bash", ".sh"},
