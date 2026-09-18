@@ -242,7 +242,7 @@ namespace llmcpp
         virtual std::string parse_response_for_completions(const std::string& response) const = 0;
         virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
         virtual int parse_response_for_token_count(const std::string& response) const = 0;
-        virtual std::string get_request_body_for_chat_completions(const nlohmann::json& messages) const = 0;
+        virtual nlohmann::json get_request_body_for_chat_completions(const nlohmann::json& messages) const = 0;
         virtual std::string parse_response_for_chat_completions(const std::string& response) const = 0;
         virtual int get_max_tokens() const = 0;
         virtual int get_truncation_length() const = 0;
@@ -355,7 +355,7 @@ namespace llmcpp
         std::string parse_response_for_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_chat_completions(const nlohmann::json& messages) const override;
+        nlohmann::json get_request_body_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
@@ -419,7 +419,7 @@ namespace llmcpp
         std::string parse_response_for_completions(const std::string& response) const override;
         std::string get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string& response) const override;
-        std::string get_request_body_for_chat_completions(const nlohmann::json& messages) const override;
+        nlohmann::json get_request_body_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
 
         int get_max_tokens() const override
@@ -1101,6 +1101,8 @@ namespace llmcpp
 
     std::string base64_decode(std::string_view encoded_string);
 
+    bool has_base64(const nlohmann::json& json, std::size_t threshold);
+
     std::string trim(std::string_view str);
 
     std::string console_string_to_u8string(std::string_view input);
@@ -1525,6 +1527,43 @@ namespace llmcpp
         }
 
         return decoded;
+    }
+
+    bool has_base64(const nlohmann::json& json, std::size_t threshold)
+    {
+        if (json.is_array())
+        {
+            for (auto& value : json)
+            {
+                if (has_base64(value, threshold))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (json.is_object())
+        {
+            for (auto& [key, value] : json.items())
+            {
+                if (has_base64(value, threshold))
+                {
+                    return true;
+                }
+            }
+        }
+        else if (json.is_string())
+        {
+            const std::string_view str{ json.get_ref<const std::string&>() };
+            if (str.size() >= threshold)
+            {
+                auto is_base64_char{ [](auto c) -> bool { return std::isalnum(c) || c == '+' || c == '/'; } };
+                if (std::all_of(str.begin(), str.end(), is_base64_char))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     std::string trim(std::string_view str)
@@ -4390,8 +4429,18 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        const std::string request_body{ params.get_request_body_for_chat_completions(messages) };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON";
+        const nlohmann::json request_body_json{ params.get_request_body_for_chat_completions(messages) };
+        const std::string request_body{ request_body_json.dump() };
+
+        constexpr std::size_t threshold{ 64 };
+        if (has_base64(request_body_json, threshold))
+        {
+            BOOST_LOG_TRIVIAL(info) << "Send JSON";
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        }
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
@@ -4499,7 +4548,7 @@ namespace llmcpp
         return response_json.at("length").get<int>();
     }
 
-    std::string tg_completions_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
+    nlohmann::json tg_completions_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
     {
         return {};
     }
@@ -4581,7 +4630,7 @@ namespace llmcpp
         return response_json.at("value").get<int>();
     }
 
-    std::string kc_generation_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
+    nlohmann::json kc_generation_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4623,7 +4672,7 @@ namespace llmcpp
         json["logprobs"] = logprobs;
         json["messages"] = messages;
 
-        return json.dump();
+        return json;
     }
 
     std::string kc_generation_parameters::parse_response_for_chat_completions(const std::string& response) const
