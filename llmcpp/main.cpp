@@ -972,11 +972,7 @@ namespace llmcpp
             bool terminated{};
         };
 
-        struct statement_type
-            : std::vector<expression_type>
-        {
-            using std::vector<expression_type>::vector;
-        };
+        using statement_type = std::vector<expression_type>;
 
         struct placeholder_type
         {
