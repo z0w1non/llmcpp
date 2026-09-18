@@ -2060,25 +2060,25 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, true);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                   \
-        namespace detail                                                                                    \
-        {                                                                                                   \
-            struct opecode                                                                                  \
-            {                                                                                               \
-                template<typename A, typename B>                                                            \
-                    requires (bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>)     \
-                vr_primitive_type operator ()(const A& a, const B& b) const                                 \
-                {                                                                                           \
-                    return unwrap(a) operator_ unwrap(b);                                                   \
-                }                                                                                           \
-                template<typename A, typename B>                                                            \
-                    requires (!(bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>))  \
-                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const                    \
-                {                                                                                           \
-                    llmcpp::throw_exception(macro_exception{});                                             \
-                }                                                                                           \
-            };                                                                                              \
-        }                                                                                                   \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                  \
+        namespace detail                                                                                   \
+        {                                                                                                  \
+            struct opecode                                                                                 \
+            {                                                                                              \
+                template<typename A, typename B>                                                           \
+                    requires (bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>)    \
+                vr_primitive_type operator ()(const A& a, const B& b) const                                \
+                {                                                                                          \
+                    return unwrap(a) operator_ unwrap(b);                                                  \
+                }                                                                                          \
+                template<typename A, typename B>                                                           \
+                    requires (!(bitwise_operable<unwrap_type_t<A>> && bitwise_operable<unwrap_type_t<B>>)) \
+                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const                   \
+                {                                                                                          \
+                    llmcpp::throw_exception(macro_exception{});                                            \
+                }                                                                                          \
+            };                                                                                             \
+        }                                                                                                  \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         //LLMCPP_DEFINE_FUNCTION_OBJECT(|| , logical_or);
@@ -2142,41 +2142,41 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(>= , greater_equal);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
-        namespace detail                                                                                \
-        {                                                                                               \
-            struct opecode                                                                              \
-            {                                                                                           \
-                template<typename A, typename B>                                                        \
-                static constexpr bool operable =                                                        \
-                    requires(const A& a, const B& b) { unwrap(a) operator_ unwrap(b); }                 \
-                    && !std::same_as<std::decay_t<unwrap_type_t<A>>, bool>                              \
-                    && !std::same_as<std::decay_t<unwrap_type_t<B>>, bool>;                             \
-                template<typename A, typename B>                                                        \
-                    requires (operable<A, B>)                                                           \
-                vr_primitive_type operator ()(const A& a, const B& b) const                             \
-                {                                                                                       \
-                    if constexpr (zero_check)                                                           \
-                    {                                                                                   \
-                        using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
-                        if constexpr (safe_equality_comparable<B_>)                                     \
-                        {                                                                               \
-                            if (unwrap(b) == B_{})                                                      \
-                            {                                                                           \
-                                llmcpp::throw_exception(macro_exception{});                             \
-                            }                                                                           \
-                        }                                                                               \
-                    }                                                                                   \
-                    return unwrap(a) operator_ unwrap(b);                                               \
-                }                                                                                       \
-                template<typename A, typename B>                                                        \
-                    requires (!operable<A, B>)                                                          \
-                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const                \
-                {                                                                                       \
-                    llmcpp::throw_exception(macro_exception{});                                         \
-                }                                                                                       \
-            };                                                                                          \
-        }                                                                                               \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                    \
+        namespace detail                                                                 \
+        {                                                                                \
+            struct opecode                                                               \
+            {                                                                            \
+                template<typename A, typename B>                                         \
+                static constexpr bool operable =                                         \
+                    requires(const A& a, const B& b) { unwrap(a) operator_ unwrap(b); }  \
+                    && !std::same_as<std::decay_t<unwrap_type_t<A>>, bool>               \
+                    && !std::same_as<std::decay_t<unwrap_type_t<B>>, bool>;              \
+                template<typename A, typename B>                                         \
+                    requires (operable<A, B>)                                            \
+                vr_primitive_type operator ()(const A& a, const B& b) const              \
+                {                                                                        \
+                    if constexpr (zero_check)                                            \
+                    {                                                                    \
+                        using B_ = std::decay_t<unwrap_type_t<B>>;                       \
+                        if constexpr (safe_equality_comparable<B_>)                      \
+                        {                                                                \
+                            if (unwrap(b) == B_{})                                       \
+                            {                                                            \
+                                llmcpp::throw_exception(macro_exception{});              \
+                            }                                                            \
+                        }                                                                \
+                    }                                                                    \
+                    return unwrap(a) operator_ unwrap(b);                                \
+                }                                                                        \
+                template<typename A, typename B>                                         \
+                    requires (!operable<A, B>)                                           \
+                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const \
+                {                                                                        \
+                    llmcpp::throw_exception(macro_exception{});                          \
+                }                                                                        \
+            };                                                                           \
+        }                                                                                \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(+, plus, false);
@@ -2186,52 +2186,52 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(%, modulus, true);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
-        namespace detail                                                        \
-        {                                                                       \
-            struct opecode                                                      \
-            {                                                                   \
-                template<typename A>                                            \
-                    requires requires(A& a) { operator_ unwrap(a); }            \
-                vr_primitive_type operator ()(A& a) const                       \
-                {                                                               \
-                    return operator_ unwrap(a);                                 \
-                }                                                               \
-                template<typename A>                                            \
-                    requires (!requires(A& a) { operator_ unwrap(a); })         \
-                [[noreturn]] vr_primitive_type operator ()(A& a) const          \
-                {                                                               \
-                    llmcpp::throw_exception(macro_exception{});                 \
-                }                                                               \
-            };                                                                  \
-        }                                                                       \
-                                                                                \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)               \
+        namespace detail                                                \
+        {                                                               \
+            struct opecode                                              \
+            {                                                           \
+                template<typename A>                                    \
+                    requires requires(A& a) { operator_ unwrap(a); }    \
+                vr_primitive_type operator ()(A& a) const               \
+                {                                                       \
+                    return operator_ unwrap(a);                         \
+                }                                                       \
+                template<typename A>                                    \
+                    requires (!requires(A& a) { operator_ unwrap(a); }) \
+                [[noreturn]] vr_primitive_type operator ()(A& a) const  \
+                {                                                       \
+                    llmcpp::throw_exception(macro_exception{});         \
+                }                                                       \
+            };                                                          \
+        }                                                               \
+                                                                        \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(++, prefix_increment);
         LLMCPP_DEFINE_FUNCTION_OBJECT(--, prefix_decrement);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, concept_name)         \
-        namespace detail                                                        \
-        {                                                                       \
-            struct opecode                                                      \
-            {                                                                   \
-                template<typename A>                                            \
-                    requires (concept_name<unwrap_type_t<A>>)                   \
-                vr_primitive_type operator ()(const A& a) const                 \
-                {                                                               \
-                    return operator_ unwrap(a);                                 \
-                }                                                               \
-                template<typename A>                                            \
-                    requires (!(concept_name<unwrap_type_t<A>>))                \
-                [[noreturn]] vr_primitive_type operator ()(const A& a) const    \
-                {                                                               \
-                    llmcpp::throw_exception(macro_exception{});                 \
-                }                                                               \
-            };                                                                  \
-        }                                                                       \
-                                                                                \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, concept_name)      \
+        namespace detail                                                     \
+        {                                                                    \
+            struct opecode                                                   \
+            {                                                                \
+                template<typename A>                                         \
+                    requires (concept_name<unwrap_type_t<A>>)                \
+                vr_primitive_type operator ()(const A& a) const              \
+                {                                                            \
+                    return operator_ unwrap(a);                              \
+                }                                                            \
+                template<typename A>                                         \
+                    requires (!(concept_name<unwrap_type_t<A>>))             \
+                [[noreturn]] vr_primitive_type operator ()(const A& a) const \
+                {                                                            \
+                    llmcpp::throw_exception(macro_exception{});              \
+                }                                                            \
+            };                                                               \
+        }                                                                    \
+                                                                             \
         LLMCPP_DEFINE_FUNCTION(opecode);
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(+, prefix_plus, has_safe_unary_plus_minus);
@@ -2240,27 +2240,27 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(~, bitwise_not, has_safe_bitwise_not);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
-        namespace detail                                                        \
-        {                                                                       \
-            struct opecode                                                      \
-            {                                                                   \
-                template<typename A>                                            \
-                    requires requires(A & a) { unwrap(a) operator_; }           \
-                vr_primitive_type operator ()(A& a) const                       \
-                {                                                               \
-                    return unwrap(a) operator_;                                 \
-                }                                                               \
-                template<typename A>                                            \
-                    requires (!requires(A & a) { unwrap(a) operator_; })        \
-                [[noreturn]] vr_primitive_type operator ()(A& a) const          \
-                {                                                               \
-                    llmcpp::throw_exception(macro_exception{});                 \
-                }                                                               \
-            };                                                                  \
-        }                                                                       \
-                                                                                \
-        LLMCPP_DEFINE_FUNCTION(opecode);                                        \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                \
+        namespace detail                                                 \
+        {                                                                \
+            struct opecode                                               \
+            {                                                            \
+                template<typename A>                                     \
+                    requires requires(A & a) { unwrap(a) operator_; }    \
+                vr_primitive_type operator ()(A& a) const                \
+                {                                                        \
+                    return unwrap(a) operator_;                          \
+                }                                                        \
+                template<typename A>                                     \
+                    requires (!requires(A & a) { unwrap(a) operator_; }) \
+                [[noreturn]] vr_primitive_type operator ()(A& a) const   \
+                {                                                        \
+                    llmcpp::throw_exception(macro_exception{});          \
+                }                                                        \
+            };                                                           \
+        }                                                                \
+                                                                         \
+        LLMCPP_DEFINE_FUNCTION(opecode);                                 \
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(++, suffix_increment);
         LLMCPP_DEFINE_FUNCTION_OBJECT(--, suffix_decrement);
