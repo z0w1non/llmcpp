@@ -257,7 +257,7 @@ namespace llmcpp
 
     std::string llm_mode_to_target(llm_mode mode, const config& cfg);
 
-    struct llm_prompt_parameters
+    struct llm_parameters
     {
         std::string prompt;
         std::string prompt_file;
@@ -287,7 +287,7 @@ namespace llmcpp
         llm_mode mode;
     };
 
-    struct tg_completions_parameters
+    struct tg_parameters
         : text_generation_parameters
     {
         std::string model;
@@ -369,7 +369,7 @@ namespace llmcpp
         }
     };
 
-    struct kc_generation_parameters
+    struct kc_parameters
         : text_generation_parameters
     {
         int max_context_length{};
@@ -604,7 +604,7 @@ namespace llmcpp
         sd_img2img_parameters img2img;
     };
 
-    struct sb_generation_parameters
+    struct sb_parameters
     {
         std::string host;
         std::string port;
@@ -631,7 +631,7 @@ namespace llmcpp
         std::string reference_audio_path;
     };
 
-    struct cu_generation_parameters
+    struct cu_parameters
     {
         std::string host;
         std::string port;
@@ -774,12 +774,12 @@ namespace llmcpp
         unsigned int timeout_connect{};
         unsigned int timeout_request{};
 
-        llm_prompt_parameters llm;
-        tg_completions_parameters tg;
-        kc_generation_parameters kc;
+        llm_parameters llm;
+        tg_parameters tg;
+        kc_parameters kc;
         sd_parameters sd;
-        sb_generation_parameters sb;
-        cu_generation_parameters cu;
+        sb_parameters sb;
+        cu_parameters cu;
 
         mutable lru_cache lru_cache{ make_lru_cache_callback() };
         context ctx;
@@ -4455,7 +4455,7 @@ namespace llmcpp
         return params.parse_response_for_chat_completions(response.body());
     }
 
-    std::string tg_completions_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
+    std::string tg_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4529,36 +4529,36 @@ namespace llmcpp
         return json.dump();
     }
 
-    std::string tg_completions_parameters::parse_response_for_completions(const std::string& response) const
+    std::string tg_parameters::parse_response_for_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("choices").at(0).at("text").get<std::string>();
     }
 
-    std::string tg_completions_parameters::get_request_body_for_token_count(std::string_view prompt) const
+    std::string tg_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
         nlohmann::json json{ nlohmann::json::object() };
         json["text"] = prompt;
         return json.dump();
     }
 
-    int tg_completions_parameters::parse_response_for_token_count(const std::string& response) const
+    int tg_parameters::parse_response_for_token_count(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("length").get<int>();
     }
 
-    nlohmann::json tg_completions_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
+    nlohmann::json tg_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
     {
         return {};
     }
 
-    std::string tg_completions_parameters::parse_response_for_chat_completions(const std::string& response) const
+    std::string tg_parameters::parse_response_for_chat_completions(const std::string& response) const
     {
         return {};
     }
 
-    std::string kc_generation_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
+    std::string kc_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4611,26 +4611,26 @@ namespace llmcpp
         return json.dump();
     }
 
-    std::string kc_generation_parameters::parse_response_for_completions(const std::string& response) const
+    std::string kc_parameters::parse_response_for_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("results").at(0).at("text").get<std::string>();
     }
 
-    std::string kc_generation_parameters::get_request_body_for_token_count(std::string_view prompt) const
+    std::string kc_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
         nlohmann::json json{ nlohmann::json::object() };
         json["prompt"] = prompt;
         return json.dump();
     }
 
-    int kc_generation_parameters::parse_response_for_token_count(const std::string& response) const
+    int kc_parameters::parse_response_for_token_count(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("value").get<int>();
     }
 
-    nlohmann::json kc_generation_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
+    nlohmann::json kc_parameters::get_request_body_for_chat_completions(const nlohmann::json& messages) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4675,7 +4675,7 @@ namespace llmcpp
         return json;
     }
 
-    std::string kc_generation_parameters::parse_response_for_chat_completions(const std::string& response) const
+    std::string kc_parameters::parse_response_for_chat_completions(const std::string& response) const
     {
         const nlohmann::json response_json{ nlohmann::json::parse(response) };
         return response_json.at("choices").at(0).at("message").at("content").get<std::string>();
