@@ -1566,7 +1566,7 @@ namespace llmcpp
     {
         if (json.is_array())
         {
-            for (auto& value : json)
+            for (const auto& value : json)
             {
                 if (has_base64(value, threshold))
                 {
@@ -1576,7 +1576,7 @@ namespace llmcpp
         }
         else if (json.is_object())
         {
-            for (auto& [key, value] : json.items())
+            for (const auto& [key, value] : json.items())
             {
                 if (has_base64(value, threshold))
                 {
