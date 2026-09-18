@@ -4804,7 +4804,6 @@ namespace llmcpp
         }
         catch (const nlohmann::json::exception& e)
         {
-            clear();
             BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(e);
         }
     }
