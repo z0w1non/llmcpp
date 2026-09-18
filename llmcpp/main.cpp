@@ -1995,7 +1995,6 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign, false);
         LLMCPP_DEFINE_FUNCTION_OBJECT(/=, divides_assign, true);
         LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, true);
-
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
 #define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                   \
@@ -2202,7 +2201,6 @@ namespace llmcpp
 
         LLMCPP_DEFINE_FUNCTION_OBJECT(++, suffix_increment);
         LLMCPP_DEFINE_FUNCTION_OBJECT(--, suffix_decrement);
-
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 #undef LLMCPP_DEFINE_FUNCTION
 
