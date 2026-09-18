@@ -1002,6 +1002,7 @@ namespace llmcpp
         {
             document_grammar();
 
+        private:
             template<typename ... Args>
             using rule = boost::spirit::qi::rule<Iterator, Args ...>;
 
