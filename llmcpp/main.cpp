@@ -1105,7 +1105,7 @@ namespace llmcpp
 
     std::string console_string_to_u8string(std::string_view input);
 
-    void truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse, std::string& result, int& tokens);
+    token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse);
 
     void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens);
 
@@ -3069,11 +3069,9 @@ namespace llmcpp
             const std::string_view str{ get_or_throw<std::string>(arguments[0]) };
             const int max_tokens{ get_or_throw<int>(arguments[1]) };
 
-            std::string result;
-            int tokens{};
-            truncate_by_tokens(str, max_tokens, cfg, reverse, result, tokens);
+            const token_count_string truncated{ truncate_by_tokens(str, max_tokens, cfg, reverse) };
 
-            return result;
+            return truncated.str;
         }
 
         primitive_type head(const std::vector< primitive_type>& arguments, const config& cfg, context& ctx)
@@ -3108,10 +3106,11 @@ namespace llmcpp
             }
 
             std::string result;
-            int tokens{};
-            truncate_by_tokens(str, head_max_tokens, cfg, false, result, tokens);
-            result.append(ellipsis);
-            truncate_by_tokens(str, tail_max_tokens, cfg, true, result, tokens);
+            const token_count_string truncate_head{ truncate_by_tokens(str, head_max_tokens, cfg, false) };
+            result += truncate_head.str;
+            result += ellipsis;
+            const token_count_string truncate_tail{ truncate_by_tokens(str, tail_max_tokens, cfg, true) };
+            result += truncate_tail.str;
 
             return result;
         }
@@ -3288,11 +3287,9 @@ namespace llmcpp
                 output = remove_reasoning(output, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
             }
 
-            std::string truncated;
-            int tokens{};
-            truncate_by_tokens(output, max_tokens, cfg, false, truncated, tokens);
+            const token_count_string truncated{ truncate_by_tokens(output, max_tokens, cfg, false) };
 
-            return truncated;
+            return truncated.str;
         }
 
         primitive_type root(const std::vector<primitive_type>& arguments, const config& cfg, context& ctx)
@@ -3389,10 +3386,9 @@ namespace llmcpp
         return parser::evaluate_document_recursive(std::string{ input }, cfg, max_depth, pushed);
     }
 
-    void truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse, std::string& result, int& tokens)
+    token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse)
     {
-        result = {};
-        tokens = {};
+        token_count_string result;
 
         std::vector<std::string> lines;
         boost::split(lines, string, boost::is_any_of("\n"));
@@ -3403,12 +3399,12 @@ namespace llmcpp
                 for (; first != last; ++first)
                 {
                     const int next_tokens{ cfg.lru_cache.get_tokens(*first) };
-                    if (tokens + next_tokens > max_tokens)
+                    if (result.tokens + next_tokens > max_tokens)
                     {
                         break;
                     }
                     temp.push_back(*first);
-                    tokens += next_tokens;
+                    result.tokens += next_tokens;
                 }
             };
 
@@ -3424,17 +3420,17 @@ namespace llmcpp
 
         for (const std::string& line : temp)
         {
-            result += line;
+            result.str += line;
         }
+
+        return result;
     }
 
     void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens)
     {
-        std::string truncated;
-        int tokens{};
-        truncate_by_tokens(string, remaining_tokens, cfg, reverse, truncated, tokens);
-        result += string;
-        remaining_tokens -= tokens;
+        const token_count_string cruncated{ truncate_by_tokens(string, remaining_tokens, cfg, reverse) };
+        result += cruncated.str;
+        remaining_tokens -= cruncated.tokens;
     }
 
     void create_parent_directories(const std::filesystem::path& path)
