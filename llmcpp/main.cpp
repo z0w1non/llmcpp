@@ -4831,7 +4831,7 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         std::string current_prompt{ expanded_prompt };
-        int current_tokens = initial_tokens;
+        int current_tokens{ initial_tokens };
         for (int completion_iterations{}; completion_iterations < cfg.llm.max_completion_iterations; ++completion_iterations)
         {
             BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
@@ -4848,7 +4848,7 @@ namespace llmcpp
                 break;
             }
 
-            int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
+            const int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
             if (tokens_to_generate <= 0)
             {
                 BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
@@ -4856,9 +4856,7 @@ namespace llmcpp
             }
 
             const int max_tokens{ tokens_to_generate };
-            const std::string response{ send_completions_request(
-                cfg, current_prompt, *cfg.llm.backend, max_tokens
-            ) };
+            const std::string response{ send_completions_request(cfg, current_prompt, *cfg.llm.backend, max_tokens) };
 
             if (response.empty())
             {
