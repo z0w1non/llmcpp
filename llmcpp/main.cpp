@@ -1944,7 +1944,7 @@ namespace llmcpp
         } && !std::same_as<std::decay_t<A>, bool>;
 
         template<typename A, typename B>
-        concept safe_convertible_to =
+        concept safe_assignable_to =
             std::is_arithmetic_v<A>
             && std::is_arithmetic_v<B>
             && !std::is_same_v<A, bool>
@@ -1981,7 +1981,7 @@ namespace llmcpp
                             return unwrap(a) = unwrap(b);
                         }
                     }
-                    else if constexpr (safe_convertible_to<A_, B_>)
+                    else if constexpr (safe_assignable_to<B_, A_>)
                     {
                         if constexpr (requires { unwrap(a) = static_cast<A_>(unwrap(b)); })
                         {
@@ -2041,7 +2041,7 @@ namespace llmcpp
                                 return unwrap(a) operator_ unwrap(b);                                   \
                             }                                                                           \
                         }                                                                               \
-                        else if constexpr (safe_convertible_to<A_, B_>)                                 \
+                        else if constexpr (safe_assignable_to<B_, A_>)                                  \
                         {                                                                               \
                             if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
                             {                                                                           \
