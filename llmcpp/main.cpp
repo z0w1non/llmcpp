@@ -677,10 +677,9 @@ namespace llmcpp
     template<typename Result>
     std::optional<Result> get_optional(const primitive_type& value);
 
-    class context
+    struct context
         : private boost::noncopyable
     {
-    public:
         using variable_map_type = string_unordered_map<primitive_type>;
 
         context();
@@ -704,8 +703,8 @@ namespace llmcpp
     struct by_key {};
     struct by_lru {};
 
-    class lru_cache
-        : boost::multi_index::multi_index_container<
+    struct lru_cache
+        : private boost::multi_index::multi_index_container<
         token_count_string,
         boost::multi_index::indexed_by<
         boost::multi_index::hashed_unique<
@@ -718,7 +717,6 @@ namespace llmcpp
         >
         >
     {
-    public:
         using callback_type = std::function<int(std::string_view)>;
         lru_cache(const callback_type& callback);
         lru_cache(const lru_cache&) = default;
@@ -3681,6 +3679,7 @@ namespace llmcpp
 
         void connect(std::string_view host, std::string_view port)
         {
+            boost::asio::ip::tcp::resolver resolver{ ioc };
             const boost::asio::ip::tcp::resolver::results_type endpoints{ resolver.resolve(host, port) };
             tcp_stream.connect(endpoints, error_code);
             if_error_throw<connect_exception>(error_code);
@@ -3789,9 +3788,9 @@ namespace llmcpp
             return tcp.expires_after(request_timeout).request(request);
         };
 
+    private:
         boost::beast::error_code error_code;
         boost::asio::io_context ioc;
-        boost::asio::ip::tcp::resolver resolver{ ioc };
         boost::beast::tcp_stream tcp_stream{ ioc };
         bool connected{};
     };
