@@ -1236,49 +1236,58 @@ namespace llmcpp
     int exception_safe_main(int argc, char ** argv);
 } // namespace llmcpp
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::suffix_expression_type,
     operand, operators
 )
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::prefix_expression_node_type,
     operator_, operand
 )
 
-BOOST_FUSION_ADAPT_TPL_STRUCT(
+BOOST_FUSION_ADAPT_TPL_STRUCT
+(
     (Operand)(Operator),
     (llmcpp::parser::operator_operand_pair)(Operand)(Operator),
     operator_, operand
 )
 
-BOOST_FUSION_ADAPT_TPL_STRUCT(
+BOOST_FUSION_ADAPT_TPL_STRUCT
+(
     (LowerExpression)(Operator),
     (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
     first, rest
 )
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::conditional_expression_node_type,
     condition, then_expr, else_expr
 );
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::macro_expression_node_type,
     name, arguments
 );
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::variable_type,
     name
 );
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::assignment_expression_node_type,
     lhs, operator_, rhs
 )
 
-BOOST_FUSION_ADAPT_STRUCT(
+BOOST_FUSION_ADAPT_STRUCT
+(
     llmcpp::parser::expression_type,
     expressions, terminated
 )
@@ -3792,7 +3801,8 @@ namespace llmcpp
             return *this;
         }
 
-        static request_type make_request(
+        static request_type make_request
+        (
             boost::beast::http::verb method,
             std::string_view host,
             std::string_view target,
@@ -3814,7 +3824,8 @@ namespace llmcpp
             return request;
         }
 
-        static request_type make_post_json_request(
+        static request_type make_post_json_request
+        (
             std::string_view host,
             std::string_view target,
             std::string_view body
@@ -3823,7 +3834,8 @@ namespace llmcpp
             return make_request(boost::beast::http::verb::post, host, target, "application/json; charset=UTF-8", body);
         }
 
-        static request_type make_get_json_request(
+        static request_type make_get_json_request
+        (
             std::string_view host,
             std::string_view target
         )
@@ -3832,7 +3844,8 @@ namespace llmcpp
         }
 
         template <typename Duration1, typename Duration2>
-        static response_type send_http_get(
+        static response_type send_http_get
+        (
             std::string_view host,
             std::string_view port,
             std::string_view target,
@@ -4240,7 +4253,8 @@ namespace llmcpp
 
             tcp::response_type history_response
             {
-                tcp::send_http_get(
+                tcp::send_http_get
+                (
                     cfg.cu.host,
                     cfg.cu.port,
                     url.encoded_path(),
@@ -4341,7 +4355,8 @@ namespace llmcpp
                 ("subfolder", file_info.subfolder)
                 ("type", file_info.type);
 
-            tcp::response_type view_response{ tcp::send_http_get(
+            tcp::response_type view_response{ tcp::send_http_get
+            (
                 cfg.cu.host,
                 cfg.cu.port,
                 target.encoded_query(),
@@ -4756,7 +4771,8 @@ namespace llmcpp
         nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string & element : get<by_lru>())
         {
-            cache.push_back(
+            cache.push_back
+            (
                 {
                     { "string", element.str },
                     { "tokens", element.tokens }
@@ -4799,7 +4815,8 @@ namespace llmcpp
             {
                 if (cache.is_object() && cache.contains("string") && cache.contains("tokens"))
                 {
-                    temp_lru_cache.insert(
+                    temp_lru_cache.insert
+                    (
                         {
                             cache["string"].get<std::string>(),
                             cache["tokens"].get<int>()
@@ -5010,7 +5027,8 @@ namespace llmcpp
         {
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
-        sink->set_formatter(
+        sink->set_formatter
+        (
             boost::log::expressions::stream
             << "[" << boost::log::trivial::severity << "] "
             << boost::log::expressions::smessage
@@ -5035,7 +5053,8 @@ namespace llmcpp
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
 
-        sink->set_formatter(
+        sink->set_formatter
+        (
             boost::log::expressions::stream
             << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
             << " [" << boost::log::trivial::severity << "] "
@@ -5975,7 +5994,8 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         nlohmann::json content{ nlohmann::json::array() };
-        content.push_back(
+        content.push_back
+        (
             {
                 { "type", "text" },
                 { "text", expanded_prompt }
@@ -5986,7 +6006,8 @@ namespace llmcpp
         {
             const image_info_type image_info{ image_info_type::from_file(cfg.llm.image_file, cfg) };
             const std::string image_url{ base64_image_to_url(image_info.base64_image, image_info.mime_type) };
-            content.push_back(
+            content.push_back
+            (
                 {
                     { "type", "image_url" },
                     { "image_url", { { "url", image_url } } }
@@ -5994,7 +6015,8 @@ namespace llmcpp
             );
         }
 
-        messages.push_back(
+        messages.push_back
+        (
             {
                 { "role", "user" },
                 { "content", std::move(content) }
@@ -6004,7 +6026,8 @@ namespace llmcpp
         const std::string chat_filename{ cfg.llm.chat_file.empty() ? generate_chat_filename() : cfg.llm.chat_file };
 
         const std::string response{ chat_completions(cfg, ctx, messages) };
-        messages.push_back(
+        messages.push_back
+        (
             {
                 { "role", "assistant" },
                 { "content", response }
