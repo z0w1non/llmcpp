@@ -4732,13 +4732,10 @@ namespace llmcpp
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        lru_cache::const_iterator iter{ get<by_key>().find(std::string{ str }) };
-        if (iter != get<by_key>().end())
+        if (lru_cache::const_iterator iter{ get<by_key>().find(std::string{ str }) }; iter != get<by_key>().end())
         {
             tokens = iter->tokens;
-            get<by_lru>().relocate(
-                get<by_lru>().end(),
-                get<by_lru>().iterator_to(*iter));
+            get<by_lru>().relocate(get<by_lru>().end(), get<by_lru>().iterator_to(*iter));
         }
         else
         {
