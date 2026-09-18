@@ -709,7 +709,9 @@ namespace llmcpp
         boost::multi_index::indexed_by<
         boost::multi_index::hashed_unique<
         boost::multi_index::tag<by_key>,
-        boost::multi_index::member<token_count_string, std::string, &token_count_string::str>
+        boost::multi_index::member<token_count_string, std::string, &token_count_string::str>,
+        string_hash,
+        std::equal_to<std::string_view>
         >,
         boost::multi_index::sequenced<
         boost::multi_index::tag<by_lru>
@@ -4732,7 +4734,7 @@ namespace llmcpp
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        if (lru_cache::const_iterator iter{ get<by_key>().find(std::string{ str }) }; iter != get<by_key>().end())
+        if (lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
         {
             tokens = iter->tokens;
             get<by_lru>().relocate(get<by_lru>().end(), get<by_lru>().iterator_to(*iter));
