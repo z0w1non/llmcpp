@@ -4132,14 +4132,13 @@ namespace llmcpp
         const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
 
         std::string body;
-        body.reserve(512 + image_data.size());
+        body.reserve(160 + image_data.size() + boundary.size() + filename.size());
 
         body += "--";
         body += boundary;
         body += "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"";
         body += filename;
         body += "\"\r\nContent-Type: image/png\r\n\r\n";
-
         body += image_data;
         body += "\r\n";
 
