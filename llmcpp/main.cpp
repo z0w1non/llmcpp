@@ -199,7 +199,6 @@ namespace llmcpp
     template<typename Key, typename T, typename Allocator = std::allocator<std::pair<const Key, T> >>
     using transparent_unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<>, Allocator>;
 
-    // for <= C++ 17
     struct string_hash
     {
         using is_transparent = void;
@@ -207,6 +206,16 @@ namespace llmcpp
         std::size_t operator()(std::string_view sv) const noexcept
         {
             return std::hash<std::string_view>{}(sv);
+        }
+
+        std::size_t operator()(const std::string& s) const noexcept
+        {
+            return std::hash<std::string_view>{}(s);
+        }
+
+        std::size_t operator()(const char* s) const noexcept
+        {
+            return std::hash<std::string_view>{}(s);
         }
     };
 
