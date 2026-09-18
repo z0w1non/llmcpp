@@ -208,16 +208,6 @@ namespace llmcpp
         {
             return std::hash<std::string_view>{}(sv);
         }
-
-        std::size_t operator()(const std::string& s) const noexcept
-        {
-            return std::hash<std::string>{}(s);
-        }
-
-        std::size_t operator()(const char* s) const noexcept
-        {
-            return std::hash<std::string_view>{}(s);
-        }
     };
 
     template<typename T>
@@ -713,9 +703,7 @@ namespace llmcpp
         string_hash,
         std::equal_to<std::string_view>
         >,
-        boost::multi_index::sequenced<
-        boost::multi_index::tag<by_lru>
-        >
+        boost::multi_index::sequenced<boost::multi_index::tag<by_lru>>
         >
         >
     {
@@ -2566,14 +2554,12 @@ namespace llmcpp
 
         std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
         {
-            namespace qi = boost::spirit::qi;
-
             std::vector<node_type> ast;
 
             grammar::iterator_type iter{ document.begin() };
             grammar::iterator_type end{ document.end() };
 
-            if (qi::parse(iter, end, grammar, ast) && iter == end)
+            if (boost::spirit::qi::parse(iter, end, grammar, ast) && iter == end)
             {
                 return evaluate_node(ast, cfg, grammar, ctx);
             }
@@ -4734,7 +4720,7 @@ namespace llmcpp
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        if (lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
+        if (const lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
         {
             tokens = iter->tokens;
             get<by_lru>().relocate(get<by_lru>().end(), get<by_lru>().iterator_to(*iter));
