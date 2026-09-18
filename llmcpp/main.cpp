@@ -703,7 +703,7 @@ namespace llmcpp
     struct by_key {};
     struct by_lru {};
 
-    struct lru_cache
+    class lru_cache
         : boost::multi_index::multi_index_container<
         token_count_string,
         boost::multi_index::indexed_by<
@@ -717,8 +717,19 @@ namespace llmcpp
         >
         >
     {
+    public:
+        using callback_type = std::function<int(std::string_view)>;
+        lru_cache(const callback_type& callback);
+        lru_cache(const lru_cache&) = default;
+        lru_cache(lru_cache&&) = default;
+        lru_cache& operator =(const lru_cache&) = default;
+        lru_cache& operator =(lru_cache&&) = default;
+        int get_tokens(std::string_view str);
         void to_file(const config& cfg) const;
         void from_file(const config& cfg);
+
+    private:
+        callback_type callback;
     };
 
     struct item
@@ -733,6 +744,8 @@ namespace llmcpp
     };
 
     command_mode string_to_command_mode(std::string_view str);
+
+    int send_token_count_request(const config& cfg, std::string_view prompt);
 
     struct config
     {
@@ -769,8 +782,10 @@ namespace llmcpp
         sb_generation_parameters sb;
         cu_generation_parameters cu;
 
-        mutable lru_cache lru_cache;
+        mutable lru_cache lru_cache{ make_lru_cache_callback() };
         context ctx;
+
+        lru_cache::callback_type make_lru_cache_callback();
     };
 
     namespace builtin
@@ -1143,10 +1158,6 @@ namespace llmcpp
     void write_item_list(const config& cfg, std::string_view task);
 
     std::string send_completions_request(const config& cfg, std::string_view prompt, const text_generation_parameters& params, int max_tokens);
-
-    int send_token_count_request(const config& cfg, std::string_view prompt);
-
-    int get_tokens_from_cache(const config& cfg, std::string_view str);
 
     std::string completions(const config& cfg, std::string_view prompt, const context& ctx);
 
@@ -2450,6 +2461,11 @@ namespace llmcpp
 
 namespace llmcpp
 {
+    lru_cache::callback_type config::make_lru_cache_callback()
+    {
+        return [this](std::string_view str) { return send_token_count_request(*this, str); };
+    }
+
     std::string expand_macro(std::string_view input, const config& cfg, const context& ctx);
 
     namespace parser
@@ -3020,9 +3036,9 @@ namespace llmcpp
             const int tail_max_tokens{ get_or_throw<int>(arguments[2]) };
 
             const std::string_view ellipsis{ "..." };
-            const int ellipsis_tokens{ get_tokens_from_cache(cfg, ellipsis) };
+            const int ellipsis_tokens{ cfg.lru_cache.get_tokens(ellipsis) };
 
-            const int total_tokens{ get_tokens_from_cache(cfg, str) };
+            const int total_tokens{ cfg.lru_cache.get_tokens(str) };
 
             if (head_max_tokens + ellipsis_tokens + tail_max_tokens >= total_tokens)
             {
@@ -3324,7 +3340,7 @@ namespace llmcpp
             {
                 for (; first != last; ++first)
                 {
-                    const int next_tokens{ get_tokens_from_cache(cfg, *first) };
+                    const int next_tokens{ cfg.lru_cache.get_tokens(*first) };
                     if (tokens + next_tokens > max_tokens)
                     {
                         break;
@@ -4637,28 +4653,33 @@ namespace llmcpp
         return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
 
-    int get_tokens_from_cache(const config& cfg, std::string_view str)
+    lru_cache::lru_cache(const lru_cache::callback_type& callback)
+        : callback{ callback }
+    {
+    }
+
+    int lru_cache::get_tokens(std::string_view str)
     {
         constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
-        lru_cache::const_iterator iter{ cfg.lru_cache.get<by_key>().find(std::string{ str }) };
-        if (iter != cfg.lru_cache.get<by_key>().end())
+        lru_cache::const_iterator iter{ get<by_key>().find(std::string{ str }) };
+        if (iter != get<by_key>().end())
         {
             tokens = iter->tokens;
-            cfg.lru_cache.get<by_lru>().relocate(
-                cfg.lru_cache.get<by_lru>().end(),
-                cfg.lru_cache.get<by_lru>().iterator_to(*iter));
+            get<by_lru>().relocate(
+                get<by_lru>().end(),
+                get<by_lru>().iterator_to(*iter));
         }
         else
         {
-            tokens = send_token_count_request(cfg, str);
-            cfg.lru_cache.insert({ std::string{ str }, tokens });
+            tokens = callback(str);
+            insert({ std::string{ str }, tokens });
         }
 
-        if (cfg.lru_cache.size() > capacity)
+        if (size() > capacity)
         {
-            cfg.lru_cache.get<by_lru>().pop_front();
+            get<by_lru>().pop_front();
         }
 
         return tokens;
@@ -4704,7 +4725,7 @@ namespace llmcpp
                 return;
             }
 
-            lru_cache temp_lru_cache;
+            lru_cache temp_lru_cache{ callback };
             const nlohmann::json caches{ json["cache"] };
             for (const nlohmann::json& cache : caches)
             {
