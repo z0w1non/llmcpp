@@ -1536,7 +1536,8 @@ namespace llmcpp
         if (str.size() >= threshold && str.size() % 4 == 0)
         {
             std::size_t padding_count{};
-            for (std::size_t i{}; i < str.size(); ++i) {
+            for (std::size_t i{}; i < str.size(); ++i)
+            {
                 const char c = str[i];
                 if (std::isalnum(static_cast<unsigned char>(c)) || c == '+' || c == '/')
                 {
