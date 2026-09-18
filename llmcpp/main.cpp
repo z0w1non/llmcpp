@@ -1101,6 +1101,8 @@ namespace llmcpp
 
     std::string base64_decode(std::string_view encoded_string);
 
+    bool is_base64(std::string_view str, std::size_t threshold);
+
     bool has_base64(const nlohmann::json& json, std::size_t threshold);
 
     std::string trim(std::string_view str);
@@ -1529,6 +1531,37 @@ namespace llmcpp
         return decoded;
     }
 
+    bool is_base64(std::string_view str, std::size_t threshold)
+    {
+        if (str.size() >= threshold && str.size() % 4 == 0)
+        {
+            std::size_t padding_count{};
+            for (std::size_t i{}; i < str.size(); ++i) {
+                const char c = str[i];
+                if (std::isalnum(static_cast<unsigned char>(c)) || c == '+' || c == '/')
+                {
+                    if (padding_count > 0)
+                    {
+                        return false;
+                    }
+                }
+                else if (c == '=')
+                {
+                    ++padding_count;
+                    if (padding_count > 2 || i < str.size() - padding_count)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
     bool has_base64(const nlohmann::json& json, std::size_t threshold)
     {
         if (json.is_array())
@@ -1554,13 +1587,9 @@ namespace llmcpp
         else if (json.is_string())
         {
             const std::string_view str{ json.get_ref<const std::string&>() };
-            if (str.size() >= threshold)
+            if (is_base64(str, threshold))
             {
-                auto is_base64_char{ [](auto c) -> bool { return std::isalnum(c) || c == '+' || c == '/'; } };
-                if (std::all_of(str.begin(), str.end(), is_base64_char))
-                {
-                    return true;
-                }
+                return true;
             }
         }
         return false;
