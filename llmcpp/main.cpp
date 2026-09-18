@@ -4132,7 +4132,7 @@ namespace llmcpp
         const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
 
         std::string body;
-        body.reserve(160 + image_data.size() + boundary.size() + filename.size());
+        body.reserve(154 + image_data.size() + boundary.size() + filename.size());
 
         body += "--";
         body += boundary;
