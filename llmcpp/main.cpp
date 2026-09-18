@@ -3976,7 +3976,8 @@ namespace llmcpp
         if (cfg.sd.abg_remover_enable)
         {
             json["script_name"] = "abg remover";
-            json["script_args"] = {
+            json["script_args"] =
+            {
                 false,
                 false,
                 false,
@@ -4237,7 +4238,8 @@ namespace llmcpp
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            tcp::response_type history_response{
+            tcp::response_type history_response
+            {
                 tcp::send_http_get(
                     cfg.cu.host,
                     cfg.cu.port,
@@ -4267,7 +4269,8 @@ namespace llmcpp
                         llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
                     }
                 }
-                catch (const nlohmann::json::out_of_range &) {
+                catch (const nlohmann::json::out_of_range &)
+                {
                     ;
                 }
 
@@ -4753,10 +4756,12 @@ namespace llmcpp
         nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string & element : get<by_lru>())
         {
-            cache.push_back({
-                { "string", element.str },
-                { "tokens", element.tokens }
-                });
+            cache.push_back(
+                {
+                    { "string", element.str },
+                    { "tokens", element.tokens }
+                }
+            );
         }
         nlohmann::json json{ { "cache", std::move(cache) } };
         const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
@@ -4794,10 +4799,12 @@ namespace llmcpp
             {
                 if (cache.is_object() && cache.contains("string") && cache.contains("tokens"))
                 {
-                    temp_lru_cache.insert({
-                        cache["string"].get<std::string>(),
-                        cache["tokens"].get<int>()
-                        });
+                    temp_lru_cache.insert(
+                        {
+                            cache["string"].get<std::string>(),
+                            cache["tokens"].get<int>()
+                        }
+                    );
                 }
             }
             *this = std::move(temp_lru_cache);
@@ -4999,7 +5006,8 @@ namespace llmcpp
         boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
         backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
         backend->auto_flush(true);
-        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink{
+        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+        {
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
         sink->set_formatter(
@@ -5022,7 +5030,8 @@ namespace llmcpp
         backend->add_stream(ofs);
         backend->auto_flush(true);
 
-        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink{
+        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+        {
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
 
@@ -5364,7 +5373,8 @@ namespace llmcpp
                     if (QueryFullProcessImageNameW(process, 0, current_path_buffer, &size))
                     {
                         const std::filesystem::path current_path{ current_path_buffer };
-                        const std::wstring current_target{
+                        const std::wstring current_target
+                        {
                             executable_file_path.has_parent_path()
                             ? current_path.wstring()
                             : current_path.filename().wstring()
@@ -5965,33 +5975,41 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         nlohmann::json content{ nlohmann::json::array() };
-        content.push_back({
-            { "type", "text" },
-            { "text", expanded_prompt }
-            });
+        content.push_back(
+            {
+                { "type", "text" },
+                { "text", expanded_prompt }
+            }
+        );
 
         if (!cfg.llm.image_file.empty())
         {
             const image_info_type image_info{ image_info_type::from_file(cfg.llm.image_file, cfg) };
             const std::string image_url{ base64_image_to_url(image_info.base64_image, image_info.mime_type) };
-            content.push_back({
-                { "type", "image_url" },
-                { "image_url", { { "url", image_url } } }
-                });
+            content.push_back(
+                {
+                    { "type", "image_url" },
+                    { "image_url", { { "url", image_url } } }
+                }
+            );
         }
 
-        messages.push_back({
-            { "role", "user" },
-            { "content", std::move(content) }
-            });
+        messages.push_back(
+            {
+                { "role", "user" },
+                { "content", std::move(content) }
+            }
+        );
 
         const std::string chat_filename{ cfg.llm.chat_file.empty() ? generate_chat_filename() : cfg.llm.chat_file };
 
         const std::string response{ chat_completions(cfg, ctx, messages) };
-        messages.push_back({
-            { "role", "assistant" },
-            { "content", response }
-            });
+        messages.push_back(
+            {
+                { "role", "assistant" },
+                { "content", response }
+            }
+        );
 
 
         write_file(cfg, messages.dump(), chat_filename);
