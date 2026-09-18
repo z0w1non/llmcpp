@@ -1549,7 +1549,7 @@ namespace llmcpp
                 else if (c == '=')
                 {
                     ++padding_count;
-                    if (padding_count > 2 || i < str.size() - padding_count)
+                    if (padding_count > 2 || i + padding_count < str.size())
                     {
                         return false;
                     }
