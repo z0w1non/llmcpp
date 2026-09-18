@@ -2907,27 +2907,27 @@ namespace llmcpp
     {
         static const string_view_unordered_map<macro_type> macros
         {
-            {"int", int_},
-            {"double", double_},
-            {"char", char_},
-            {"string", string_},
-            {"file", file},
-            {"head", head},
-            {"tail", tail},
-            {"head_tail", head_tail},
-            {"json_literal", json_literal},
-            {"getenv", getenv},
-            {"setenv", setenv},
-            {"generated", generated},
-            {"random", random},
-            {"choice", choice},
-            {"exec", exec},
-            {"code_block", code_block},
-            {"summary", summary},
-            {"root", root},
-            {"parent", parent},
-            {"stem", stem},
-            {"extension", extension}
+            { "int", int_ },
+            { "double", double_ },
+            { "char", char_ },
+            { "string", string_ },
+            { "file", file },
+            { "head", head },
+            { "tail", tail },
+            { "head_tail", head_tail },
+            { "json_literal", json_literal },
+            { "getenv", getenv },
+            { "setenv", setenv },
+            { "generated", generated },
+            { "random", random },
+            { "choice", choice },
+            { "exec", exec },
+            { "code_block", code_block },
+            { "summary", summary },
+            { "root", root },
+            { "parent", parent },
+            { "stem", stem },
+            { "extension", extension }
         };
 
         if (const auto iter{ macros.find(name) }; iter != macros.end())
