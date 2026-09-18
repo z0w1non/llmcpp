@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <cstdint>
 #include <concepts>
+#include <functional>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
