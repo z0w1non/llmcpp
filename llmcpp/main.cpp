@@ -825,6 +825,17 @@ namespace llmcpp
         std::string time();
         std::string datetime();
         std::string stdin_(const config & cfg);
+
+        namespace detail
+        {
+            template<typename T>
+            primitive_type cast_to(const primitive_type argument);
+
+            template<typename T>
+            primitive_type cast_to(const std::vector<primitive_type> & arguments);
+
+            primitive_type head_tail_impl(macro_argument_type args, bool reverse);
+        }
     } // namespace builtin
 
     namespace parser
@@ -3025,74 +3036,43 @@ namespace llmcpp
         }
     }
 
-    template<typename T>
-    primitive_type cast_to(const primitive_type argument)
-    {
-        try
-        {
-            return boost::apply_visitor([&](const auto & value) { return boost::lexical_cast<T>(value); }, argument);
-        }
-        catch (const boost::exception &)
-        {
-            throw_nested_exception(macro_exception{});
-        }
-    }
-
-    template<typename T>
-    primitive_type cast_to(const std::vector<primitive_type> & arguments)
-    {
-        validate_arguments_size(args.arguments, 1, 1);
-        return cast_to<T>(arguments[0]);
-    }
-
     namespace builtin
     {
         primitive_type int_(macro_argument_type args)
         {
-            return cast_to<int>(args.arguments);
+            return detail::cast_to<int>(args.arguments);
         }
 
         primitive_type double_(macro_argument_type args)
         {
-            return cast_to<double>(args.arguments);
+            return detail::cast_to<double>(args.arguments);
         }
 
         primitive_type char_(macro_argument_type args)
         {
-            return cast_to<char>(args.arguments);
+            return detail::cast_to<char>(args.arguments);
         }
 
         primitive_type string_(macro_argument_type args)
         {
-            return cast_to<std::string>(args.arguments);
+            return detail::cast_to<std::string>(args.arguments);
         }
 
         primitive_type file(macro_argument_type args)
         {
             validate_arguments_size(args.arguments, 1, 1);
             const std::string_view filename{ get_or_throw<std::string>(args.arguments[0]) };
-
             return read_text_file_to_string(filename, args.cfg);
-        }
-
-        primitive_type head_tail_impl(macro_argument_type args, bool reverse)
-        {
-            validate_arguments_size(args.arguments, 2, 2);
-            const std::string_view str{ get_or_throw<std::string>(args.arguments[0]) };
-            const int max_tokens{ get_or_throw<int>(args.arguments[1]) };
-
-            const token_count_string truncated{ truncate_by_tokens(str, max_tokens, args.cfg, reverse) };
-            return truncated.str;
         }
 
         primitive_type head(macro_argument_type args)
         {
-            return head_tail_impl(args, false);
+            return detail::head_tail_impl(args, false);
         }
 
         primitive_type tail(macro_argument_type args)
         {
-            return head_tail_impl(args, true);
+            return detail::head_tail_impl(args, true);
         }
 
         primitive_type head_tail(macro_argument_type args)
@@ -3338,6 +3318,39 @@ namespace llmcpp
             }
             return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
         }
+
+        namespace detail
+        {
+            template<typename T>
+            primitive_type cast_to(const primitive_type argument)
+            {
+                try
+                {
+                    return boost::apply_visitor([&](const auto & value) { return boost::lexical_cast<T>(value); }, argument);
+                }
+                catch (const boost::exception &)
+                {
+                    throw_nested_exception(macro_exception{});
+                }
+            }
+
+            template<typename T>
+            primitive_type cast_to(const std::vector<primitive_type> & arguments)
+            {
+                validate_arguments_size(arguments, 1, 1);
+                return cast_to<T>(arguments[0]);
+            }
+
+            primitive_type head_tail_impl(macro_argument_type args, bool reverse)
+            {
+                validate_arguments_size(args.arguments, 2, 2);
+                const std::string_view str{ get_or_throw<std::string>(args.arguments[0]) };
+                const int max_tokens{ get_or_throw<int>(args.arguments[1]) };
+
+                const token_count_string truncated{ truncate_by_tokens(str, max_tokens, args.cfg, reverse) };
+                return truncated.str;
+            }
+        } // namespace detail
     } // namespace builtin
 
     std::string expand_macro(std::string_view input, const config & cfg, const context & ctx)
@@ -5017,7 +5030,7 @@ namespace llmcpp
 
     void init_logging_with_nowide_cout()
     {
-        boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
+        const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
         backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
         backend->auto_flush(true);
         boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
@@ -5035,7 +5048,7 @@ namespace llmcpp
 
     void init_logging_with_nowide_file_log(const std::filesystem::path & log)
     {
-        boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
+        const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
         create_parent_directories(log);
         boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
         if (!ofs->is_open())
