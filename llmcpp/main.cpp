@@ -796,6 +796,7 @@ namespace llmcpp
         };
         using macro_type = std::function<primitive_type(macro_argument_type)>;
         std::optional<macro_type> get_macro(std::string_view name);
+        void validate_arguments_size(const std::vector<primitive_type> & arguments, std::optional<std::size_t> min = std::nullopt, std::optional<std::size_t> max = std::nullopt);
 
         primitive_type int_(macro_argument_type);
         primitive_type double_(macro_argument_type);
@@ -819,7 +820,6 @@ namespace llmcpp
         primitive_type parent(macro_argument_type);
         primitive_type stem(macro_argument_type);
         primitive_type extension(macro_argument_type);
-
 
         std::string date();
         std::string time();
@@ -3013,6 +3013,18 @@ namespace llmcpp
         return std::nullopt;
     }
 
+    void builtin::validate_arguments_size(const std::vector<primitive_type> & arguments, std::optional<std::size_t> min, std::optional<std::size_t> max)
+    {
+        if (min && arguments.size() < *min)
+        {
+            throw_nested_exception(macro_exception{});
+        }
+        if (max && arguments.size() > *max)
+        {
+            throw_nested_exception(macro_exception{});
+        }
+    }
+
     template<typename T>
     primitive_type cast_to(const primitive_type argument)
     {
@@ -3029,11 +3041,7 @@ namespace llmcpp
     template<typename T>
     primitive_type cast_to(const std::vector<primitive_type> & arguments)
     {
-        if (arguments.empty())
-        {
-            llmcpp::throw_exception(macro_exception{});
-        }
-
+        validate_arguments_size(args.arguments, 1, 1);
         return cast_to<T>(arguments[0]);
     }
 
@@ -3061,11 +3069,7 @@ namespace llmcpp
 
         primitive_type file(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             const std::string_view filename{ get_or_throw<std::string>(args.arguments[0]) };
 
             return read_text_file_to_string(filename, args.cfg);
@@ -3073,16 +3077,11 @@ namespace llmcpp
 
         primitive_type head_tail_impl(macro_argument_type args, bool reverse)
         {
-            if (args.arguments.size() < 2)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 2, 2);
             const std::string_view str{ get_or_throw<std::string>(args.arguments[0]) };
             const int max_tokens{ get_or_throw<int>(args.arguments[1]) };
 
             const token_count_string truncated{ truncate_by_tokens(str, max_tokens, args.cfg, reverse) };
-
             return truncated.str;
         }
 
@@ -3098,11 +3097,7 @@ namespace llmcpp
 
         primitive_type head_tail(macro_argument_type args)
         {
-            if (args.arguments.size() < 3)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 3, 3);
             const std::string_view str{ get_or_throw<std::string>(args.arguments[0]) };
             const int head_max_tokens{ get_or_throw<int>(args.arguments[1]) };
             const int tail_max_tokens{ get_or_throw<int>(args.arguments[2]) };
@@ -3123,27 +3118,18 @@ namespace llmcpp
             result += ellipsis;
             const token_count_string truncate_tail{ truncate_by_tokens(str, tail_max_tokens, args.cfg, true) };
             result += truncate_tail.str;
-
             return result;
         }
 
         primitive_type json_literal(macro_argument_type args)
         {
-            if (args.arguments.size() < 1)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             return json_escape_string(get_or_throw<std::string>(args.arguments[0]));
         }
 
         primitive_type getenv(macro_argument_type args)
         {
-            if (args.arguments.size() < 1)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             const std::string & key{ get_or_throw<std::string>(args.arguments[0]) };
 
             if (const char * env{ boost::nowide::getenv(key.c_str()) }; env)
@@ -3156,11 +3142,7 @@ namespace llmcpp
 
         primitive_type setenv(macro_argument_type args)
         {
-            if (args.arguments.size() < 2)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 2);
             const std::string & key{ get_or_throw<std::string>(args.arguments[0]) };
             const std::string & value{ get_or_throw<std::string>(args.arguments[1]) };
 
@@ -3174,11 +3156,7 @@ namespace llmcpp
 
         primitive_type generated(macro_argument_type args)
         {
-            if (args.arguments.size() < 1)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1);
             const std::string_view prompt{ get_or_throw<std::string>(args.arguments[0]) };
 
             std::string result;
@@ -3191,6 +3169,7 @@ namespace llmcpp
 
         primitive_type random(macro_argument_type args)
         {
+            validate_arguments_size(args.arguments, 0, 2);
             const std::optional<int> optional_min{ args.arguments.size() > 0 ? get_optional<int>(args.arguments[0]) : std::nullopt };
             const std::optional<int> optional_max{ args.arguments.size() > 1 ? get_optional<int>(args.arguments[1]) : std::nullopt };
 
@@ -3202,11 +3181,7 @@ namespace llmcpp
 
         primitive_type choice(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1);
             return args.arguments[llmcpp::random<std::size_t>(0, args.arguments.size() - 1)];
         }
 
@@ -3215,11 +3190,7 @@ namespace llmcpp
             namespace process = boost::process::v2;
             namespace asio = boost::asio;
 
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1);
             const std::string_view exe_name{ get_or_throw<std::string>(args.arguments[0]) };
             std::vector<std::string> args_;
             args_.reserve(args.arguments.size());
@@ -3261,11 +3232,7 @@ namespace llmcpp
 
         primitive_type code_block(macro_argument_type args)
         {
-            if (args.arguments.size() < 2)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 2, 2);
             const std::string_view markdown{ get_or_throw<std::string>(args.arguments[0]) };
             const std::string_view code_block{ get_or_throw<std::string>(args.arguments[1]) };
 
@@ -3280,11 +3247,7 @@ namespace llmcpp
 
         primitive_type summary(macro_argument_type args)
         {
-            if (args.arguments.size() < 3)
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 3, 3);
             const std::string_view prompt{ get_or_throw<std::string>(args.arguments[0]) };
             const std::string & target{ get_or_throw<std::string>(args.arguments[1]) };
             const int max_tokens{ get_or_throw<int>(args.arguments[2]) };
@@ -3306,41 +3269,25 @@ namespace llmcpp
 
         primitive_type root(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             return std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }.root_path().string();
         }
 
         primitive_type parent(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             return std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }.relative_path().string();
         }
 
         primitive_type stem(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             return std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }.stem().string();
         }
 
         primitive_type extension(macro_argument_type args)
         {
-            if (args.arguments.empty())
-            {
-                llmcpp::throw_exception(macro_exception{});
-            }
-
+            validate_arguments_size(args.arguments, 1, 1);
             return std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }.extension().string();
         }
 
