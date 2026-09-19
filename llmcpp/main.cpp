@@ -237,9 +237,9 @@ namespace llmcpp
     struct text_generation_parameters
     {
         virtual ~text_generation_parameters() {}
-        virtual std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const = 0;
+        virtual nlohmann::json get_request_body_for_completions(std::string_view prompt, int max_tokens) const = 0;
         virtual std::string parse_response_for_completions(const std::string & response) const = 0;
-        virtual std::string get_request_body_for_token_count(std::string_view prompt) const = 0;
+        virtual nlohmann::json get_request_body_for_token_count(std::string_view prompt) const = 0;
         virtual int parse_response_for_token_count(const std::string & response) const = 0;
         virtual nlohmann::json get_request_body_for_chat_completions(const nlohmann::json & messages) const = 0;
         virtual std::string parse_response_for_chat_completions(const std::string & response) const = 0;
@@ -350,9 +350,9 @@ namespace llmcpp
         std::string dry_sequence_breakers;
         std::string grammar_string;
 
-        std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
+        nlohmann::json get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
         std::string parse_response_for_completions(const std::string & response) const override;
-        std::string get_request_body_for_token_count(std::string_view prompt) const override;
+        nlohmann::json get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string & response) const override;
         nlohmann::json get_request_body_for_chat_completions(const nlohmann::json & messages) const override;
         std::string parse_response_for_chat_completions(const std::string & response) const override;
@@ -414,9 +414,9 @@ namespace llmcpp
         bool logprobs{};
         bool replace_instruct_placeholders{};
 
-        std::string get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
+        nlohmann::json get_request_body_for_completions(std::string_view prompt, int max_tokens) const override;
         std::string parse_response_for_completions(const std::string & response) const override;
-        std::string get_request_body_for_token_count(std::string_view prompt) const override;
+        nlohmann::json get_request_body_for_token_count(std::string_view prompt) const override;
         int parse_response_for_token_count(const std::string & response) const override;
         nlohmann::json get_request_body_for_chat_completions(const nlohmann::json & messages) const override;
         std::string parse_response_for_chat_completions(const std::string & response) const override;
@@ -4450,7 +4450,7 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens) };
+        const std::string request_body{ params.get_request_body_for_completions(prompt, max_tokens).dump()};
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
@@ -4500,7 +4500,7 @@ namespace llmcpp
         return params.parse_response_for_chat_completions(response.body());
     }
 
-    std::string tg_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
+    nlohmann::json tg_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4571,7 +4571,7 @@ namespace llmcpp
         json["dry_sequence_breakers"] = dry_sequence_breakers;
         json["grammar_string"] = grammar_string;
 
-        return json.dump();
+        return json;
     }
 
     std::string tg_parameters::parse_response_for_completions(const std::string & response) const
@@ -4580,11 +4580,11 @@ namespace llmcpp
         return response_json.at("choices").at(0).at("text").get<std::string>();
     }
 
-    std::string tg_parameters::get_request_body_for_token_count(std::string_view prompt) const
+    nlohmann::json tg_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
         nlohmann::json json{ nlohmann::json::object() };
         json["text"] = prompt;
-        return json.dump();
+        return json;
     }
 
     int tg_parameters::parse_response_for_token_count(const std::string & response) const
@@ -4645,7 +4645,7 @@ namespace llmcpp
         return response_json.at("choices").at(0).at("message").at("content").get<std::string>();
     }
 
-    std::string kc_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
+    nlohmann::json kc_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
 
@@ -4704,11 +4704,11 @@ namespace llmcpp
         return response_json.at("results").at(0).at("text").get<std::string>();
     }
 
-    std::string kc_parameters::get_request_body_for_token_count(std::string_view prompt) const
+    nlohmann::json kc_parameters::get_request_body_for_token_count(std::string_view prompt) const
     {
         nlohmann::json json{ nlohmann::json::object() };
         json["prompt"] = prompt;
-        return json.dump();
+        return json;
     }
 
     int kc_parameters::parse_response_for_token_count(const std::string & response) const
@@ -4777,7 +4777,7 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt) };
+        const std::string request_body{ cfg.llm.backend->get_request_body_for_token_count(prompt).dump()};
         BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
