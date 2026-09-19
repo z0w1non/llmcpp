@@ -234,9 +234,9 @@ namespace llmcpp
         static image_info_type from_file(std::string_view path, const config & cfg);
     };
 
-    struct text_generation_parameters
+    struct llm_backend_parameters
     {
-        virtual ~text_generation_parameters() {}
+        virtual ~llm_backend_parameters() {}
         virtual nlohmann::json get_request_body_for_completions(std::string_view prompt, int max_tokens) const = 0;
         virtual std::string parse_response_for_completions(const std::string & response) const = 0;
         virtual nlohmann::json get_request_body_for_token_count(std::string_view prompt) const = 0;
@@ -282,12 +282,12 @@ namespace llmcpp
 
         bool code_block_extract{};
 
-        text_generation_parameters * backend{};
+        llm_backend_parameters * backend{};
         llm_mode mode;
     };
 
     struct tg_parameters
-        : text_generation_parameters
+        : llm_backend_parameters
     {
         std::string model;
         int best_of{};
@@ -369,7 +369,7 @@ namespace llmcpp
     };
 
     struct kc_parameters
-        : text_generation_parameters
+        : llm_backend_parameters
     {
         int max_context_length{};
         int max_length{};
@@ -1173,7 +1173,7 @@ namespace llmcpp
 
     void write_item_list(const config & cfg, std::string_view task);
 
-    std::string send_completions_request(const config & cfg, std::string_view prompt, const text_generation_parameters & params, int max_tokens);
+    std::string send_completions_request(const config & cfg, std::string_view prompt, const llm_backend_parameters & params, int max_tokens);
 
     std::string completions(const config & cfg, std::string_view prompt, const context & ctx);
 
@@ -4394,7 +4394,7 @@ namespace llmcpp
         return image_info_type{ base64_image, mime_type };
     }
 
-    std::string send_completions_request(const config & cfg, std::string_view prompt, const text_generation_parameters & params, int max_tokens)
+    std::string send_completions_request(const config & cfg, std::string_view prompt, const llm_backend_parameters & params, int max_tokens)
     {
         const std::string_view host{ cfg.llm.host };
         const std::string_view port{ cfg.llm.port };
@@ -4418,7 +4418,7 @@ namespace llmcpp
         return params.parse_response_for_completions(response.body());
     }
 
-    std::string send_chat_completions_request(const config & cfg, const text_generation_parameters & params, const nlohmann::json & messages)
+    std::string send_chat_completions_request(const config & cfg, const llm_backend_parameters & params, const nlohmann::json & messages)
     {
         const std::string_view host{ cfg.llm.host };
         const std::string_view port{ cfg.llm.port };
