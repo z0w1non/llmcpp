@@ -3374,19 +3374,21 @@ namespace llmcpp
             return oss.str();
         }
 
-        std::string stdin_(const config & cfg)
+        bool is_interactive_input()
         {
 #if BOOST_OS_WINDOWS
-            bool is_terminal = (_isatty(0) != 0);
+            return (_isatty(0) != 0);
 #else
-            bool is_terminal = (isatty() != 0);
+            return (isatty() != 0);
 #endif
+        }
 
-            if (is_terminal)
+        std::string stdin_(const config & cfg)
+        {
+            if (is_interactive_input())
             {
                 return std::string{};
             }
-
             return std::string{ std::istreambuf_iterator<char>{ boost::nowide::cin }, std::istreambuf_iterator<char>{} };
         }
     } // namespace builtin
