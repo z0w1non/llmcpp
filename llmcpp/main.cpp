@@ -3609,11 +3609,9 @@ namespace llmcpp
 
             std::string result;
             result.reserve(image.size() + text_chunk.size());
-
             result.append(image.substr(0, ihdr_end_offset));
             result.append(reinterpret_cast<const char *>(text_chunk.data()), text_chunk.size());
             result.append(image.substr(ihdr_end_offset));
-
             return result;
         }
 
@@ -4079,9 +4077,7 @@ namespace llmcpp
                 "reference_audio_path", cfg.sb.reference_audio_path);
 
         BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
-
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
-
         return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
     }
 
@@ -4192,13 +4188,10 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-
-        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
-
         BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
 
+        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
         const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
         BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
 
