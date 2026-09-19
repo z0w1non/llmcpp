@@ -3759,6 +3759,7 @@ namespace llmcpp
             tcp_stream.connect(endpoints, error_code);
             if_error_throw<connect_exception>(error_code);
             connected = true;
+            BOOST_LOG_TRIVIAL(info) << "Connect " << host << ":" << port;;
         }
 
         void close() noexcept
@@ -3786,7 +3787,9 @@ namespace llmcpp
 
             if (response.result() != boost::beast::http::status::ok)
             {
-                llmcpp::throw_exception(http_status_exception{}
+                llmcpp::throw_exception
+                (
+                    http_status_exception{}
                     << error_info::http::response::status{ response.result() }
                     << error_info::http::response::reason{ std::to_string(response.result_int()) }
                 );
@@ -4451,7 +4454,6 @@ namespace llmcpp
         BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-
         if (!cfg.llm.api_key.empty())
         {
             request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
