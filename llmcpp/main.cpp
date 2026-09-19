@@ -5026,10 +5026,12 @@ namespace llmcpp
         const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
         backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
         backend->auto_flush(true);
-        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+
+        const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
         {
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
+
         sink->set_formatter
         (
             boost::log::expressions::stream
@@ -5051,7 +5053,7 @@ namespace llmcpp
         backend->add_stream(ofs);
         backend->auto_flush(true);
 
-        boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+        const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
         {
             boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
         };
@@ -5065,7 +5067,6 @@ namespace llmcpp
         );
 
         boost::log::core::get()->add_sink(sink);
-
         boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
     }
 
