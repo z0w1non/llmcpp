@@ -920,7 +920,7 @@ namespace llmcpp
         };
 
         template<typename LowerExpression, typename Operator>
-        struct basic_variadic_binary_expression
+        struct basic_binary_expression
         {
             using lower_expression_type = LowerExpression;
             using operator_type = Operator;
@@ -947,11 +947,11 @@ namespace llmcpp
             boost::recursive_wrapper<prefix_expression_type> operand;
         };
 
-        using multiplicative_expression_type = basic_variadic_binary_expression<prefix_expression_type, multiplicative_operator>;
-        using additive_expression_type = basic_variadic_binary_expression<multiplicative_expression_type, additive_operator>;
-        using shift_expression_type = basic_variadic_binary_expression<additive_expression_type, shift_operator>;
-        using relational_expression_type = basic_variadic_binary_expression<shift_expression_type, relational_operator>;
-        using equality_expression_type = basic_variadic_binary_expression<relational_expression_type, equality_operator>;
+        using multiplicative_expression_type = basic_binary_expression<prefix_expression_type, multiplicative_operator>;
+        using additive_expression_type = basic_binary_expression<multiplicative_expression_type, additive_operator>;
+        using shift_expression_type = basic_binary_expression<additive_expression_type, shift_operator>;
+        using relational_expression_type = basic_binary_expression<shift_expression_type, relational_operator>;
+        using equality_expression_type = basic_binary_expression<relational_expression_type, equality_operator>;
         using and_expression_type = std::vector<equality_expression_type>;
         using xor_expression_type = std::vector<and_expression_type>;
         using or_expression_type = std::vector<xor_expression_type>;
@@ -1276,7 +1276,7 @@ BOOST_FUSION_ADAPT_TPL_STRUCT
 BOOST_FUSION_ADAPT_TPL_STRUCT
 (
     (LowerExpression)(Operator),
-    (llmcpp::parser::basic_variadic_binary_expression)(LowerExpression)(Operator),
+    (llmcpp::parser::basic_binary_expression)(LowerExpression)(Operator),
     first, rest
 )
 
