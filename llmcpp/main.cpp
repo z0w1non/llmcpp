@@ -4595,12 +4595,54 @@ namespace llmcpp
 
     nlohmann::json tg_parameters::get_request_body_for_chat_completions(const nlohmann::json & messages) const
     {
-        return {};
+        nlohmann::json json{ nlohmann::json::object() };
+
+        //json["max_length"] = max_tokens;
+        json["max_tokens"] = get_max_tokens();
+        json["repetition_penalty"] = repetition_penalty;
+        json["repetition_penalty_range"] = repetition_penalty_range;
+        json["sampler_priority"] = sampler_priority;
+
+        if (seed != -1)
+        {
+            json["seed"] = seed;
+        }
+
+        const std::vector<std::string> stop_sequence
+        {
+            "{{[INPUT]}}",
+            "{{[OUTPUT]}}"
+        };
+
+        json["stop_sequence"] = stop_sequence;
+        json["temperature"] = temperature;
+        json["tfs"] = tfs;
+        json["top_a"] = top_a;
+        json["top_k"] = top_k;
+        json["top_p"] = top_p;
+        json["min_p"] = min_p;
+        json["typical_p"] = typical_p;
+        json["ban_eos_token"] = ban_eos_token;
+        json["dynamic_temperature"] = dynamic_temperature;
+        json["dynatemp_low"] = dynatemp_low;
+        json["dynatemp_high"] = dynatemp_high;
+        json["smoothing_factor"] = smoothing_factor;
+        json["dynatemp_exponent"] = dynatemp_exponent;
+        json["mirostat_mode"] = mirostat_mode;
+        json["custom_token_bans"] = custom_token_bans;
+        json["skip_special_tokens"] = skip_special_tokens;
+        json["ban_eos_token"] = ban_eos_token;
+        json["custom_token_bans"] = custom_token_bans;
+        json["logprobs"] = logprobs;
+        json["messages"] = messages;
+
+        return json;
     }
 
     std::string tg_parameters::parse_response_for_chat_completions(const std::string & response) const
     {
-        return {};
+        const nlohmann::json response_json{ nlohmann::json::parse(response) };
+        return response_json.at("choices").at(0).at("message").at("content").get<std::string>();
     }
 
     std::string kc_parameters::get_request_body_for_completions(std::string_view prompt, int max_tokens) const
