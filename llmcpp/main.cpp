@@ -5869,10 +5869,10 @@ namespace llmcpp
         std::string::size_type first{};
         while ((first = result.find(prefix, first)) != std::string::npos)
         {
-            const std::string::size_type last{ result.find(suffix, first + prefix.length()) };
+            const std::string::size_type last{ result.find(suffix, first + prefix.size()) };
             if (last != std::string::npos)
             {
-                const std::string::size_type remove_length{ (last + suffix.length()) - first };
+                const std::string::size_type remove_length{ (last + suffix.size()) - first };
                 BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
                 result.erase(first, remove_length);
             }
