@@ -33,6 +33,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
+#include <boost/current_function.hpp>
 #include <boost/date_time.hpp>
 #include <boost/date_time/time_facet.hpp>
 #include <boost/exception/all.hpp>
@@ -99,6 +100,8 @@
 #else
 #include <unistd.h>
 #endif
+
+#define LLMCPP_LOG(lvl) if (llmcpp::log::location_scope_guard location_scope_guard_{__FILE__, __LINE__, BOOST_CURRENT_FUNCTION}; true) BOOST_LOG_TRIVIAL(lvl)
 
 namespace llmcpp
 {
@@ -1187,11 +1190,24 @@ namespace llmcpp
 
     void parse_user_defined_variables(const std::vector<std::string> & predefined_macros, context & ctx);
 
-    void init_logging_with_nowide_cout();
+    namespace log
+    {
+        struct location_scope_guard
+        {
+            location_scope_guard(const char * file, int line, const char * function);
+            ~location_scope_guard();
 
-    void init_logging_with_nowide_file_log(const std::filesystem::path & log);
+        private:
+            boost::log::core_ptr core;
+            boost::log::attribute_set::iterator file_iterator, line_iterator, function_iterator;
+        };
 
-    void init_logging(const config & cfg);
+        void init_logging_cout();
+
+        void init_logging_file(const std::filesystem::path & log);
+
+        void init_logging(const config & cfg);
+    } // namespace log
 
     void init_chat_mode(config & cfg);
 
@@ -1344,7 +1360,7 @@ namespace llmcpp
 
         [[noreturn]] std::string operator ()(const undefined_variable_type & undefined_variable) const
         {
-            BOOST_LOG_TRIVIAL(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
+            LLMCPP_LOG(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
             llmcpp::throw_exception(macro_exception{});
         }
     };
@@ -2357,12 +2373,12 @@ namespace llmcpp
                 try
                 {
                     const std::string evaluated{ vr_primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
-                    BOOST_LOG_TRIVIAL(trace) << "Placeholder evaluated (" << evaluated << ")";
+                    LLMCPP_LOG(trace) << "Placeholder evaluated (" << evaluated << ")";
                     return evaluated;
                 }
                 catch (const macro_exception &)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Placeholder evaluation failed";
+                    LLMCPP_LOG(warning) << "Placeholder evaluation failed";
                     return std::string{};
                 }
             }
@@ -2943,17 +2959,17 @@ namespace llmcpp
                 try
                 {
                     primitive_type evaluated{ (*macro)({ evaluated_args, cfg, ctx }) };
-                    BOOST_LOG_TRIVIAL(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ")";
+                    LLMCPP_LOG(trace) << "Macro evaluated (" << expr.name << " => " << primitive_to_string(evaluated) << ")";
                     return primitive_val_to_vr_primitive(evaluated);
                 }
                 catch (const boost::exception &)
                 {
-                    BOOST_LOG_TRIVIAL(warning) << "Evaluation failed (" << expr.name << ")";
+                    LLMCPP_LOG(warning) << "Evaluation failed (" << expr.name << ")";
                     throw_nested_exception(macro_exception{});
                 }
             }
 
-            BOOST_LOG_TRIVIAL(warning) << "Macro not found (" << expr.name << ")";
+            LLMCPP_LOG(warning) << "Macro not found (" << expr.name << ")";
             llmcpp::throw_exception(macro_exception{});
         }
 
@@ -2966,10 +2982,10 @@ namespace llmcpp
         {
             if (primitive_type * variable_value_ptr{ ctx.get(variable.name) }; variable_value_ptr)
             {
-                BOOST_LOG_TRIVIAL(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ")";
+                LLMCPP_LOG(trace) << "Variable found (" << variable.name << "=" << primitive_to_string(*variable_value_ptr) << ")";
                 return primitive_ref_to_vr_primitive(*variable_value_ptr);
             }
-            BOOST_LOG_TRIVIAL(trace) << "Variable not found (" << variable.name << ")";
+            LLMCPP_LOG(trace) << "Variable not found (" << variable.name << ")";
             return undefined_variable_type{ variable.name };
         }
 
@@ -3717,7 +3733,7 @@ namespace llmcpp
             tcp_stream.connect(endpoints, error_code);
             if_error_throw<connect_exception>(error_code);
             connected = true;
-            BOOST_LOG_TRIVIAL(info) << "Connect " << host << ":" << port;;
+            LLMCPP_LOG(info) << "Connect " << host << ":" << port;;
         }
 
         void close() noexcept
@@ -4019,13 +4035,13 @@ namespace llmcpp
         }
 
         const std::string request_body{ json.dump() };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
@@ -4076,7 +4092,7 @@ namespace llmcpp
             .set_if(!cfg.sb.reference_audio_path.empty(),
                 "reference_audio_path", cfg.sb.reference_audio_path);
 
-        BOOST_LOG_TRIVIAL(info) << "Send target\n```\n" << target.c_str() << "\n```";
+        LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
         return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
     }
@@ -4154,12 +4170,12 @@ namespace llmcpp
                 {
                     const std::string server_path{ upload_image_to_comfy_ui(cfg, local_relative_path) };
                     ctx.set(variable_name, server_path);
-                    BOOST_LOG_TRIVIAL(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
+                    LLMCPP_LOG(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
                 }
             }
             else
             {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path";
+                LLMCPP_LOG(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path";
             }
         }
     }
@@ -4185,18 +4201,18 @@ namespace llmcpp
         json["prompt"] = prompt_json;
 
         const std::string request_body{ json.dump() };
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        BOOST_LOG_TRIVIAL(info) << "Response: " << response.body();
+        LLMCPP_LOG(info) << "Response: " << response.body();
 
         nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
         const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
-        BOOST_LOG_TRIVIAL(info) << "Queued successfully. Prompt ID: " << prompt_id;
+        LLMCPP_LOG(info) << "Queued successfully. Prompt ID: " << prompt_id;
 
         const std::vector<generated_file_info> target_files{ receive_comfy_ui_generated_file_info(cfg, prompt_id) };
-        BOOST_LOG_TRIVIAL(info) << "Generation complete";
+        LLMCPP_LOG(info) << "Generation complete";
 
         write_comfy_ui_generated_files(cfg, target_files);
     }
@@ -4403,8 +4419,8 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        const std::string request_body{ params.get_request_for_completions(prompt, max_tokens).dump()};
-        BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+        const std::string request_body{ params.get_request_for_completions(prompt, max_tokens).dump() };
+        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
         if (!cfg.llm.api_key.empty())
@@ -4413,7 +4429,7 @@ namespace llmcpp
         }
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_completions(response.body());
     }
@@ -4433,11 +4449,11 @@ namespace llmcpp
         constexpr std::size_t threshold{ 64 };
         if (has_base64(request_body_json, threshold))
         {
-            BOOST_LOG_TRIVIAL(info) << "Send JSON";
+            LLMCPP_LOG(info) << "Send JSON";
         }
         else
         {
-            BOOST_LOG_TRIVIAL(info) << "Send JSON\n```\n" << request_body << "\n```";
+            LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
         }
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
@@ -4448,7 +4464,7 @@ namespace llmcpp
         }
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        BOOST_LOG_TRIVIAL(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
 
         return params.parse_response_for_chat_completions(response.body());
     }
@@ -4730,8 +4746,8 @@ namespace llmcpp
         tcp tcp;
         tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-        const std::string request_body{ cfg.llm.backend->get_request_for_token_count(prompt).dump()};
-        BOOST_LOG_TRIVIAL(trace) << "Send JSON\n```\n" << request_body << "\n```";
+        const std::string request_body{ cfg.llm.backend->get_request_for_token_count(prompt).dump() };
+        LLMCPP_LOG(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
         boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
 
@@ -4831,7 +4847,7 @@ namespace llmcpp
         }
         catch (const nlohmann::json::exception & e)
         {
-            BOOST_LOG_TRIVIAL(warning) << boost::diagnostic_information(e);
+            LLMCPP_LOG(warning) << boost::diagnostic_information(e);
         }
     }
 
@@ -4844,13 +4860,13 @@ namespace llmcpp
 
         const int initial_tokens{ send_token_count_request(cfg, expanded_prompt) };
 
-        BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
+        LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         std::string current_prompt{ expanded_prompt };
         int current_tokens{ initial_tokens };
         for (int completion_iterations{}; completion_iterations < cfg.llm.max_completion_iterations; ++completion_iterations)
         {
-            BOOST_LOG_TRIVIAL(trace) << "completion_iterations: " << completion_iterations;
+            LLMCPP_LOG(trace) << "completion_iterations: " << completion_iterations;
 
             if (current_tokens - initial_tokens >= cfg.llm.min_completion_tokens)
             {
@@ -4860,14 +4876,14 @@ namespace llmcpp
             const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - current_tokens };
             if (remaining_tokens <= 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "Context window full. Cannot generate more tokens";
+                LLMCPP_LOG(warning) << "Context window full. Cannot generate more tokens";
                 break;
             }
 
             const int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
             if (tokens_to_generate <= 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "No tokens left to generate. Aborting";
+                LLMCPP_LOG(warning) << "No tokens left to generate. Aborting";
                 break;
             }
 
@@ -5011,110 +5027,142 @@ namespace llmcpp
                 if (!key.empty())
                 {
                     ctx.set(key, value);
-                    BOOST_LOG_TRIVIAL(info) << "Variable set " << key << " = " << value;
+                    LLMCPP_LOG(info) << "Variable set " << key << " = " << value;
                 }
             }
             else
             {
-                BOOST_LOG_TRIVIAL(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value";
+                LLMCPP_LOG(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value";
             }
         }
     }
 
-    void init_logging_with_nowide_cout()
+    namespace log
     {
-        const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
-        backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
-        backend->auto_flush(true);
-
-        const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+        location_scope_guard::location_scope_guard(const char * file, int line, const char * function)
+            : core(boost::log::core::get())
+            , file_iterator{ core->add_thread_attribute("File", boost::log::attributes::make_constant(file)).first }
+            , line_iterator{ core->add_thread_attribute("Line", boost::log::attributes::make_constant(line)).first }
+            , function_iterator{ core->add_thread_attribute("Function", boost::log::attributes::make_constant(function)).first }
         {
-            boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
-        };
-
-        sink->set_formatter
-        (
-            boost::log::expressions::stream
-            << "[" << boost::log::trivial::severity << "] "
-            << boost::log::expressions::smessage
-        );
-        boost::log::core::get()->add_sink(sink);
-    }
-
-    void init_logging_with_nowide_file_log(const std::filesystem::path & log)
-    {
-        const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
-        create_parent_directories(log);
-        boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
-        if (!ofs->is_open())
-        {
-            llmcpp::throw_exception(file_open_exception{} << error_info::path{ log });
-        }
-        backend->add_stream(ofs);
-        backend->auto_flush(true);
-
-        const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
-        {
-            boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
-        };
-
-        sink->set_formatter
-        (
-            boost::log::expressions::stream
-            << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
-            << " [" << boost::log::trivial::severity << "] "
-            << boost::log::expressions::smessage
-        );
-
-        boost::log::core::get()->add_sink(sink);
-        boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
-    }
-
-    void init_logging(const config & cfg)
-    {
-        boost::log::trivial::severity_level level = boost::log::trivial::info;
-        if (cfg.log_level == "trace")
-        {
-            level = boost::log::trivial::trace;
-        }
-        else if (cfg.log_level == "debug")
-        {
-            level = boost::log::trivial::debug;
-        }
-        else if (cfg.log_level == "info")
-        {
-            level = boost::log::trivial::info;
-        }
-        else if (cfg.log_level == "warning")
-        {
-            level = boost::log::trivial::warning;
-        }
-        else if (cfg.log_level == "error")
-        {
-            level = boost::log::trivial::error;
-        }
-        else if (cfg.log_level == "fatal")
-        {
-            level = boost::log::trivial::fatal;
-        }
-        else
-        {
-            BOOST_LOG_TRIVIAL(warning) << "Unkown log level: \"" << cfg.log_level << "\"";
         }
 
-        if (cfg.verbose)
+        location_scope_guard::~location_scope_guard()
         {
-            init_logging_with_nowide_cout();
+            core->remove_thread_attribute(file_iterator);
+            core->remove_thread_attribute(line_iterator);
+            core->remove_thread_attribute(function_iterator);
         }
 
-        if (!cfg.log_file.empty())
+        void init_logging_cout()
         {
-            const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(cfg.log_file, ".txt"), cfg) };
-            init_logging_with_nowide_file_log(log_file_path);
+            const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
+            backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
+            backend->auto_flush(true);
+
+            const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+            {
+                boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
+            };
+
+            sink->set_formatter
+            (
+                boost::log::expressions::stream
+                << "[" << boost::log::trivial::severity << "] "
+                << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
+                [
+                    boost::log::expressions::stream
+                        << " [" << boost::log::expressions::attr<std::string>("File")
+                        << ":" << boost::log::expressions::attr<int>("Line")
+                        << " (" << boost::log::expressions::attr<std::string>("Function") << ")]"
+                ]
+                << boost::log::expressions::smessage
+            );
+            boost::log::core::get()->add_sink(sink);
         }
 
-        boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
-    }
+        void init_logging_file(const std::filesystem::path & log)
+        {
+            const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
+            create_parent_directories(log);
+            boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
+            if (!ofs->is_open())
+            {
+                llmcpp::throw_exception(file_open_exception{} << error_info::path{ log });
+            }
+            backend->add_stream(ofs);
+            backend->auto_flush(true);
+
+            const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
+            {
+                boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
+            };
+
+            sink->set_formatter
+            (
+                boost::log::expressions::stream
+                << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
+                << " [" << boost::log::trivial::severity << "] "
+                << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
+                [
+                    boost::log::expressions::stream
+                        << " [" << boost::log::expressions::attr<std::string>("File")
+                        << ":" << boost::log::expressions::attr<int>("Line")
+                        << " (" << boost::log::expressions::attr<std::string>("Function") << ")]"
+                ]
+                << boost::log::expressions::smessage
+            );
+
+            boost::log::core::get()->add_sink(sink);
+            boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
+        }
+
+        void init_logging(const config & cfg)
+        {
+            boost::log::trivial::severity_level level = boost::log::trivial::info;
+            if (cfg.log_level == "trace")
+            {
+                level = boost::log::trivial::trace;
+            }
+            else if (cfg.log_level == "debug")
+            {
+                level = boost::log::trivial::debug;
+            }
+            else if (cfg.log_level == "info")
+            {
+                level = boost::log::trivial::info;
+            }
+            else if (cfg.log_level == "warning")
+            {
+                level = boost::log::trivial::warning;
+            }
+            else if (cfg.log_level == "error")
+            {
+                level = boost::log::trivial::error;
+            }
+            else if (cfg.log_level == "fatal")
+            {
+                level = boost::log::trivial::fatal;
+            }
+            else
+            {
+                LLMCPP_LOG(warning) << "Unkown log level: \"" << cfg.log_level << "\"";
+            }
+
+            if (cfg.verbose)
+            {
+                init_logging_cout();
+            }
+
+            if (!cfg.log_file.empty())
+            {
+                const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(cfg.log_file, ".txt"), cfg) };
+                init_logging_file(log_file_path);
+            }
+
+            boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
+        }
+    } // namespace log
 
     void init_chat_mode(config & cfg)
     {
@@ -5338,7 +5386,7 @@ namespace llmcpp
                 return true;
             }
 
-            BOOST_LOG_TRIVIAL(trace)
+            LLMCPP_LOG(trace)
                 << "[Waiting " << (retries + 1) << "/" << max_retries << "] "
                 << host << ":" << port << " (" << error_code.message() << ")";
 
@@ -5355,7 +5403,7 @@ namespace llmcpp
         //auto exe = process::environment::find_executable(boost::filesystem::path{ excutable });
         //if (exe.empty())
         //{
-        //    BOOST_LOG_TRIVIAL(warning) << "exe not found";
+        //    LLMCPP_LOG(warning) << "exe not found";
         //    return;
         //}
         process::process proc{ ctx, excutable_file, arguments, process::windows::create_new_console };
@@ -5759,7 +5807,7 @@ namespace llmcpp
             }
             catch (const command_line_exception &)
             {
-                BOOST_LOG_TRIVIAL(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
+                LLMCPP_LOG(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
                 return 1;
             }
 
@@ -5779,7 +5827,7 @@ namespace llmcpp
                 return 1;
             }
 
-            init_logging(cfg);
+            log::init_logging(cfg);
 
             if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
             {
@@ -5873,7 +5921,7 @@ namespace llmcpp
             if (last != std::string::npos)
             {
                 const std::string::size_type remove_length{ (last + suffix.size()) - first };
-                BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
+                LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
                 result.erase(first, remove_length);
             }
             else
@@ -5884,7 +5932,7 @@ namespace llmcpp
 
         if (result != response)
         {
-            BOOST_LOG_TRIVIAL(info) << "Reasoning removed.\n```\n" << result << "\n```\n";
+            LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result << "\n```\n";
         }
 
         return result;
@@ -5904,7 +5952,7 @@ namespace llmcpp
         }
         ofs.write(data, size);
         const std::string_view file_type{ is_binary ? "binary" : "text" };
-        BOOST_LOG_TRIVIAL(info) << "Write " << file_type << " to " << file_path;
+        LLMCPP_LOG(info) << "Write " << file_type << " to " << file_path;
     }
 
     void write_file(const config & cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
@@ -5995,7 +6043,7 @@ namespace llmcpp
         }
 
         const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
-        BOOST_LOG_TRIVIAL(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
+        LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
 
         nlohmann::json content{ nlohmann::json::array() };
         content.push_back
@@ -6115,7 +6163,7 @@ namespace llmcpp
             create_process_async(cfg.server_executable_file, arguments);
             if (!wait_for_port(cfg.server_host, cfg.server_port, cfg.server_max_retries, cfg.server_wait_ms))
             {
-                BOOST_LOG_TRIVIAL(warning) << "Connection timed out waiting for server response.";
+                LLMCPP_LOG(warning) << "Connection timed out waiting for server response.";
             }
         }
     }
@@ -6126,7 +6174,7 @@ namespace llmcpp
         {
             if (terminate_process_by_path(cfg.server_executable_file) == 0)
             {
-                BOOST_LOG_TRIVIAL(warning) << "Failed to terminate process by executable file path (" << cfg.server_executable_file << ").";
+                LLMCPP_LOG(warning) << "Failed to terminate process by executable file path (" << cfg.server_executable_file << ").";
             }
         }
     }
@@ -6204,17 +6252,17 @@ namespace llmcpp
         }
         catch (const boost::exception & exception)
         {
-            BOOST_LOG_TRIVIAL(error) << boost::diagnostic_information(exception);
+            LLMCPP_LOG(error) << boost::diagnostic_information(exception);
             return -1;
         }
         catch (const std::exception & exception)
         {
-            BOOST_LOG_TRIVIAL(error) << exception.what();
+            LLMCPP_LOG(error) << exception.what();
             return -1;
         }
         catch (...)
         {
-            BOOST_LOG_TRIVIAL(error) << "Unknown exception caught.";
+            LLMCPP_LOG(error) << "Unknown exception caught.";
             return -1;
         }
 
