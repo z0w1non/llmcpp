@@ -5069,13 +5069,9 @@ namespace llmcpp
             (
                 boost::log::expressions::stream
                 << "[" << boost::log::trivial::severity << "] "
-                << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
-                [
-                    boost::log::expressions::stream
-                        << "[" << boost::log::expressions::attr<std::string>("File")
-                        << "(" << boost::log::expressions::attr<int>("Line") << ") "
-                        << boost::log::expressions::attr<std::string>("Function") << ")]"
-                ]
+                << "[" << boost::log::expressions::attr<std::string>("File")
+                << "(" << boost::log::expressions::attr<int>("Line") << ") "
+                << boost::log::expressions::attr<std::string>("Function") << ")] "
                 << boost::log::expressions::smessage
             );
             boost::log::core::get()->add_sink(sink);
@@ -5103,13 +5099,9 @@ namespace llmcpp
                 boost::log::expressions::stream
                 << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
                 << " [" << boost::log::trivial::severity << "] "
-                << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
-                [
-                    boost::log::expressions::stream
-                        << "[" << boost::log::expressions::attr<std::string>("File")
-                        << "(" << boost::log::expressions::attr<int>("Line") << ") "
-                        << boost::log::expressions::attr<std::string>("Function") << ")]"
-                ]
+                << "[" << boost::log::expressions::attr<std::string>("File")
+                << "(" << boost::log::expressions::attr<int>("Line") << ") "
+                << boost::log::expressions::attr<std::string>("Function") << ")] "
                 << boost::log::expressions::smessage
             );
 
