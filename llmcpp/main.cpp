@@ -4664,7 +4664,7 @@ namespace llmcpp
         json["logprobs"] = logprobs;
         json["replace_instruct_placeholders"] = replace_instruct_placeholders;
 
-        return json.dump();
+        return json;
     }
 
     std::string kc_parameters::parse_response_for_completions(const std::string & response) const
@@ -5072,9 +5072,9 @@ namespace llmcpp
                 << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
                 [
                     boost::log::expressions::stream
-                        << " [" << boost::log::expressions::attr<std::string>("File")
-                        << ":" << boost::log::expressions::attr<int>("Line")
-                        << " (" << boost::log::expressions::attr<std::string>("Function") << ")]"
+                        << "[" << boost::log::expressions::attr<std::string>("File")
+                        << "(" << boost::log::expressions::attr<int>("Line") << ") "
+                        << boost::log::expressions::attr<std::string>("Function") << ")]"
                 ]
                 << boost::log::expressions::smessage
             );
@@ -5106,9 +5106,9 @@ namespace llmcpp
                 << boost::log::expressions::if_(boost::log::expressions::has_attr<std::string>("File"))
                 [
                     boost::log::expressions::stream
-                        << " [" << boost::log::expressions::attr<std::string>("File")
-                        << ":" << boost::log::expressions::attr<int>("Line")
-                        << " (" << boost::log::expressions::attr<std::string>("Function") << ")]"
+                        << "[" << boost::log::expressions::attr<std::string>("File")
+                        << "(" << boost::log::expressions::attr<int>("Line") << ") "
+                        << boost::log::expressions::attr<std::string>("Function") << ")]"
                 ]
                 << boost::log::expressions::smessage
             );
