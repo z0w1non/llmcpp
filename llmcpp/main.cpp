@@ -1833,14 +1833,14 @@ namespace llmcpp
         {
             namespace qi = boost::spirit::qi;
 
-            using qi::double_;
-            using qi::int_;
-            using qi::char_;
             using qi::bool_;
-            using qi::lexeme;
+            using qi::char_;
+            using qi::int_;
+            using qi::double_;
             using qi::lit;
-            using qi::skip;
+            using qi::lexeme;
             using qi::space;
+            using qi::skip;
             using qi::matches;
 
             document = *node;
@@ -4902,7 +4902,9 @@ namespace llmcpp
             current_tokens = send_token_count_request(cfg, current_prompt);
         }
 
-        std::string generated{ current_prompt.substr(initial_prompt_size) };
+        std::string generated;
+        generated.reserve(initial_prompt_size + cfg.llm.generation_suffix.size());
+        generated += current_prompt.substr(initial_prompt_size);
         generated += cfg.llm.generation_suffix;
 
         return generated;
