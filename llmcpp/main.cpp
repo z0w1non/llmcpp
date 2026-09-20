@@ -1202,6 +1202,9 @@ namespace llmcpp
             boost::log::attribute_set::iterator file_iterator, line_iterator, function_iterator;
         };
 
+        template<typename Sink>
+        void set_formatter(Sink & sink);
+
         void init_logging_cout();
 
         void init_logging_file(const std::filesystem::path & log);
@@ -5054,6 +5057,21 @@ namespace llmcpp
             core->remove_thread_attribute(function_iterator);
         }
 
+        template<typename Sink>
+        void set_formatter(Sink & sink)
+        {
+            sink->set_formatter
+            (
+                boost::log::expressions::stream
+                << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
+                << " [" << boost::log::trivial::severity << "] "
+                << "[" << boost::log::expressions::attr<std::string>("File")
+                << "(" << boost::log::expressions::attr<int>("Line") << ") "
+                << boost::log::expressions::attr<std::string>("Function") << ")] "
+                << boost::log::expressions::smessage
+            );
+        }
+
         void init_logging_cout()
         {
             const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
@@ -5064,16 +5082,7 @@ namespace llmcpp
             {
                 boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
             };
-
-            sink->set_formatter
-            (
-                boost::log::expressions::stream
-                << "[" << boost::log::trivial::severity << "] "
-                << "[" << boost::log::expressions::attr<std::string>("File")
-                << "(" << boost::log::expressions::attr<int>("Line") << ") "
-                << boost::log::expressions::attr<std::string>("Function") << ")] "
-                << boost::log::expressions::smessage
-            );
+            set_formatter(sink);
             boost::log::core::get()->add_sink(sink);
         }
 
@@ -5093,18 +5102,7 @@ namespace llmcpp
             {
                 boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
             };
-
-            sink->set_formatter
-            (
-                boost::log::expressions::stream
-                << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
-                << " [" << boost::log::trivial::severity << "] "
-                << "[" << boost::log::expressions::attr<std::string>("File")
-                << "(" << boost::log::expressions::attr<int>("Line") << ") "
-                << boost::log::expressions::attr<std::string>("Function") << ")] "
-                << boost::log::expressions::smessage
-            );
-
+            set_formatter(sink);
             boost::log::core::get()->add_sink(sink);
             boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
         }
