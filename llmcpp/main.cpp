@@ -101,7 +101,11 @@
 #include <unistd.h>
 #endif
 
+#if defined(LLMCPP_LOGGING_SOURCE_LOCATION)
 #define LLMCPP_LOG(lvl) if (llmcpp::log::location_scope_guard location_scope_guard_{__FILE__, __LINE__, BOOST_CURRENT_FUNCTION}; true) BOOST_LOG_TRIVIAL(lvl)
+#else
+#define LLMCPP_LOG(lvl) BOOST_LOG_TRIVIAL(lvl)
+#endif
 
 namespace llmcpp
 {
@@ -1192,6 +1196,7 @@ namespace llmcpp
 
     namespace log
     {
+#if defined(LLMCPP_LOGGING_SOURCE_LOCATION)
         struct location_scope_guard
         {
             location_scope_guard(const char * file, int line, const char * function);
@@ -1201,6 +1206,7 @@ namespace llmcpp
             boost::log::core_ptr core;
             boost::log::attribute_set::iterator file_iterator, line_iterator, function_iterator;
         };
+#endif
 
         template<typename Sink>
         void set_formatter(Sink & sink);
@@ -5044,6 +5050,7 @@ namespace llmcpp
 
     namespace log
     {
+#if defined(LLMCPP_LOGGING_SOURCE_LOCATION)
         location_scope_guard::location_scope_guard(const char * file, int line, const char * function)
             : core(boost::log::core::get())
             , file_iterator{ core->add_thread_attribute("File", boost::log::attributes::make_constant(file)).first }
@@ -5058,6 +5065,7 @@ namespace llmcpp
             core->remove_thread_attribute(line_iterator);
             core->remove_thread_attribute(function_iterator);
         }
+#endif
 
         template<typename Sink>
         void set_formatter(Sink & sink)
