@@ -5075,9 +5075,11 @@ namespace llmcpp
                 boost::log::expressions::stream
                 << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S") << " "
                 << "[" << boost::log::trivial::severity << "] "
+#if defined(LLMCPP_LOGGING_SOURCE_LOCATION)
                 << "[" << boost::log::expressions::attr<std::string>("File")
                 << "(" << boost::log::expressions::attr<int>("Line") << ") "
                 << boost::log::expressions::attr<std::string>("Function") << ")] "
+#endif
                 << boost::log::expressions::smessage
             );
         }
