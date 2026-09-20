@@ -5063,8 +5063,8 @@ namespace llmcpp
             sink->set_formatter
             (
                 boost::log::expressions::stream
-                << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S")
-                << " [" << boost::log::trivial::severity << "] "
+                << boost::log::expressions::format_date_time<boost::posix_time::ptime>("TimeStamp", "%Y-%m-%d %H:%M:%S") << " "
+                << "[" << boost::log::trivial::severity << "] "
                 << "[" << boost::log::expressions::attr<std::string>("File")
                 << "(" << boost::log::expressions::attr<int>("Line") << ") "
                 << boost::log::expressions::attr<std::string>("Function") << ")] "
