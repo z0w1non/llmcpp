@@ -1413,6 +1413,9 @@ namespace llmcpp
         using type = T;
     };
 
+    template<typename T>
+    using decay_t = std::decay_t<unwrap_type_t<T>>;
+
     std::string primitive_to_string(const primitive_type & primitive)
     {
         return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
@@ -1937,6 +1940,31 @@ namespace llmcpp
                     llmcpp::throw_exception(macro_exception{} << error_info::description{ "Boolean cast of an undefined variable" });
                 }
             };
+
+            template<typename A, typename B>
+            concept safe_assignable_to_impl =
+                std::is_arithmetic_v<A>
+                && std::is_arithmetic_v<B>
+                && std::is_convertible_v<A, B>
+                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
+                && requires(A a) { B{ a }; };
+
+            template<typename A, typename B>
+            concept safe_arithmetic_assignable_to_impl =
+                std::is_arithmetic_v<A>
+                && std::is_arithmetic_v<B>
+                && std::is_convertible_v<A, B>
+                && !std::is_same_v<A, bool>
+                && !std::is_same_v<B, bool>
+                && requires(A a) { B{ a }; };
+
+            template<typename A, typename B>
+            concept safe_bitwise_assignable_to_impl =
+                std::is_integral_v<A>
+                && std::is_integral_v<B>
+                && std::is_convertible_v<A, B>
+                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
+                && requires(A a) { B{ a }; };
         } // namespace detail
 
         template<typename T>
@@ -1986,34 +2014,6 @@ namespace llmcpp
             { ~a };
         } && !std::same_as<std::decay_t<A>, bool>;
 
-        namespace detail
-        {
-            template<typename A, typename B>
-            concept safe_assignable_to_impl =
-                std::is_arithmetic_v<A>
-                && std::is_arithmetic_v<B>
-                && std::is_convertible_v<A, B>
-                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
-                && requires(A a) { B{ a }; };
-
-            template<typename A, typename B>
-            concept safe_arithmetic_assignable_to_impl =
-                std::is_arithmetic_v<A>
-                && std::is_arithmetic_v<B>
-                && std::is_convertible_v<A, B>
-                && !std::is_same_v<A, bool>
-                && !std::is_same_v<B, bool>
-                && requires(A a) { B{ a }; };
-
-            template<typename A, typename B>
-            concept safe_bitwise_assignable_to_impl =
-                std::is_integral_v<A>
-                && std::is_integral_v<B>
-                && std::is_convertible_v<A, B>
-                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
-                && requires(A a) { B{ a }; };
-        }
-
         template<typename A, typename B>
         concept safe_assignable_to = detail::safe_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
 
@@ -2036,8 +2036,8 @@ namespace llmcpp
                 template<typename A, typename B>
                 vr_primitive_type operator ()(A & a, const B & b) const
                 {
-                    using A_ = std::decay_t<unwrap_type_t<A>>;
-                    using B_ = std::decay_t<unwrap_type_t<B>>;
+                    using A_ = llmcpp::decay_t<A>;
+                    using B_ = llmcpp::decay_t<B>;
                     if constexpr (std::is_same_v<A_, undefined_variable_type> && !std::is_same_v<B_, undefined_variable_type>)
                     {
                         const primitive_type value{ unwrap(b) };
@@ -2098,8 +2098,8 @@ namespace llmcpp
                     template<typename A, typename B>                                                    \
                     vr_primitive_type operator ()(A& a, const B& b) const                               \
                     {                                                                                   \
-                        using A_ = std::decay_t<unwrap_type_t<A>>;                                      \
-                        using B_ = std::decay_t<unwrap_type_t<B>>;                                      \
+                        using A_ = llmcpp::decay_t<A>;                                                  \
+                        using B_ = llmcpp::decay_t<B>;                                                  \
                         if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)              \
                         {                                                                               \
                             if constexpr (requires { unwrap(a) operator_ unwrap(b); })                  \
@@ -2230,15 +2230,15 @@ namespace llmcpp
                 template<typename A, typename B>                                         \
                 static constexpr bool operable =                                         \
                     requires(const A& a, const B& b) { unwrap(a) operator_ unwrap(b); }  \
-                    && !std::same_as<std::decay_t<unwrap_type_t<A>>, bool>               \
-                    && !std::same_as<std::decay_t<unwrap_type_t<B>>, bool>;              \
+                    && !std::same_as<llmcpp::decay_t<A>, bool>                           \
+                    && !std::same_as<llmcpp::decay_t<B>, bool>;                          \
                 template<typename A, typename B>                                         \
                     requires (operable<A, B>)                                            \
                 vr_primitive_type operator ()(const A& a, const B& b) const              \
                 {                                                                        \
                     if constexpr (zero_check)                                            \
                     {                                                                    \
-                        using B_ = std::decay_t<unwrap_type_t<B>>;                       \
+                        using B_ = llmcpp::decay_t<B>;                                   \
                         if constexpr (safe_equality_comparable<B_>)                      \
                         {                                                                \
                             if (unwrap(b) == B_{})                                       \
