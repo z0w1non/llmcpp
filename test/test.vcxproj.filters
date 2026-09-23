@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="ソース ファイル">
+      <UniqueIdentifier>{21cf9f24-1971-44a7-bfc3-1aa846638116}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル">
+      <UniqueIdentifier>{a5b26d89-2e10-4701-8666-593c97d844d3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\test">
+      <UniqueIdentifier>{ce8fb364-ed93-453b-a376-c7bf4312013f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\llmcpp">
+      <UniqueIdentifier>{a3c205f3-4c00-4800-a5cb-457f727b895d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\third_party">
+      <UniqueIdentifier>{7a6dc7ab-cb71-4e39-9e42-acbe5d088211}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\third_party\nlohmann">
+      <UniqueIdentifier>{6b974ab3-9b74-4042-b11e-d72e2b94523c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="test.cpp">
+      <Filter>ソース ファイル\test</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\llmcpp\llmcpp.hpp">
+      <Filter>ヘッダー ファイル\llmcpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\third_party\nlohmann\json.hpp">
+      <Filter>ヘッダー ファイル\third_party\nlohmann</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

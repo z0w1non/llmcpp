@@ -80,31 +80,6 @@
 
 #include "nlohmann/json.hpp"
 
-#if BOOST_OS_WINDOWS
-#include <boost/process/v2/windows/creation_flags.hpp>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef STRICT
-#define STRICT
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#include <tlhelp32.h>
-#undef IN
-#undef OUT
-#undef NEAR
-#undef FAR
-#endif
-
-#if BOOST_OS_WINDOWS
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 #if defined(LLMCPP_LOGGING_SOURCE_LOCATION)
 #define LLMCPP_LOG(lvl) if (llmcpp::log::location_scope_guard location_scope_guard_{__FILE__, __LINE__, BOOST_CURRENT_FUNCTION}; true) BOOST_LOG_TRIVIAL(lvl)
 #else
@@ -1366,6 +1341,31 @@ BOOST_FUSION_ADAPT_STRUCT
 #endif // LLMCPP_HPP
 
 #ifdef LLMCPP_IMPLEMENTATION
+
+#if BOOST_OS_WINDOWS
+#include <boost/process/v2/windows/creation_flags.hpp>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef STRICT
+#define STRICT
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <tlhelp32.h>
+#undef IN
+#undef OUT
+#undef NEAR
+#undef FAR
+#endif
+
+#if BOOST_OS_WINDOWS
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace llmcpp
 {
