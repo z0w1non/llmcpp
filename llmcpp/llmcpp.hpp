@@ -59,7 +59,6 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/multi_index_container.hpp>
-#include <boost/noncopyable.hpp>
 #include <boost/nowide/args.hpp>
 #include <boost/nowide/cstdlib.hpp>
 #include <boost/nowide/fstream.hpp>
@@ -150,11 +149,6 @@ namespace llmcpp
         {
             using error_code = boost::error_info<struct tag_error_code, boost::system::error_code>;
         }
-    }
-
-    exception::exception()
-    {
-        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
     }
 
     template<typename Exception>
@@ -657,11 +651,13 @@ namespace llmcpp
     std::optional<Result> get_optional(const primitive_type& value);
 
     struct context
-        : private boost::noncopyable
     {
         using variable_map_type = string_unordered_map<primitive_type>;
 
         context();
+        context& operator=(const context&) = delete;
+        context(context&&) = delete;
+        context& operator=(context&&) = delete;
         context make_pushed() const;
         void set(std::string_view key, const primitive_type& value);
         const primitive_type* get(std::string_view key) const;
@@ -1369,6 +1365,11 @@ BOOST_FUSION_ADAPT_STRUCT
 
 namespace llmcpp
 {
+    exception::exception()
+    {
+        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
+    }
+
     command_mode string_to_command_mode(std::string_view name)
     {
         command_mode result{};
@@ -5034,6 +5035,12 @@ namespace llmcpp
                 po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
                 po::notify(vm);
 
+                if (vm.find("help") != vm.end())
+                {
+                    boost::nowide::cout << allowed_options << std::endl;
+                    return 1;
+                }
+
                 try
                 {
                     cfg.command_mode = string_to_command_mode(command_mode_string);
@@ -5052,12 +5059,6 @@ namespace llmcpp
                     std::istringstream config_file{ filesystem::read_text_file_to_string(cfg.config_file, cfg, ".ini") };
                     po::store(po::parse_config_file(config_file, allowed_options), vm, true);
                     po::notify(vm);
-                }
-
-                if (vm.find("help") != vm.end())
-                {
-                    boost::nowide::cout << allowed_options << std::endl;
-                    return 1;
                 }
 
                 log::init_logging(cfg);
