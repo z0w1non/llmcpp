@@ -1179,13 +1179,13 @@ namespace llmcpp
 
     namespace sd
     {
-        std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
+        std::string make_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
-        nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-        nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-        nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
         std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
     } // namespace sd
@@ -4249,7 +4249,7 @@ namespace llmcpp
     namespace sd
     {
         // unused
-        std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+        std::string make_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
         {
             std::ostringstream oss;
             oss
@@ -4269,7 +4269,7 @@ namespace llmcpp
             return oss.str();
         }
 
-        nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json;
 
@@ -4291,7 +4291,7 @@ namespace llmcpp
             return json;
         }
 
-        nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json;
 
@@ -4315,7 +4315,7 @@ namespace llmcpp
             return json;
         }
 
-        nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json;
 
@@ -4438,11 +4438,11 @@ namespace llmcpp
 
             if (cfg.sd.mode == sd_mode::txt2img)
             {
-                json.update(txt2img_request(cfg, prompt, negative_prompt));
+                json.update(make_txt2img_request(cfg, prompt, negative_prompt));
             }
             else if (cfg.sd.mode == sd_mode::img2img)
             {
-                json.update(img2img_request(cfg, prompt, negative_prompt));
+                json.update(make_img2img_request(cfg, prompt, negative_prompt));
             }
 
             return json;
@@ -4456,7 +4456,7 @@ namespace llmcpp
             tcp tcp;
             tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-            const nlohmann::json json{ automatic1111_request(cfg, prompt, negative_prompt) };
+            const nlohmann::json json{ make_request(cfg, prompt, negative_prompt) };
             const std::string request_body{ json.dump() };
             LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
