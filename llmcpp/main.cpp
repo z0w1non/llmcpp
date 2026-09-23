@@ -1988,10 +1988,20 @@ namespace llmcpp
 
         template<typename A, typename B>
         concept safe_assignable_to =
-            std::is_arithmetic_v<A>
-            && std::is_arithmetic_v<B>
-            && !std::is_same_v<A, bool>
-            && !std::is_same_v<B, bool>;
+            std::is_arithmetic_v<std::decay_t<A>>
+            && std::is_arithmetic_v<std::decay_t<B>>
+            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
+            && !(std::is_same_v<std::decay_t<A>, bool> ^ std::is_same_v<std::decay_t<B>, bool>)
+            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
+
+        template<typename A, typename B>
+        concept safe_arithmetic_assignable_to =
+            std::is_arithmetic_v<std::decay_t<A>>
+            && std::is_arithmetic_v<std::decay_t<B>>
+            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
+            && !std::is_same_v<std::decay_t<A>, bool>
+            && !std::is_same_v<std::decay_t<B>, bool>
+            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
 
         namespace detail
         {
@@ -2084,7 +2094,7 @@ namespace llmcpp
                                 return unwrap(a) operator_ unwrap(b);                                   \
                             }                                                                           \
                         }                                                                               \
-                        else if constexpr (safe_assignable_to<B_, A_>)                                  \
+                        else if constexpr (safe_arithmetic_assignable_to<B_, A_>)                       \
                         {                                                                               \
                             if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
                             {                                                                           \
