@@ -1169,6 +1169,8 @@ namespace llmcpp
         using code_blocks = string_unordered_map<std::string>;
 
         code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
+
+        std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
     } // namespace llm
 
     namespace sd
@@ -1284,8 +1286,6 @@ namespace llmcpp
     void create_process_async(std::string_view excutable_file, const std::vector<std::string>& arguments);
 
     std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path);
-
-    std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
 
     void generate_and_output(const config& cfg);
 
@@ -3139,7 +3139,7 @@ namespace llmcpp
                 pushed.set("target", target);
                 pushed.set("max_tokens", std::to_string(max_tokens));
                 output = llm::completions(args.cfg, prompt, pushed);
-                output = remove_reasoning(output, args.cfg.llm.reasoning_prefix, args.cfg.llm.reasoning_suffix);
+                output = llm::remove_reasoning(output, args.cfg.llm.reasoning_prefix, args.cfg.llm.reasoning_suffix);
             }
 
             const token_count_string truncated{ string_utils::truncate_by_tokens(output, max_tokens, args.cfg, false) };
@@ -4103,6 +4103,39 @@ namespace llmcpp
                 const std::string name{ sanitize_as_filename(match[1].str()) };
                 const std::string code{ match[2].str() };
                 result[name] = code;
+            }
+
+            return result;
+        }
+
+        std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix)
+        {
+            std::string result{ response };
+
+            if (prefix.empty() || suffix.empty())
+            {
+                return result;
+            }
+
+            std::string::size_type first{};
+            while ((first = result.find(prefix, first)) != std::string::npos)
+            {
+                const std::string::size_type last{ result.find(suffix, first + prefix.size()) };
+                if (last != std::string::npos)
+                {
+                    const std::string::size_type remove_length{ (last + suffix.size()) - first };
+                    LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
+                    result.erase(first, remove_length);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (result != response)
+            {
+                LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result << "\n```\n";
             }
 
             return result;
@@ -6145,39 +6178,6 @@ namespace llmcpp
             (*this)(key_false, value_false);
         }
         return *this;
-    }
-
-    std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix)
-    {
-        std::string result{ response };
-
-        if (prefix.empty() || suffix.empty())
-        {
-            return result;
-        }
-
-        std::string::size_type first{};
-        while ((first = result.find(prefix, first)) != std::string::npos)
-        {
-            const std::string::size_type last{ result.find(suffix, first + prefix.size()) };
-            if (last != std::string::npos)
-            {
-                const std::string::size_type remove_length{ (last + suffix.size()) - first };
-                LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result.substr(first, remove_length) << "\n```\n";
-                result.erase(first, remove_length);
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        if (result != response)
-        {
-            LLMCPP_LOG(info) << "Reasoning removed.\n```\n" << result << "\n```\n";
-        }
-
-        return result;
     }
 
     void generate_and_output(const config& cfg)
