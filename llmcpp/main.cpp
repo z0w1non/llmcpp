@@ -1150,39 +1150,67 @@ namespace llmcpp
 
     std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
 
-    std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
+    namespace llm
+    {
+        void init_llm_mode(config& cfg);
 
-    nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        void init_chat_mode(config& cfg);
 
-    nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        std::vector<item> parse_item_list(std::string_view str);
 
-    nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        void write_item_list(const config& cfg, std::string_view task);
 
-    std::string send_automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        std::string send_completions_request(const config& cfg, std::string_view prompt, const llm_backend_parameters& params, int max_tokens);
 
-    std::string send_style_bert_voice_request(const config& cfg, std::string_view text);
+        std::string send_chat_completions_request(const config& cfg, const llm_backend_parameters& params, const nlohmann::json& messages);
 
-    std::string generate_boundary();
+        std::string completions(const config& cfg, std::string_view prompt, const context& ctx);
 
-    std::string upload_image_to_comfy_ui(const config& cfg, std::string_view image_path, bool overwrite = true);
+        std::string chat_completions(const config& cfg, const context& ctx, const nlohmann::json& messages);
 
-    void send_comfy_ui_prompt(const config& cfg, std::string_view workflow);
+        void completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
 
-    struct generated_file_info;
+        std::string generate_uuid_v4();
 
-    std::vector<generated_file_info> receive_comfy_ui_generated_file_info(const config& cfg, std::string_view prompt_id);
+        std::string generate_chat_filename();
 
-    void write_comfy_ui_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files);
+        void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
+    } // namespace llm
 
-    std::vector<item> parse_item_list(std::string_view str);
+    namespace sd
+    {
+        std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
-    void write_item_list(const config& cfg, std::string_view task);
+        nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string send_completions_request(const config& cfg, std::string_view prompt, const llm_backend_parameters& params, int max_tokens);
+        nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string completions(const config& cfg, std::string_view prompt, const context& ctx);
+        nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string chat_completions(const config& cfg, const context& ctx, const nlohmann::json& messages);
+        std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+    } // namespace sd
+
+    namespace sb
+    {
+        std::string send_request(const config& cfg, std::string_view text);
+    } // namespace sb
+
+    namespace cu
+    {
+        std::string generate_boundary();
+
+        std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite = true);
+
+        void upload_images(const config& cfg, context& ctx);
+
+        void send_request(const config& cfg, std::string_view workflow);
+
+        struct generated_file_info;
+
+        std::vector<generated_file_info> receive_generated_file_info(const config& cfg, std::string_view prompt_id);
+
+        void write_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files);
+    } // namespace cu
 
     std::string unescape_string(std::string_view str);
 
@@ -1216,8 +1244,6 @@ namespace llmcpp
         void init_logging(const config& cfg);
     } // namespace log
 
-    void init_chat_mode(config& cfg);
-
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
 
     void set_static_builtin_variables(config& cfg);
@@ -1225,8 +1251,6 @@ namespace llmcpp
     void set_dynamic_builtin_variables(config& cfg);
 
     void set_paragraphs_to_phases(const std::vector<item>& paragraphs, std::vector<std::string>& phases);
-
-    void init_llm_mode(config& cfg);
 
     std::string sanitize_as_filename(std::string_view name);
 
@@ -1253,12 +1277,6 @@ namespace llmcpp
     void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
 
     void write_code_block(const config& cfg, std::string_view markdown);
-
-    void generate_text_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
-
-    std::string generate_uuid_v4();
-
-    std::string generate_chat_filename();
 
     std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
 
@@ -3179,7 +3197,7 @@ namespace llmcpp
             std::string result;
             {
                 context pushed{ args.ctx.make_pushed() };
-                result = completions(args.cfg, prompt, pushed);
+                result = llm::completions(args.cfg, prompt, pushed);
             }
             return result;
         }
@@ -3275,7 +3293,7 @@ namespace llmcpp
                 context pushed{ args.ctx.make_pushed() };
                 pushed.set("target", target);
                 pushed.set("max_tokens", std::to_string(max_tokens));
-                output = completions(args.cfg, prompt, pushed);
+                output = llm::completions(args.cfg, prompt, pushed);
                 output = remove_reasoning(output, args.cfg.llm.reasoning_prefix, args.cfg.llm.reasoning_suffix);
             }
 
@@ -3872,648 +3890,897 @@ namespace llmcpp
         bool connected{};
     };
 
-    // unused
-    std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+    namespace llm
     {
-        std::ostringstream oss;
-        oss
-            << prompt << std::endl
-            << "Negative prompt: " << negative_prompt << std::endl
-            << "Steps: " << parameters.steps << ", "
-            << "Sampler: " << parameters.sampler_name << ", "
-            << "CFG scale: " << parameters.cfg_scale << ", "
-            << "Seed: " << parameters.seed << ", "
-            << "Size: " << parameters.width << "x" << parameters.height << ", "
-            //<< "Model hash: "
-            << "Denoising strength: " << parameters.denoising_strength << ", "
-            << "Hires upscale: " << parameters.txt2img.hr_scale << ", "
-            << "Hires steps: " << parameters.txt2img.hr_second_pass_steps << ", "
-            << "Hires upscaler: " << parameters.txt2img.hr_upscaler
-            << std::flush;
-        return oss.str();
-    }
-
-    nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
-    {
-        nlohmann::json json;
-
-        json["enable_hr"] = cfg.sd.txt2img.enable_hr;
-        json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
-        json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
-        json["hr_scale"] = cfg.sd.txt2img.hr_scale;
-        json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
-        json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
-        json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
-        json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
-        if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
+        void init_llm_mode(config& cfg)
         {
-            json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
-        }
-        //json["hr_prompt"] = prompt;
-        //json["hr_negative_prompt"] = negative_prompt;
-
-        return json;
-    }
-
-    nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
-    {
-        nlohmann::json json;
-
-        json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
-        json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
-        json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
-        json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
-        json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
-        json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
-        json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
-        json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
-        json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
-        json["sd_mask_round"] = cfg.sd.img2img.mask_round;
-        json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
-        json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
-        json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
-        json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
-        json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
-        json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
-
-        return json;
-    }
-
-    nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
-    {
-        nlohmann::json json;
-
-        json["prompt"] = prompt;
-        if (!negative_prompt.empty())
-        {
-            json["negative_prompt"] = negative_prompt;
-        }
-        //json["styles"] = cfg.sd_txt2img_params.styles;
-        json["seed"] = cfg.sd.seed;
-        json["subseed"] = cfg.sd.subseed;
-        json["subseed_strength"] = cfg.sd.subseed_strength;
-        json["seed_resize_from_h"] = cfg.sd.seed_resize_from_h;
-        json["seed_resize_from_w"] = cfg.sd.seed_resize_from_w;
-        json["sampler_name"] = cfg.sd.sampler_name;
-        json["scheduler"] = cfg.sd.scheduler;
-        json["batch_size"] = cfg.sd.batch_size;
-        json["n_iter"] = cfg.sd.n_iter;
-        json["steps"] = cfg.sd.steps;
-        json["cfg_scale"] = cfg.sd.cfg_scale;
-        json["width"] = cfg.sd.width;
-        json["height"] = cfg.sd.height;
-        json["restore_faces"] = cfg.sd.restore_faces;
-        json["tiling"] = cfg.sd.tiling;
-        json["do_not_save_samples"] = cfg.sd.do_not_save_samples;
-        json["do_not_save_grid"] = cfg.sd.do_not_save_grid;
-        json["eta"] = cfg.sd.eta;
-        json["denoising_strength"] = cfg.sd.denoising_strength;
-        json["s_min_uncond"] = cfg.sd.s_min_uncond;
-        json["s_churn"] = cfg.sd.s_churn;
-        json["s_tmax"] = cfg.sd.s_tmax;
-        json["s_tmin"] = cfg.sd.s_tmin;
-        json["s_noise"] = cfg.sd.s_noise;
-        if (!cfg.sd.override_settings.empty())
-        {
-            json["override_settings"] = nlohmann::json::parse(cfg.sd.override_settings);
-        }
-        json["override_settings_restore_afterwards"] = cfg.sd.override_settings_restore_afterwards;
-        json["refiner_checkpoint"] = cfg.sd.refiner_checkpoint;
-        json["refiner_switch_at"] = cfg.sd.refiner_switch_at;
-        json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
-        if (!cfg.sd.firstpass_image.empty())
-        {
-            json["firstpass_image"] = image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
-        }
-        if (!cfg.sd.comments.empty())
-        {
-            json["comments"] = cfg.sd.comments;
-        }
-
-        json["force_task_id"] = cfg.sd.force_task_id;
-
-        if (!cfg.sd.sampler_index.empty() && cfg.sd.sampler_name.empty())
-        {
-            json["sampler_index"] = cfg.sd.sampler_index;
-        }
-
-        if (cfg.sd.abg_remover_enable)
-        {
-            json["script_name"] = "abg remover";
-            json["script_args"] =
+            if (!cfg.llm.paragraphs_file.empty())
             {
-                false,
-                false,
-                false,
-                "#000000",
-                false
-            };
-        }
-
-        json["send_images"] = cfg.sd.send_images;
-        json["save_images"] = cfg.sd.save_images;
-
-        nlohmann::json alwayson_scripts{ nlohmann::json::object() };
-        if (cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
-        {
-            nlohmann::json adetailer{ nlohmann::json::object() };
-            nlohmann::json object{ nlohmann::json::object() };
-            object["ad_model"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
-            if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
-            {
-                object["ad_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
+                cfg.phases.clear();
+                const std::string content{ read_text_file_to_string(cfg.llm.paragraphs_file, cfg) };
+                std::vector<item> paragraphs{ parse_item_list(content) };
+                set_paragraphs_to_phases(paragraphs, cfg.phases);
             }
-            if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+
+            if (cfg.command_mode == command_mode::tg)
             {
-                object["ad_negative_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
-            }
-            adetailer["args"] = { true, false, object };
-            alwayson_scripts["ADetailer"] = adetailer;
-        }
-        //{
-        //    nlohmann::json sampler{ nlohmann::json::object() };
-        //    sampler["args"] =
-        //    {
-        //        cfg.sd.steps,
-        //        cfg.sd.sampler_name,
-        //        cfg.sd.scheduler
-        //    };
-        //    alwayson_scripts["Sampler"] = sampler;
-        //}
-        //{
-        //    nlohmann::json seed{ nlohmann::json::object() };
-        //    seed["args"] = 
-        //    {
-        //        cfg.sd.seed,
-        //        false,
-        //        cfg.sd.subseed,
-        //        0,
-        //        0,
-        //        0
-        //    };
-        //    alwayson_scripts["Seed"] = seed;
-        //}
-        json["alwayson_scripts"] = alwayson_scripts;
-
-        if (!cfg.sd.infotext.empty())
-        {
-            json["infotext"] = cfg.sd.infotext;
-        }
-
-        if (cfg.sd.mode == sd_mode::txt2img)
-        {
-            json.update(txt2img_request(cfg, prompt, negative_prompt));
-        }
-        else if (cfg.sd.mode == sd_mode::img2img)
-        {
-            json.update(img2img_request(cfg, prompt, negative_prompt));
-        }
-
-        return json;
-    }
-
-    std::string send_automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
-    {
-        const std::string_view host{ cfg.sd.host };
-        const std::string_view port{ cfg.sd.port };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        const nlohmann::json json{ automatic1111_request(cfg, prompt, negative_prompt) };
-        const std::string request_body{ json.dump() };
-        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
-
-        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
-
-        const std::string base64_image_data{ response_json.at("images").at(0).get<std::string>() };
-
-        if (base64_image_data.empty())
-        {
-            llmcpp::throw_exception(image_generation_exception{} << error_info::description{ "No image data found in the response" });
-        }
-
-        const std::string decoded_image{ base64_decode(base64_image_data) };
-
-        return decoded_image;
-    }
-
-    std::string send_style_bert_voice_request(const config& cfg, std::string_view text)
-    {
-        const std::string_view host{ cfg.sb.host };
-        const std::string_view port{ cfg.sb.port };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        boost::urls::url target{ cfg.sb.target };
-        url_params_setter{ target }
-            ("text", text)
-            ("sdp_ratio", cfg.sb.sdp_ratio)
-            ("noise", cfg.sb.noise)
-            ("noisew", cfg.sb.noisew)
-            ("length", cfg.sb.length)
-            ("language", cfg.sb.language)
-            ("auto_split", cfg.sb.auto_split)
-            ("split_interval", cfg.sb.split_interval)
-            .set_if_else(!cfg.sb.model_name.empty(),
-                "model_name", cfg.sb.model_name,
-                "model_id", cfg.sb.model_id)
-            .set_if_else(!cfg.sb.speaker_name.empty(),
-                "speaker_name", cfg.sb.speaker_name,
-                "speaker_id", cfg.sb.speaker_id)
-            .set_if(!cfg.sb.assist_text.empty(),
-                "assist_text", cfg.sb.assist_text)
-            .set_if(!cfg.sb.assist_text.empty(),
-                "assist_text_weight", cfg.sb.assist_text_weight)
-            .set_if(!cfg.sb.style.empty(),
-                "style", cfg.sb.style)
-            .set_if(!cfg.sb.style.empty(),
-                "style_weight", cfg.sb.style_weight)
-            .set_if(!cfg.sb.reference_audio_path.empty(),
-                "reference_audio_path", cfg.sb.reference_audio_path);
-
-        LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
-        return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
-    }
-
-    std::string generate_boundary()
-    {
-        std::ostringstream oss;
-        oss << std::hex << std::setfill('0');
-        oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
-            << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
-            << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
-            << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
-        return oss.str();
-    }
-
-    std::string upload_image_to_comfy_ui(const config& cfg, std::string_view image_path, bool overwrite)
-    {
-        const std::string image_data{ read_binary_file_to_string(image_path, cfg) };
-        const std::string boundary{ generate_boundary() };
-        const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
-
-        std::string body;
-        body.reserve(154 + image_data.size() + boundary.size() + filename.size());
-
-        body += "--";
-        body += boundary;
-        body += "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"";
-        body += filename;
-        body += "\"\r\nContent-Type: image/png\r\n\r\n";
-        body += image_data;
-        body += "\r\n";
-
-        if (overwrite)
-        {
-            body += "--";
-            body += boundary;
-            body += "\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n";
-        }
-
-        body += "--";
-        body += boundary;
-        body += "--\r\n";
-
-        const std::string_view host{ cfg.cu.host };
-        const std::string_view port{ cfg.cu.port };
-        const std::string_view target{ cfg.cu.upload_image_target };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        std::string content_type;
-        content_type.reserve(30 + boundary.size());
-        content_type += "multipart/form-data; boundary=";
-        content_type += boundary;
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, body) };
-        request.set(boost::beast::http::field::content_type, content_type);
-
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-
-        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
-
-        return response_json.at("name").get<std::string>();
-    }
-
-    void upload_images_to_comfy_ui(const config& cfg, context& ctx)
-    {
-        for (const std::string& key_value_pair : cfg.cu.upload_images)
-        {
-            const std::size_t separator_position{ key_value_pair.find('=') };
-            if (separator_position != std::string::npos)
-            {
-                const std::string variable_name{ key_value_pair.substr(0, separator_position) };
-                const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
-                if (!variable_name.empty())
+                cfg.llm.backend = &cfg.tg;
+                if (cfg.llm.completions_target.empty())
                 {
-                    const std::string server_path{ upload_image_to_comfy_ui(cfg, local_relative_path) };
-                    ctx.set(variable_name, server_path);
-                    LLMCPP_LOG(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
+                    cfg.llm.completions_target = "/v1/completions";
                 }
+                if (cfg.llm.token_count_target.empty())
+                {
+                    cfg.llm.token_count_target = "/v1/internal/token-count";
+                }
+                if (cfg.llm.chat_completions_target.empty())
+                {
+                    cfg.llm.chat_completions_target = "/v1/chat/completions";
+                }
+            }
+            else if (cfg.command_mode == command_mode::kc)
+            {
+                cfg.llm.backend = &cfg.kc;
+                if (cfg.llm.completions_target.empty())
+                {
+                    cfg.llm.completions_target = "/api/v1/generate";
+                }
+                if (cfg.llm.token_count_target.empty())
+                {
+                    cfg.llm.token_count_target = "/api/extra/tokencount";
+                }
+                if (cfg.llm.chat_completions_target.empty())
+                {
+                    cfg.llm.chat_completions_target = "/v1/chat/completions";
+                }
+            }
+        }
+
+        void init_chat_mode(config& cfg)
+        {
+            if (cfg.phases.empty())
+            {
+                cfg.phases = { "{{user}}", "{{char}}" };
+            }
+            if (cfg.llm.generation_prefix.empty())
+            {
+                cfg.llm.generation_prefix = "\\n{{phase}}: ";
+            }
+        }
+
+        std::vector<item> parse_item_list(std::string_view str)
+        {
+            std::vector<item> result;
+
+            const std::regex item_regex{ R"(^(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
+            const std::regex sub_item_regex{ R"(^(?:[ \t]+)(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
+
+            std::istringstream iss{ std::string{ str } };
+            std::string line;
+            bool is_prev_line_item{};
+            while (std::getline(iss, line))
+            {
+                if (line.empty())
+                {
+                    continue;
+                }
+                if (std::smatch match; std::regex_match(line, match, item_regex))
+                {
+                    const std::string trimmed{ trim(match[1].str()) };
+                    if (!trimmed.empty())
+                    {
+                        result.push_back({ trimmed });
+                        is_prev_line_item = true;
+                    }
+                }
+                else if (std::smatch match; is_prev_line_item && std::regex_match(line, match, sub_item_regex))
+                {
+                    const std::string trimmed{ trim(match[1].str()) };
+                    if (!trimmed.empty())
+                    {
+                        result.back().descriptions.push_back(trimmed);
+                    }
+                }
+                else
+                {
+                    is_prev_line_item = false;
+                }
+            }
+
+            return result;
+        }
+
+        void write_item_list(const config& cfg, std::string_view task)
+        {
+            const std::vector<item> items{ parse_item_list(task) };
+
+            for (const item& item : items)
+            {
+                std::string descriptions;
+                for (const std::string& description : item.descriptions)
+                {
+                    descriptions += description;
+                }
+                write_file(cfg, descriptions, item.head, std::ios::binary);
+            }
+        }
+
+        std::string send_completions_request(const config& cfg, std::string_view prompt, const llm_backend_parameters& params, int max_tokens)
+        {
+            const std::string_view host{ cfg.llm.host };
+            const std::string_view port{ cfg.llm.port };
+            const std::string_view target{ cfg.llm.completions_target };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            const std::string request_body{ params.get_request_for_completions(prompt, max_tokens).dump() };
+            LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+            if (!cfg.llm.api_key.empty())
+            {
+                request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
+            }
+
+            const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+            LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
+            return params.parse_response_for_completions(response.body());
+        }
+
+        std::string send_chat_completions_request(const config& cfg, const llm_backend_parameters& params, const nlohmann::json& messages)
+        {
+            const std::string_view host{ cfg.llm.host };
+            const std::string_view port{ cfg.llm.port };
+            const std::string_view target{ cfg.llm.chat_completions_target };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            const nlohmann::json request_body_json{ params.get_request_for_chat_completions(messages) };
+            const std::string request_body{ request_body_json.dump() };
+
+            constexpr std::size_t threshold{ 64 };
+            if (has_base64(request_body_json, threshold))
+            {
+                LLMCPP_LOG(info) << "Send JSON";
             }
             else
             {
-                LLMCPP_LOG(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path";
+                LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
             }
+
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+
+            if (!cfg.llm.api_key.empty())
+            {
+                request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
+            }
+
+            const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+            LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
+            return params.parse_response_for_chat_completions(response.body());
         }
-    }
 
-    struct generated_file_info
-    {
-        std::string filename;
-        std::string subfolder;
-        std::string type;
-    };
-
-    void send_comfy_ui_prompt(const config& cfg, std::string_view prompt)
-    {
-        const std::string_view host{ cfg.cu.host };
-        const std::string_view port{ cfg.cu.port };
-        const std::string_view target{ cfg.cu.prompt_target };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        nlohmann::json json;
-        nlohmann::json prompt_json{ nlohmann::json::parse(prompt) };
-        json["prompt"] = prompt_json;
-
-        const std::string request_body{ json.dump() };
-        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        LLMCPP_LOG(info) << "Response: " << response.body();
-
-        nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
-        const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
-        LLMCPP_LOG(info) << "Queued successfully. Prompt ID: " << prompt_id;
-
-        const std::vector<generated_file_info> target_files{ receive_comfy_ui_generated_file_info(cfg, prompt_id) };
-        LLMCPP_LOG(info) << "Generation complete";
-
-        write_comfy_ui_generated_files(cfg, target_files);
-    }
-
-    std::vector<generated_file_info> receive_comfy_ui_generated_file_info(const config& cfg, std::string_view prompt_id)
-    {
-        std::vector<generated_file_info> target_files;
-
-        boost::urls::url url;
-        url.set_path("/history");
-        url.path().append(prompt_id);
-
-        while (true)
+        std::string completions(const config& cfg, std::string_view prompt, const context& ctx)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
+            const std::string expanded_prefix{ expand_macro(cfg.llm.generation_prefix, cfg, ctx) };
+            const std::size_t initial_prompt_size{ expanded_prompt.size() };
+            expanded_prompt += expanded_prefix;
 
-            tcp::response_type history_response
+            const int initial_tokens{ send_token_count_request(cfg, expanded_prompt) };
+
+            LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
+
+            std::string current_prompt{ expanded_prompt };
+            int current_tokens{ initial_tokens };
+            for (int completion_iterations{}; completion_iterations < cfg.llm.max_completion_iterations; ++completion_iterations)
             {
-                tcp::send_http_get
-                (
-                    cfg.cu.host,
-                    cfg.cu.port,
-                    url.encoded_path(),
-                    std::chrono::seconds{ cfg.timeout_connect },
-                    std::chrono::seconds{ cfg.timeout_request }
-                )
-            };
+                LLMCPP_LOG(trace) << "completion_iterations: " << completion_iterations;
 
-            nlohmann::json history_json{ nlohmann::json::parse(history_response.body()) };
+                if (current_tokens - initial_tokens >= cfg.llm.min_completion_tokens)
+                {
+                    break;
+                }
 
-            if (!history_json.is_object())
-            {
-                continue;
+                const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - current_tokens };
+                if (remaining_tokens <= 0)
+                {
+                    LLMCPP_LOG(warning) << "Context window full. Cannot generate more tokens";
+                    break;
+                }
+
+                const int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
+                if (tokens_to_generate <= 0)
+                {
+                    LLMCPP_LOG(warning) << "No tokens left to generate. Aborting";
+                    break;
+                }
+
+                const int max_tokens{ tokens_to_generate };
+                const std::string response{ send_completions_request(cfg, current_prompt, *cfg.llm.backend, max_tokens) };
+
+                if (response.empty())
+                {
+                    break;
+                }
+
+                current_prompt += response;
+                current_tokens = send_token_count_request(cfg, current_prompt);
             }
 
+            std::string generated;
+            generated.reserve(initial_prompt_size + cfg.llm.generation_suffix.size());
+            generated += current_prompt.substr(initial_prompt_size);
+            generated += cfg.llm.generation_suffix;
+
+            return generated;
+        }
+
+        std::string chat_completions(const config& cfg, const context& ctx, const nlohmann::json& messages)
+        {
+            return send_chat_completions_request(cfg, *cfg.llm.backend, messages);
+        }
+
+        void completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
+        {
+            const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
+
+            std::string response{ completions(cfg, truncated_prompt, ctx) };
+            response = remove_reasoning(response, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
+            response += cfg.llm.generation_suffix;
+
+            write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
+
+            if (!cfg.verbose)
+            {
+                boost::nowide::cout << response << std::flush;
+            }
+
+            write_code_block(cfg, response);
+        }
+
+        std::string generate_uuid_v4()
+        {
+            std::ostringstream oss;
+            oss << std::hex << std::setfill('0');
+            oss << std::setw(8) << (random<std::uint32_t>() & 0xFFFFFFFF) << '-'
+                << std::setw(4) << (random<std::uint32_t>() & 0xFFFF) << '-'
+                << '4' << std::setw(3) << (random<std::uint32_t>() & 0xFFF) << '-'
+                << std::setw(4) << ((random<std::uint32_t>() & 0x3FFF) | 0x8000) << '-'
+                << std::setw(12) << (random<std::uint64_t>() & 0xFFFFFFFFFFFFULL)
+                ;
+            return oss.str();
+        }
+
+        std::string generate_chat_filename()
+        {
+            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
+            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d_%H%M%S") };
+            std::ostringstream oss;
+            oss.imbue(std::locale(oss.getloc(), facet));
+            oss << "chat_" << local_time << "_" << generate_uuid_v4() << ".json";
+            return oss.str();
+        }
+
+        void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
+        {
+            std::string chat_file_content;
             try
             {
-                const nlohmann::json& prompt_response_obj{ history_json.at(prompt_id) };
+                chat_file_content = read_text_file_to_string(cfg.llm.chat_file, cfg);
+            }
+            catch (const file_open_exception&)
+            {
+                ;
+            }
+
+            nlohmann::json messages;
+            if (chat_file_content.empty())
+            {
+                messages = nlohmann::json::array();
+            }
+            else
+            {
+                messages = nlohmann::json::parse(chat_file_content);
+            }
+
+            const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
+            LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
+
+            nlohmann::json content{ nlohmann::json::array() };
+            content.push_back
+            (
+                {
+                    { "type", "text" },
+                    { "text", expanded_prompt }
+                }
+            );
+
+            if (!cfg.llm.image_file.empty())
+            {
+                const image_info_type image_info{ image_info_type::from_file(cfg.llm.image_file, cfg) };
+                const std::string image_url{ base64_image_to_url(image_info.base64_image, image_info.mime_type) };
+                content.push_back
+                (
+                    {
+                        { "type", "image_url" },
+                        { "image_url", { { "url", image_url } } }
+                    }
+                );
+            }
+
+            messages.push_back
+            (
+                {
+                    { "role", "user" },
+                    { "content", std::move(content) }
+                }
+            );
+
+            const std::string chat_filename{ cfg.llm.chat_file.empty() ? generate_chat_filename() : cfg.llm.chat_file };
+
+            const std::string response{ chat_completions(cfg, ctx, messages) };
+            messages.push_back
+            (
+                {
+                    { "role", "assistant" },
+                    { "content", response }
+                }
+            );
+
+
+            write_file(cfg, messages.dump(), chat_filename);
+
+            write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
+
+            if (!cfg.verbose)
+            {
+                boost::nowide::cout << response << std::flush;
+            }
+
+            write_code_block(cfg, response);
+        }
+    } // namespace llm
+
+    namespace sd
+    {
+        // unused
+        std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt)
+        {
+            std::ostringstream oss;
+            oss
+                << prompt << std::endl
+                << "Negative prompt: " << negative_prompt << std::endl
+                << "Steps: " << parameters.steps << ", "
+                << "Sampler: " << parameters.sampler_name << ", "
+                << "CFG scale: " << parameters.cfg_scale << ", "
+                << "Seed: " << parameters.seed << ", "
+                << "Size: " << parameters.width << "x" << parameters.height << ", "
+                //<< "Model hash: "
+                << "Denoising strength: " << parameters.denoising_strength << ", "
+                << "Hires upscale: " << parameters.txt2img.hr_scale << ", "
+                << "Hires steps: " << parameters.txt2img.hr_second_pass_steps << ", "
+                << "Hires upscaler: " << parameters.txt2img.hr_upscaler
+                << std::flush;
+            return oss.str();
+        }
+
+        nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        {
+            nlohmann::json json;
+
+            json["enable_hr"] = cfg.sd.txt2img.enable_hr;
+            json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
+            json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
+            json["hr_scale"] = cfg.sd.txt2img.hr_scale;
+            json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
+            json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
+            json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
+            json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
+            if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
+            {
+                json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
+            }
+            //json["hr_prompt"] = prompt;
+            //json["hr_negative_prompt"] = negative_prompt;
+
+            return json;
+        }
+
+        nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        {
+            nlohmann::json json;
+
+            json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
+            json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
+            json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
+            json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
+            json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
+            json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
+            json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
+            json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
+            json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
+            json["sd_mask_round"] = cfg.sd.img2img.mask_round;
+            json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
+            json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
+            json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
+            json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
+            json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
+            json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
+
+            return json;
+        }
+
+        nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        {
+            nlohmann::json json;
+
+            json["prompt"] = prompt;
+            if (!negative_prompt.empty())
+            {
+                json["negative_prompt"] = negative_prompt;
+            }
+            //json["styles"] = cfg.sd_txt2img_params.styles;
+            json["seed"] = cfg.sd.seed;
+            json["subseed"] = cfg.sd.subseed;
+            json["subseed_strength"] = cfg.sd.subseed_strength;
+            json["seed_resize_from_h"] = cfg.sd.seed_resize_from_h;
+            json["seed_resize_from_w"] = cfg.sd.seed_resize_from_w;
+            json["sampler_name"] = cfg.sd.sampler_name;
+            json["scheduler"] = cfg.sd.scheduler;
+            json["batch_size"] = cfg.sd.batch_size;
+            json["n_iter"] = cfg.sd.n_iter;
+            json["steps"] = cfg.sd.steps;
+            json["cfg_scale"] = cfg.sd.cfg_scale;
+            json["width"] = cfg.sd.width;
+            json["height"] = cfg.sd.height;
+            json["restore_faces"] = cfg.sd.restore_faces;
+            json["tiling"] = cfg.sd.tiling;
+            json["do_not_save_samples"] = cfg.sd.do_not_save_samples;
+            json["do_not_save_grid"] = cfg.sd.do_not_save_grid;
+            json["eta"] = cfg.sd.eta;
+            json["denoising_strength"] = cfg.sd.denoising_strength;
+            json["s_min_uncond"] = cfg.sd.s_min_uncond;
+            json["s_churn"] = cfg.sd.s_churn;
+            json["s_tmax"] = cfg.sd.s_tmax;
+            json["s_tmin"] = cfg.sd.s_tmin;
+            json["s_noise"] = cfg.sd.s_noise;
+            if (!cfg.sd.override_settings.empty())
+            {
+                json["override_settings"] = nlohmann::json::parse(cfg.sd.override_settings);
+            }
+            json["override_settings_restore_afterwards"] = cfg.sd.override_settings_restore_afterwards;
+            json["refiner_checkpoint"] = cfg.sd.refiner_checkpoint;
+            json["refiner_switch_at"] = cfg.sd.refiner_switch_at;
+            json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
+            if (!cfg.sd.firstpass_image.empty())
+            {
+                json["firstpass_image"] = image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
+            }
+            if (!cfg.sd.comments.empty())
+            {
+                json["comments"] = cfg.sd.comments;
+            }
+
+            json["force_task_id"] = cfg.sd.force_task_id;
+
+            if (!cfg.sd.sampler_index.empty() && cfg.sd.sampler_name.empty())
+            {
+                json["sampler_index"] = cfg.sd.sampler_index;
+            }
+
+            if (cfg.sd.abg_remover_enable)
+            {
+                json["script_name"] = "abg remover";
+                json["script_args"] =
+                {
+                    false,
+                    false,
+                    false,
+                    "#000000",
+                    false
+                };
+            }
+
+            json["send_images"] = cfg.sd.send_images;
+            json["save_images"] = cfg.sd.save_images;
+
+            nlohmann::json alwayson_scripts{ nlohmann::json::object() };
+            if (cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
+            {
+                nlohmann::json adetailer{ nlohmann::json::object() };
+                nlohmann::json object{ nlohmann::json::object() };
+                object["ad_model"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
+                if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+                {
+                    object["ad_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
+                }
+                if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+                {
+                    object["ad_negative_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
+                }
+                adetailer["args"] = { true, false, object };
+                alwayson_scripts["ADetailer"] = adetailer;
+            }
+            //{
+            //    nlohmann::json sampler{ nlohmann::json::object() };
+            //    sampler["args"] =
+            //    {
+            //        cfg.sd.steps,
+            //        cfg.sd.sampler_name,
+            //        cfg.sd.scheduler
+            //    };
+            //    alwayson_scripts["Sampler"] = sampler;
+            //}
+            //{
+            //    nlohmann::json seed{ nlohmann::json::object() };
+            //    seed["args"] = 
+            //    {
+            //        cfg.sd.seed,
+            //        false,
+            //        cfg.sd.subseed,
+            //        0,
+            //        0,
+            //        0
+            //    };
+            //    alwayson_scripts["Seed"] = seed;
+            //}
+            json["alwayson_scripts"] = alwayson_scripts;
+
+            if (!cfg.sd.infotext.empty())
+            {
+                json["infotext"] = cfg.sd.infotext;
+            }
+
+            if (cfg.sd.mode == sd_mode::txt2img)
+            {
+                json.update(txt2img_request(cfg, prompt, negative_prompt));
+            }
+            else if (cfg.sd.mode == sd_mode::img2img)
+            {
+                json.update(img2img_request(cfg, prompt, negative_prompt));
+            }
+
+            return json;
+        }
+
+        std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+        {
+            const std::string_view host{ cfg.sd.host };
+            const std::string_view port{ cfg.sd.port };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            const nlohmann::json json{ automatic1111_request(cfg, prompt, negative_prompt) };
+            const std::string request_body{ json.dump() };
+            LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+            const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+
+            const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+            LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
+
+            nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
+
+            const std::string base64_image_data{ response_json.at("images").at(0).get<std::string>() };
+
+            if (base64_image_data.empty())
+            {
+                llmcpp::throw_exception(image_generation_exception{} << error_info::description{ "No image data found in the response" });
+            }
+
+            const std::string decoded_image{ base64_decode(base64_image_data) };
+
+            return decoded_image;
+        }
+    } // namespace sd
+
+    namespace sb
+    {
+        std::string send_request(const config& cfg, std::string_view text)
+        {
+            const std::string_view host{ cfg.sb.host };
+            const std::string_view port{ cfg.sb.port };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            boost::urls::url target{ cfg.sb.target };
+            url_params_setter{ target }
+                ("text", text)
+                ("sdp_ratio", cfg.sb.sdp_ratio)
+                ("noise", cfg.sb.noise)
+                ("noisew", cfg.sb.noisew)
+                ("length", cfg.sb.length)
+                ("language", cfg.sb.language)
+                ("auto_split", cfg.sb.auto_split)
+                ("split_interval", cfg.sb.split_interval)
+                .set_if_else(!cfg.sb.model_name.empty(),
+                    "model_name", cfg.sb.model_name,
+                    "model_id", cfg.sb.model_id)
+                .set_if_else(!cfg.sb.speaker_name.empty(),
+                    "speaker_name", cfg.sb.speaker_name,
+                    "speaker_id", cfg.sb.speaker_id)
+                .set_if(!cfg.sb.assist_text.empty(),
+                    "assist_text", cfg.sb.assist_text)
+                .set_if(!cfg.sb.assist_text.empty(),
+                    "assist_text_weight", cfg.sb.assist_text_weight)
+                .set_if(!cfg.sb.style.empty(),
+                    "style", cfg.sb.style)
+                .set_if(!cfg.sb.style.empty(),
+                    "style_weight", cfg.sb.style_weight)
+                .set_if(!cfg.sb.reference_audio_path.empty(),
+                    "reference_audio_path", cfg.sb.reference_audio_path);
+
+            LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
+            return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
+        }
+    } // namespace sb
+
+    namespace cu
+    {
+        std::string generate_boundary()
+        {
+            std::ostringstream oss;
+            oss << std::hex << std::setfill('0');
+            oss << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+                << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+                << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>()
+                << std::setw(sizeof(std::uint64_t) * 2) << random<std::uint64_t>();
+            return oss.str();
+        }
+
+        std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite)
+        {
+            const std::string image_data{ read_binary_file_to_string(image_path, cfg) };
+            const std::string boundary{ generate_boundary() };
+            const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
+
+            std::string body;
+            body.reserve(154 + image_data.size() + boundary.size() + filename.size());
+
+            body += "--";
+            body += boundary;
+            body += "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"";
+            body += filename;
+            body += "\"\r\nContent-Type: image/png\r\n\r\n";
+            body += image_data;
+            body += "\r\n";
+
+            if (overwrite)
+            {
+                body += "--";
+                body += boundary;
+                body += "\r\nContent-Disposition: form-data; name=\"overwrite\"\r\n\r\ntrue\r\n";
+            }
+
+            body += "--";
+            body += boundary;
+            body += "--\r\n";
+
+            const std::string_view host{ cfg.cu.host };
+            const std::string_view port{ cfg.cu.port };
+            const std::string_view target{ cfg.cu.upload_image_target };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            std::string content_type;
+            content_type.reserve(30 + boundary.size());
+            content_type += "multipart/form-data; boundary=";
+            content_type += boundary;
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, body) };
+            request.set(boost::beast::http::field::content_type, content_type);
+
+            const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+
+            nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
+
+            return response_json.at("name").get<std::string>();
+        }
+
+        void upload_images(const config& cfg, context& ctx)
+        {
+            for (const std::string& key_value_pair : cfg.cu.upload_images)
+            {
+                const std::size_t separator_position{ key_value_pair.find('=') };
+                if (separator_position != std::string::npos)
+                {
+                    const std::string variable_name{ key_value_pair.substr(0, separator_position) };
+                    const std::string local_relative_path{ key_value_pair.substr(separator_position + 1) };
+                    if (!variable_name.empty())
+                    {
+                        const std::string server_path{ upload_image(cfg, local_relative_path) };
+                        ctx.set(variable_name, server_path);
+                        LLMCPP_LOG(info) << "Successfully uploaded. (" << variable_name << "=" << server_path << ")";
+                    }
+                }
+                else
+                {
+                    LLMCPP_LOG(warning) << "Invalid upload images format: " << key_value_pair << ". Expected variable_name=local_path";
+                }
+            }
+        }
+
+        struct generated_file_info
+        {
+            std::string filename;
+            std::string subfolder;
+            std::string type;
+        };
+
+        void send_request(const config& cfg, std::string_view prompt)
+        {
+            const std::string_view host{ cfg.cu.host };
+            const std::string_view port{ cfg.cu.port };
+            const std::string_view target{ cfg.cu.prompt_target };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            nlohmann::json json;
+            nlohmann::json prompt_json{ nlohmann::json::parse(prompt) };
+            json["prompt"] = prompt_json;
+
+            const std::string request_body{ json.dump() };
+            LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
+
+            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+            const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+            LLMCPP_LOG(info) << "Response: " << response.body();
+
+            nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
+            const std::string prompt_id{ response_json.at("prompt_id").get<std::string>() };
+            LLMCPP_LOG(info) << "Queued successfully. Prompt ID: " << prompt_id;
+
+            const std::vector<generated_file_info> target_files{ receive_generated_file_info(cfg, prompt_id) };
+            LLMCPP_LOG(info) << "Generation complete";
+
+            write_generated_files(cfg, target_files);
+        }
+
+        std::vector<generated_file_info> receive_generated_file_info(const config& cfg, std::string_view prompt_id)
+        {
+            std::vector<generated_file_info> target_files;
+
+            boost::urls::url url;
+            url.set_path("/history");
+            url.path().append(prompt_id);
+
+            while (true)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+                tcp::response_type history_response
+                {
+                    tcp::send_http_get
+                    (
+                        cfg.cu.host,
+                        cfg.cu.port,
+                        url.encoded_path(),
+                        std::chrono::seconds{ cfg.timeout_connect },
+                        std::chrono::seconds{ cfg.timeout_request }
+                    )
+                };
+
+                nlohmann::json history_json{ nlohmann::json::parse(history_response.body()) };
+
+                if (!history_json.is_object())
+                {
+                    continue;
+                }
 
                 try
                 {
-                    const nlohmann::json& status_object{ prompt_response_obj.at("status") };
-                    const std::string status_str{ status_object.at("status_str").get<std::string>() };
-                    if (status_str == "error")
+                    const nlohmann::json& prompt_response_obj{ history_json.at(prompt_id) };
+
+                    try
                     {
-                        llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
+                        const nlohmann::json& status_object{ prompt_response_obj.at("status") };
+                        const std::string status_str{ status_object.at("status_str").get<std::string>() };
+                        if (status_str == "error")
+                        {
+                            llmcpp::throw_exception(comfy_ui_generation_exception{} << error_info::description{ "ComfyUI generation failed on server" });
+                        }
                     }
-                }
-                catch (const nlohmann::json::out_of_range&)
-                {
-                    ;
-                }
-
-                target_files.clear();
-
-                const nlohmann::json& outputs_object{ prompt_response_obj.at("outputs") };
-                for (const auto& [key, value] : outputs_object.items())
-                {
-                    if (!value.is_object())
+                    catch (const nlohmann::json::out_of_range&)
                     {
-                        continue;
+                        ;
                     }
 
-                    for (const auto& [prop_key, file_list] : value.items())
+                    target_files.clear();
+
+                    const nlohmann::json& outputs_object{ prompt_response_obj.at("outputs") };
+                    for (const auto& [key, value] : outputs_object.items())
                     {
-                        if (!file_list.is_array())
+                        if (!value.is_object())
                         {
                             continue;
                         }
 
-                        for (const nlohmann::json& file_item : file_list)
+                        for (const auto& [prop_key, file_list] : value.items())
                         {
-                            if (!file_item.is_object()
-                                || !file_item.contains("filename")
-                                || !file_item.contains("type"))
+                            if (!file_list.is_array())
                             {
                                 continue;
                             }
 
-                            target_files.emplace_back
-                            (
-                                file_item.at("filename").get<std::string>(),
-                                file_item.value("subfolder", ""),
-                                file_item.at("type").get<std::string>()
-                            );
+                            for (const nlohmann::json& file_item : file_list)
+                            {
+                                if (!file_item.is_object()
+                                    || !file_item.contains("filename")
+                                    || !file_item.contains("type"))
+                                {
+                                    continue;
+                                }
+
+                                target_files.emplace_back
+                                (
+                                    file_item.at("filename").get<std::string>(),
+                                    file_item.value("subfolder", ""),
+                                    file_item.at("type").get<std::string>()
+                                );
+                            }
                         }
                     }
-                }
 
-                if (!target_files.empty())
+                    if (!target_files.empty())
+                    {
+                        break;
+                    }
+                }
+                catch (const nlohmann::json::out_of_range&)
                 {
-                    break;
+                    continue;
                 }
             }
-            catch (const nlohmann::json::out_of_range&)
-            {
-                continue;
-            }
+
+            return target_files;
         }
 
-        return target_files;
-    }
-
-    void write_comfy_ui_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files)
-    {
-        for (const generated_file_info& file_info : target_files)
+        void write_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files)
         {
-            std::filesystem::path relative_file_path{ cfg.cu.output_directory };
-            if (cfg.cu.preserve_subdirectories)
+            for (const generated_file_info& file_info : target_files)
             {
-                relative_file_path /= file_info.subfolder;
-            }
-            relative_file_path /= file_info.filename;
-
-            boost::urls::url target;
-            url_params_setter{ target }
-                ("filename", file_info.filename)
-                ("subfolder", file_info.subfolder)
-                ("type", file_info.type);
-
-            tcp::response_type view_response{ tcp::send_http_get
-            (
-                cfg.cu.host,
-                cfg.cu.port,
-                target.encoded_query(),
-                std::chrono::seconds{ cfg.timeout_connect },
-                std::chrono::seconds{ cfg.timeout_request }
-            ) };
-
-            write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
-        }
-    }
-
-    std::vector<item> parse_item_list(std::string_view str)
-    {
-        std::vector<item> result;
-
-        const std::regex item_regex{ R"(^(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
-        const std::regex sub_item_regex{ R"(^(?:[ \t]+)(?:[-*+]|[0-9a-zA-Z]+[.\)]) (.+))", std::regex_constants::ECMAScript };
-
-        std::istringstream iss{ std::string{ str } };
-        std::string line;
-        bool is_prev_line_item{};
-        while (std::getline(iss, line))
-        {
-            if (line.empty())
-            {
-                continue;
-            }
-            if (std::smatch match; std::regex_match(line, match, item_regex))
-            {
-                const std::string trimmed{ trim(match[1].str()) };
-                if (!trimmed.empty())
+                std::filesystem::path relative_file_path{ cfg.cu.output_directory };
+                if (cfg.cu.preserve_subdirectories)
                 {
-                    result.push_back({ trimmed });
-                    is_prev_line_item = true;
+                    relative_file_path /= file_info.subfolder;
                 }
-            }
-            else if (std::smatch match; is_prev_line_item && std::regex_match(line, match, sub_item_regex))
-            {
-                const std::string trimmed{ trim(match[1].str()) };
-                if (!trimmed.empty())
-                {
-                    result.back().descriptions.push_back(trimmed);
-                }
-            }
-            else
-            {
-                is_prev_line_item = false;
+                relative_file_path /= file_info.filename;
+
+                boost::urls::url target;
+                url_params_setter{ target }
+                    ("filename", file_info.filename)
+                    ("subfolder", file_info.subfolder)
+                    ("type", file_info.type);
+
+                tcp::response_type view_response{ tcp::send_http_get
+                (
+                    cfg.cu.host,
+                    cfg.cu.port,
+                    target.encoded_query(),
+                    std::chrono::seconds{ cfg.timeout_connect },
+                    std::chrono::seconds{ cfg.timeout_request }
+                ) };
+
+                write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
             }
         }
-
-        return result;
-    }
-
-    void write_item_list(const config& cfg, std::string_view task)
-    {
-        const std::vector<item> items{ parse_item_list(task) };
-
-        for (const item& item : items)
-        {
-            std::string descriptions;
-            for (const std::string& description : item.descriptions)
-            {
-                descriptions += description;
-            }
-            write_file(cfg, descriptions, item.head, std::ios::binary);
-        }
-    }
+    } // namespace cu
 
     image_info_type image_info_type::from_file(std::string_view path, const config& cfg)
     {
         const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
         const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
         return image_info_type{ base64_image, mime_type };
-    }
-
-    std::string send_completions_request(const config& cfg, std::string_view prompt, const llm_backend_parameters& params, int max_tokens)
-    {
-        const std::string_view host{ cfg.llm.host };
-        const std::string_view port{ cfg.llm.port };
-        const std::string_view target{ cfg.llm.completions_target };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        const std::string request_body{ params.get_request_for_completions(prompt, max_tokens).dump() };
-        LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
-
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-        if (!cfg.llm.api_key.empty())
-        {
-            request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
-        }
-
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
-
-        return params.parse_response_for_completions(response.body());
-    }
-
-    std::string send_chat_completions_request(const config& cfg, const llm_backend_parameters& params, const nlohmann::json& messages)
-    {
-        const std::string_view host{ cfg.llm.host };
-        const std::string_view port{ cfg.llm.port };
-        const std::string_view target{ cfg.llm.chat_completions_target };
-
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-        const nlohmann::json request_body_json{ params.get_request_for_chat_completions(messages) };
-        const std::string request_body{ request_body_json.dump() };
-
-        constexpr std::size_t threshold{ 64 };
-        if (has_base64(request_body_json, threshold))
-        {
-            LLMCPP_LOG(info) << "Send JSON";
-        }
-        else
-        {
-            LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
-        }
-
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-
-        if (!cfg.llm.api_key.empty())
-        {
-            request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
-        }
-
-        const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-        LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
-
-        return params.parse_response_for_chat_completions(response.body());
     }
 
     nlohmann::json tg_parameters::get_request_for_completions(std::string_view prompt, int max_tokens) const
@@ -4898,67 +5165,6 @@ namespace llmcpp
         }
     }
 
-    std::string completions(const config& cfg, std::string_view prompt, const context& ctx)
-    {
-        std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
-        const std::string expanded_prefix{ expand_macro(cfg.llm.generation_prefix, cfg, ctx) };
-        const std::size_t initial_prompt_size{ expanded_prompt.size() };
-        expanded_prompt += expanded_prefix;
-
-        const int initial_tokens{ send_token_count_request(cfg, expanded_prompt) };
-
-        LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
-
-        std::string current_prompt{ expanded_prompt };
-        int current_tokens{ initial_tokens };
-        for (int completion_iterations{}; completion_iterations < cfg.llm.max_completion_iterations; ++completion_iterations)
-        {
-            LLMCPP_LOG(trace) << "completion_iterations: " << completion_iterations;
-
-            if (current_tokens - initial_tokens >= cfg.llm.min_completion_tokens)
-            {
-                break;
-            }
-
-            const int remaining_tokens{ cfg.llm.backend->get_truncation_length() - current_tokens };
-            if (remaining_tokens <= 0)
-            {
-                LLMCPP_LOG(warning) << "Context window full. Cannot generate more tokens";
-                break;
-            }
-
-            const int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
-            if (tokens_to_generate <= 0)
-            {
-                LLMCPP_LOG(warning) << "No tokens left to generate. Aborting";
-                break;
-            }
-
-            const int max_tokens{ tokens_to_generate };
-            const std::string response{ send_completions_request(cfg, current_prompt, *cfg.llm.backend, max_tokens) };
-
-            if (response.empty())
-            {
-                break;
-            }
-
-            current_prompt += response;
-            current_tokens = send_token_count_request(cfg, current_prompt);
-        }
-
-        std::string generated;
-        generated.reserve(initial_prompt_size + cfg.llm.generation_suffix.size());
-        generated += current_prompt.substr(initial_prompt_size);
-        generated += cfg.llm.generation_suffix;
-
-        return generated;
-    }
-
-    std::string chat_completions(const config& cfg, const context& ctx, const nlohmann::json& messages)
-    {
-        return send_chat_completions_request(cfg, *cfg.llm.backend, messages);
-    }
-
     std::string unescape_string(std::string_view str)
     {
         std::string result;
@@ -5204,18 +5410,6 @@ namespace llmcpp
         }
     } // namespace log
 
-    void init_chat_mode(config& cfg)
-    {
-        if (cfg.phases.empty())
-        {
-            cfg.phases = { "{{user}}", "{{char}}" };
-        }
-        if (cfg.llm.generation_prefix.empty())
-        {
-            cfg.llm.generation_prefix = "\\n{{phase}}: ";
-        }
-    }
-
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, context& ctx)
     {
         if (phase_index >= phases.size())
@@ -5259,50 +5453,6 @@ namespace llmcpp
                 temp += description;
             }
             phases.push_back(temp);
-        }
-    }
-
-    void init_llm_mode(config& cfg)
-    {
-        if (!cfg.llm.paragraphs_file.empty())
-        {
-            cfg.phases.clear();
-            const std::string content{ read_text_file_to_string(cfg.llm.paragraphs_file, cfg) };
-            std::vector<item> paragraphs{ parse_item_list(content) };
-            set_paragraphs_to_phases(paragraphs, cfg.phases);
-        }
-
-        if (cfg.command_mode == command_mode::tg)
-        {
-            cfg.llm.backend = &cfg.tg;
-            if (cfg.llm.completions_target.empty())
-            {
-                cfg.llm.completions_target = "/v1/completions";
-            }
-            if (cfg.llm.token_count_target.empty())
-            {
-                cfg.llm.token_count_target = "/v1/internal/token-count";
-            }
-            if (cfg.llm.chat_completions_target.empty())
-            {
-                cfg.llm.chat_completions_target = "/v1/chat/completions";
-            }
-        }
-        else if (cfg.command_mode == command_mode::kc)
-        {
-            cfg.llm.backend = &cfg.kc;
-            if (cfg.llm.completions_target.empty())
-            {
-                cfg.llm.completions_target = "/api/v1/generate";
-            }
-            if (cfg.llm.token_count_target.empty())
-            {
-                cfg.llm.token_count_target = "/api/extra/tokencount";
-            }
-            if (cfg.llm.chat_completions_target.empty())
-            {
-                cfg.llm.chat_completions_target = "/v1/chat/completions";
-            }
         }
     }
 
@@ -5871,7 +6021,7 @@ namespace llmcpp
 
             if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
             {
-                init_llm_mode(cfg);
+                llm::init_llm_mode(cfg);
             }
 
             if (cfg.phases.empty())
@@ -6019,126 +6169,6 @@ namespace llmcpp
         }
     }
 
-    void generate_text_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
-    {
-        const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
-
-        std::string response{ completions(cfg, truncated_prompt, ctx) };
-        response = remove_reasoning(response, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
-        response += cfg.llm.generation_suffix;
-
-        write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
-
-        if (!cfg.verbose)
-        {
-            boost::nowide::cout << response << std::flush;
-        }
-
-        write_code_block(cfg, response);
-    }
-
-    std::string generate_uuid_v4()
-    {
-        std::ostringstream oss;
-        oss << std::hex << std::setfill('0');
-        oss << std::setw(8) << (random<std::uint32_t>() & 0xFFFFFFFF) << '-'
-            << std::setw(4) << (random<std::uint32_t>() & 0xFFFF) << '-'
-            << '4' << std::setw(3) << (random<std::uint32_t>() & 0xFFF) << '-'
-            << std::setw(4) << ((random<std::uint32_t>() & 0x3FFF) | 0x8000) << '-'
-            << std::setw(12) << (random<std::uint64_t>() & 0xFFFFFFFFFFFFULL)
-            ;
-        return oss.str();
-    }
-
-    std::string generate_chat_filename()
-    {
-        const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-        const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d_%H%M%S") };
-        std::ostringstream oss;
-        oss.imbue(std::locale(oss.getloc(), facet));
-        oss << "chat_" << local_time << "_" << generate_uuid_v4() << ".json";
-        return oss.str();
-    }
-
-    void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
-    {
-        std::string chat_file_content;
-        try
-        {
-            chat_file_content = read_text_file_to_string(cfg.llm.chat_file, cfg);
-        }
-        catch (const file_open_exception&)
-        {
-            ;
-        }
-
-        nlohmann::json messages;
-        if (chat_file_content.empty())
-        {
-            messages = nlohmann::json::array();
-        }
-        else
-        {
-            messages = nlohmann::json::parse(chat_file_content);
-        }
-
-        const std::string expanded_prompt{ expand_macro(prompt, cfg, ctx) };
-        LLMCPP_LOG(info) << "Prompt created.\n```\n" << expanded_prompt << "\n```";
-
-        nlohmann::json content{ nlohmann::json::array() };
-        content.push_back
-        (
-            {
-                { "type", "text" },
-                { "text", expanded_prompt }
-            }
-        );
-
-        if (!cfg.llm.image_file.empty())
-        {
-            const image_info_type image_info{ image_info_type::from_file(cfg.llm.image_file, cfg) };
-            const std::string image_url{ base64_image_to_url(image_info.base64_image, image_info.mime_type) };
-            content.push_back
-            (
-                {
-                    { "type", "image_url" },
-                    { "image_url", { { "url", image_url } } }
-                }
-            );
-        }
-
-        messages.push_back
-        (
-            {
-                { "role", "user" },
-                { "content", std::move(content) }
-            }
-        );
-
-        const std::string chat_filename{ cfg.llm.chat_file.empty() ? generate_chat_filename() : cfg.llm.chat_file };
-
-        const std::string response{ chat_completions(cfg, ctx, messages) };
-        messages.push_back
-        (
-            {
-                { "role", "assistant" },
-                { "content", response }
-            }
-        );
-
-
-        write_file(cfg, messages.dump(), chat_filename);
-
-        write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
-
-        if (!cfg.verbose)
-        {
-            boost::nowide::cout << response << std::flush;
-        }
-
-        write_code_block(cfg, response);
-    }
-
     std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg)
     {
         return string.empty() ? read_text_file_to_string(file_path, cfg) : std::string{ string };
@@ -6151,31 +6181,31 @@ namespace llmcpp
             if (cfg.llm.mode == llm_mode::completions)
             {
                 const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
-                generate_text_and_write_file(cfg, prompt, cfg.ctx);
+                llm::completions_and_write_file(cfg, prompt, cfg.ctx);
             }
             else if (cfg.llm.mode == llm_mode::chat_completions)
             {
                 const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
-                chat_completions_and_write_file(cfg, prompt, cfg.ctx);
+                llm::chat_completions_and_write_file(cfg, prompt, cfg.ctx);
             }
         }
         else if (cfg.command_mode == command_mode::sd)
         {
             const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
             const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
-            const std::string image{ send_automatic1111_request(cfg, prompt_string, negative_prompt_string) };
+            const std::string image{ sd::send_request(cfg, prompt_string, negative_prompt_string) };
             write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
         }
         else if (cfg.command_mode == command_mode::sb)
         {
             const std::string text{ expand_macro(prompt_from_string_or_file_path(cfg.sb.text, cfg.sb.text_file, cfg), cfg, cfg.ctx) };
-            const std::string voice{ send_style_bert_voice_request(cfg, text) };
+            const std::string voice{ sb::send_request(cfg, text) };
             write_file(cfg, voice, cfg.sb.output_file, std::ios::binary);
         }
         else if (cfg.command_mode == command_mode::cu)
         {
             const std::string prompt{ expand_macro(prompt_from_string_or_file_path(cfg.cu.prompt, cfg.cu.prompt_file, cfg), cfg, cfg.ctx) };
-            send_comfy_ui_prompt(cfg, prompt);
+            cu::send_request(cfg, prompt);
         }
     }
 
@@ -6285,7 +6315,7 @@ namespace llmcpp
 
             if (cfg.command_mode == command_mode::cu)
             {
-                upload_images_to_comfy_ui(cfg, cfg.ctx);
+                cu::upload_images(cfg, cfg.ctx);
             }
 
             iterate(cfg);
