@@ -1986,30 +1986,42 @@ namespace llmcpp
             { ~a };
         } && !std::same_as<std::decay_t<A>, bool>;
 
-        template<typename A, typename B>
-        concept safe_assignable_to =
-            std::is_arithmetic_v<std::decay_t<A>>
-            && std::is_arithmetic_v<std::decay_t<B>>
-            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
-            && !(std::is_same_v<std::decay_t<A>, bool> ^ std::is_same_v<std::decay_t<B>, bool>)
-            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
+        namespace detail
+        {
+            template<typename A, typename B>
+            concept safe_assignable_to_impl =
+                std::is_arithmetic_v<A>
+                && std::is_arithmetic_v<B>
+                && std::is_convertible_v<A, B>
+                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
+                && requires(A a) { B{ a }; };
+
+            template<typename A, typename B>
+            concept safe_arithmetic_assignable_to_impl =
+                std::is_arithmetic_v<A>
+                && std::is_arithmetic_v<B>
+                && std::is_convertible_v<A, B>
+                && !std::is_same_v<A, bool>
+                && !std::is_same_v<B, bool>
+                && requires(A a) { B{ a }; };
+
+            template<typename A, typename B>
+            concept safe_bitwise_assignable_to_impl =
+                std::is_integral_v<A>
+                && std::is_integral_v<B>
+                && std::is_convertible_v<A, B>
+                && !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>)
+                && requires(A a) { B{ a }; };
+        }
 
         template<typename A, typename B>
-        concept safe_arithmetic_assignable_to =
-            std::is_arithmetic_v<std::decay_t<A>>
-            && std::is_arithmetic_v<std::decay_t<B>>
-            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
-            && !std::is_same_v<std::decay_t<A>, bool>
-            && !std::is_same_v<std::decay_t<B>, bool>
-            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
+        concept safe_assignable_to = detail::safe_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
 
         template<typename A, typename B>
-        concept safe_bitwise_assignable_to =
-            std::is_integral_v<std::decay_t<A>>
-            && std::is_integral_v<std::decay_t<B>>
-            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
-            && !(std::is_same_v<std::decay_t<A>, bool> ^ std::is_same_v<std::decay_t<B>, bool>)
-            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
+        concept safe_arithmetic_assignable_to = detail::safe_arithmetic_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
+
+        template<typename A, typename B>
+        concept safe_bitwise_assignable_to = detail::safe_bitwise_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
 
         namespace detail
         {
