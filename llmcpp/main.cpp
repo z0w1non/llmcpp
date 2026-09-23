@@ -499,7 +499,7 @@ namespace llmcpp
         adetailer_parametesrs adetailer_parametesrs;
     };
 
-    BOOST_DEFINE_ENUM(sd_mode, txt2img, img2img);
+    BOOST_DEFINE_ENUM_CLASS(sd_mode, txt2img, img2img);
 
     sd_mode string_to_sd_mode(std::string_view name);
 
@@ -741,7 +741,7 @@ namespace llmcpp
         std::vector<std::string> descriptions;
     };
 
-    BOOST_DEFINE_ENUM(command_mode, tg, kc, sd, sb, cu, extract_png_parameters);
+    BOOST_DEFINE_ENUM_CLASS(command_mode, tg, kc, sd, sb, cu, extract_png_parameters);
 
     command_mode string_to_command_mode(std::string_view name);
 
