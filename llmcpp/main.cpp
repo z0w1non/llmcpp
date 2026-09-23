@@ -255,12 +255,9 @@ namespace llmcpp
         virtual int get_truncation_length() const = 0;
     };
 
-    enum class llm_mode
-    {
-        completions, chat_completions
-    };
+    BOOST_DEFINE_ENUM_CLASS(llm_mode, completions, chat_completions)
 
-    llm_mode string_to_llm_mode(std::string_view str);
+    llm_mode string_to_llm_mode(std::string_view name);
 
     std::string llm_mode_to_target(llm_mode mode, const config& cfg);
 
@@ -1497,18 +1494,14 @@ namespace llmcpp
         llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
     }
 
-    llm_mode string_to_llm_mode(std::string_view str)
+    llm_mode string_to_llm_mode(std::string_view name)
     {
-        static const std::unordered_map<std::string_view, llm_mode> map
+        llm_mode result{};
+        if (boost::describe::enum_from_string(name, result))
         {
-            { "completions", llm_mode::completions },
-            { "chat-completions", llm_mode::chat_completions }
-        };
-        if (const auto iter{ map.find(str) }; iter != map.end())
-        {
-            return iter->second;
+            return result;
         }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown llm-mode string " + std::string{ str } });
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown llm-mode string " + std::string{ name } });
     }
 
     std::string llm_mode_to_target(llm_mode mode, const config& cfg)
