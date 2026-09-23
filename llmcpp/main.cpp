@@ -1982,7 +1982,7 @@ namespace llmcpp
         concept safe_equality_comparable_with = requires(const A & a, const B & b)
         {
             { a == b } -> std::convertible_to<bool>;
-        } && !(std::same_as<std::decay_t<A>, bool> ^ std::same_as<std::decay_t<B>, bool>);
+        } && !(std::same_as<llmcpp::decay_t<A>, bool> ^ std::same_as<llmcpp::decay_t<B>, bool>);
 
         template<typename T>
         concept safe_equality_comparable = requires(const T & a, const T & b)
@@ -1993,14 +1993,14 @@ namespace llmcpp
         template<typename A, typename B>
         concept safe_totally_ordered_with
             = std::totally_ordered_with<A, B>
-            && !(std::same_as<std::decay_t<A>, bool> ^ std::same_as<std::decay_t<B>, bool>);
+            && !(std::same_as<llmcpp::decay_t<A>, bool> ^ std::same_as<llmcpp::decay_t<B>, bool>);
 
         template<typename A>
         concept has_safe_unary_plus_minus = requires(const A & a)
         {
             { +a };
             { -a };
-        } && !std::same_as<std::decay_t<A>, bool>;
+        } && !std::same_as<llmcpp::decay_t<A>, bool>;
 
         template<typename A>
         concept has_safe_logical_not = requires(const A & a)
@@ -2012,16 +2012,16 @@ namespace llmcpp
         concept has_safe_bitwise_not = requires(const A & a)
         {
             { ~a };
-        } && !std::same_as<std::decay_t<A>, bool>;
+        } && !std::same_as<llmcpp::decay_t<A>, bool>;
 
         template<typename A, typename B>
-        concept safe_assignable_to = detail::safe_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
+        concept safe_assignable_to = detail::safe_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         template<typename A, typename B>
-        concept safe_arithmetic_assignable_to = detail::safe_arithmetic_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
+        concept safe_arithmetic_assignable_to = detail::safe_arithmetic_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         template<typename A, typename B>
-        concept safe_bitwise_assignable_to = detail::safe_bitwise_assignable_to_impl<std::decay_t<A>, std::decay_t<B>>;
+        concept safe_bitwise_assignable_to = detail::safe_bitwise_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         namespace detail
         {
@@ -2176,13 +2176,13 @@ namespace llmcpp
             struct opecode                                                                          \
             {                                                                                       \
                 template<typename A, typename B>                                                    \
-                    requires (safe_equality_comparable_with<unwrap_type_t<A>, unwrap_type_t<B>>)    \
+                    requires (safe_equality_comparable_with<A, B>)                                  \
                 vr_primitive_type operator ()(const A& a, const B& b) const                         \
                 {                                                                                   \
                     return unwrap(a) operator_ unwrap(b);                                           \
                 }                                                                                   \
                 template<typename A, typename B>                                                    \
-                    requires (!(safe_equality_comparable_with<unwrap_type_t<A>, unwrap_type_t<B>>)) \
+                    requires (!(safe_equality_comparable_with<A, B>))                               \
                 [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const            \
                 {                                                                                   \
                     llmcpp::throw_exception(macro_exception{});                                     \
@@ -2201,13 +2201,13 @@ namespace llmcpp
             struct opecode                                                                      \
             {                                                                                   \
                 template<typename A, typename B>                                                \
-                    requires (safe_totally_ordered_with<unwrap_type_t<A>, unwrap_type_t<B>>)    \
+                    requires (safe_totally_ordered_with<A, B>)                                  \
                 vr_primitive_type operator ()(const A& a, const B& b) const                     \
                 {                                                                               \
                     return unwrap(a) operator_ unwrap(b);                                       \
                 }                                                                               \
                 template<typename A, typename B>                                                \
-                    requires (!(safe_totally_ordered_with<unwrap_type_t<A>, unwrap_type_t<B>>)) \
+                    requires (!(safe_totally_ordered_with<A, B>))                               \
                 vr_primitive_type operator ()(const A& a, const B& b) const                     \
                 {                                                                               \
                     llmcpp::throw_exception(macro_exception{});                                 \
@@ -2298,13 +2298,13 @@ namespace llmcpp
             struct opecode                                                   \
             {                                                                \
                 template<typename A>                                         \
-                    requires (concept_name<unwrap_type_t<A>>)                \
+                    requires (concept_name<A>)                               \
                 vr_primitive_type operator ()(const A& a) const              \
                 {                                                            \
                     return operator_ unwrap(a);                              \
                 }                                                            \
                 template<typename A>                                         \
-                    requires (!(concept_name<unwrap_type_t<A>>))             \
+                    requires (!(concept_name<A>))                            \
                 [[noreturn]] vr_primitive_type operator ()(const A& a) const \
                 {                                                            \
                     llmcpp::throw_exception(macro_exception{});              \
