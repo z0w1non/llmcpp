@@ -1152,7 +1152,13 @@ namespace llmcpp
 
     std::string make_automatic1111_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
 
-    std::string send_automatic1111_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+    nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+
+    nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+
+    nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+
+    std::string send_automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
 
     std::string send_style_bert_voice_request(const config& cfg, std::string_view text);
 
@@ -3887,14 +3893,54 @@ namespace llmcpp
         return oss.str();
     }
 
-    std::string send_automatic1111_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+    nlohmann::json txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
     {
-        const std::string_view host{ cfg.sd.host };
-        const std::string_view port{ cfg.sd.port };
+        nlohmann::json json;
 
-        tcp tcp;
-        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+        json["enable_hr"] = cfg.sd.txt2img.enable_hr;
+        json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
+        json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
+        json["hr_scale"] = cfg.sd.txt2img.hr_scale;
+        json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
+        json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
+        json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
+        json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
+        if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
+        {
+            json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
+        }
+        //json["hr_prompt"] = prompt;
+        //json["hr_negative_prompt"] = negative_prompt;
 
+        return json;
+    }
+
+    nlohmann::json img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+    {
+        nlohmann::json json;
+
+        json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
+        json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
+        json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
+        json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
+        json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
+        json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
+        json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
+        json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
+        json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
+        json["sd_mask_round"] = cfg.sd.img2img.mask_round;
+        json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
+        json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
+        json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
+        json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
+        json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
+        json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
+
+        return json;
+    }
+
+    nlohmann::json automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+    {
         nlohmann::json json;
 
         json["prompt"] = prompt;
@@ -3942,41 +3988,6 @@ namespace llmcpp
         if (!cfg.sd.comments.empty())
         {
             json["comments"] = cfg.sd.comments;
-        }
-        if (cfg.sd.mode == sd_mode::txt2img)
-        {
-            json["enable_hr"] = cfg.sd.txt2img.enable_hr;
-            json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
-            json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
-            json["hr_scale"] = cfg.sd.txt2img.hr_scale;
-            json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
-            json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
-            json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
-            json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
-            if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
-            {
-            }
-            //json["hr_prompt"] = prompt;
-            //json["hr_negative_prompt"] = negative_prompt;
-        }
-        else if (cfg.sd.mode == sd_mode::img2img)
-        {
-            json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
-            json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
-            json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
-            json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
-            json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
-            json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
-            json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
-            json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
-            json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
-            json["sd_mask_round"] = cfg.sd.img2img.mask_round;
-            json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
-            json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
-            json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
-            json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
-            json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
-            json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
         }
 
         json["force_task_id"] = cfg.sd.force_task_id;
@@ -4049,6 +4060,27 @@ namespace llmcpp
             json["infotext"] = cfg.sd.infotext;
         }
 
+        if (cfg.sd.mode == sd_mode::txt2img)
+        {
+            json.update(txt2img_request(cfg, prompt, negative_prompt));
+        }
+        else if (cfg.sd.mode == sd_mode::img2img)
+        {
+            json.update(img2img_request(cfg, prompt, negative_prompt));
+        }
+
+        return json;
+    }
+
+    std::string send_automatic1111_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
+    {
+        const std::string_view host{ cfg.sd.host };
+        const std::string_view port{ cfg.sd.port };
+
+        tcp tcp;
+        tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+        const nlohmann::json json{ automatic1111_request(cfg, prompt, negative_prompt) };
         const std::string request_body{ json.dump() };
         LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
@@ -6131,7 +6163,7 @@ namespace llmcpp
         {
             const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
             const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
-            const std::string image{ send_automatic1111_txt2img_request(cfg, prompt_string, negative_prompt_string) };
+            const std::string image{ send_automatic1111_request(cfg, prompt_string, negative_prompt_string) };
             write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
         }
         else if (cfg.command_mode == command_mode::sb)
