@@ -437,3 +437,6 @@ llmcpp --create-process --server-executable-file koboldcpp.exe --server-argument
 llmcpp --terminate-process --server-executable-file koboldcpp.exe
 ```
 `--terminate-process` が指定された場合、指定された実行ファイルのフルパスあるいはファイル名を利用してサーバーのプロセスを終了する。
+
+## 備考
+本プロジェクトはテンプレートを多用するため、MSVC でコンパイルする際はコンパイルオプションに `/bigobj` を追加する必要がある。
