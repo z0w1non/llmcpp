@@ -2003,6 +2003,14 @@ namespace llmcpp
             && !std::is_same_v<std::decay_t<B>, bool>
             && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
 
+        template<typename A, typename B>
+        concept safe_bitwise_assignable_to =
+            std::is_integral_v<std::decay_t<A>>
+            && std::is_integral_v<std::decay_t<B>>
+            && std::is_convertible_v<std::decay_t<A>, std::decay_t<B>>
+            && !(std::is_same_v<std::decay_t<A>, bool> ^ std::is_same_v<std::decay_t<B>, bool>)
+            && requires(std::decay_t<A> a) { std::decay_t<B>{ a }; };
+
         namespace detail
         {
             struct assign
@@ -2070,7 +2078,7 @@ namespace llmcpp
             }                                                                                 \
         };
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                                   \
+#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, concept_name, zero_check)                     \
             namespace detail                                                                            \
             {                                                                                           \
                 struct opecode                                                                          \
@@ -2094,7 +2102,7 @@ namespace llmcpp
                                 return unwrap(a) operator_ unwrap(b);                                   \
                             }                                                                           \
                         }                                                                               \
-                        else if constexpr (safe_arithmetic_assignable_to<B_, A_>)                       \
+                        else if constexpr (concept_name<B_, A_>)                                        \
                         {                                                                               \
                             if constexpr (requires { unwrap(a) operator_ static_cast<A_>(unwrap(b)); }) \
                             {                                                                           \
@@ -2108,16 +2116,16 @@ namespace llmcpp
                                                                                                         \
             LLMCPP_DEFINE_FUNCTION(opecode);
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(/=, divides_assign, true);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, true);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign, safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign, safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign, safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign, safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign, safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign, safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign, safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign, safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(/=, divides_assign, safe_arithmetic_assignable_to, true);
+        LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, safe_arithmetic_assignable_to, true);
 #undef LLMCPP_DEFINE_FUNCTION_OBJECT
 
 #define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                                                  \
