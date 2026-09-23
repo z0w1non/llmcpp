@@ -255,7 +255,7 @@ namespace llmcpp
         virtual int get_truncation_length() const = 0;
     };
 
-    BOOST_DEFINE_ENUM_CLASS(llm_mode, completions, chat_completions)
+    BOOST_DEFINE_ENUM_CLASS(llm_mode, completions, chat_completions);
 
     llm_mode string_to_llm_mode(std::string_view name);
 
@@ -1107,48 +1107,36 @@ namespace llmcpp
         boost::urls::url& url;
     };
 
-    std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
+    namespace filesystem
+    {
+        void create_parent_directories(const std::filesystem::path& path);
 
-    std::string base64_encode(std::string_view encoded_string);
+        std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
 
-    std::string base64_decode(std::string_view encoded_string);
+        std::string read_binary_file_to_string(std::string_view file, const config& cfg);
 
-    bool is_base64(std::string_view str, std::size_t threshold);
+        std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension = ".txt");
 
-    bool has_base64(const nlohmann::json& json, std::size_t threshold);
+        std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg);
 
-    std::string trim(std::string_view str);
+        std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg);
 
-    std::string console_string_to_u8string(std::string_view input);
+        std::string complement_extension(std::string_view filepath, std::string_view extension);
 
-    token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse);
+        std::string complement_codeblock_extension(std::string_view language_identifier);
 
-    void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens);
+        std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
 
-    void create_parent_directories(const std::filesystem::path& path);
+        std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type);
 
-    std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
+        std::string_view extension_to_mime_type(std::string_view extension);
 
-    std::string read_binary_file_to_string(std::string_view file, const config& cfg);
+        void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode = 0);
 
-    std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension = ".txt");
+        void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
 
-    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg);
-
-    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg);
-
-    std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type);
-
-    template<typename Integer>
-    Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
-
-    std::string_view extension_to_mime_type(std::string_view extension);
-
-    std::string complement_extension(std::string_view filepath, std::string_view extension);
-
-    std::string complement_codeblock_extension(std::string_view language_identifier);
-
-    std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
+        std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
+    } // namespace filesystem
 
     namespace llm
     {
@@ -1175,6 +1163,12 @@ namespace llmcpp
         std::string generate_chat_filename();
 
         void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
+
+        void write_code_block(const config& cfg, std::string_view markdown);
+
+        using code_blocks = string_unordered_map<std::string>;
+
+        code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
     } // namespace llm
 
     namespace sd
@@ -1212,13 +1206,39 @@ namespace llmcpp
         void write_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files);
     } // namespace cu
 
-    std::string unescape_string(std::string_view str);
+    namespace command_line
+    {
+        void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& ctx);
 
-    std::string json_escape_string(std::string_view str);
+        std::vector<std::string> split_command_line_args(std::string_view args);
 
-    void unescape_parameters(config& cfg);
+        int parse_command_line(int argc, char** argv, config& cfg);
 
-    void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& ctx);
+        void unescape_parameters(config& cfg);
+    } // command_line
+
+    namespace string_utils
+    {
+        std::string unescape_string(std::string_view str);
+
+        std::string json_escape_string(std::string_view str);
+
+        std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
+
+        std::string base64_encode(std::string_view encoded_string);
+
+        std::string base64_decode(std::string_view encoded_string);
+
+        bool is_base64(std::string_view str, std::size_t threshold);
+
+        bool has_base64(const nlohmann::json& json, std::size_t threshold);
+
+        std::string console_string_to_u8string(std::string_view input);
+
+        token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse);
+
+        void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens);
+    } // namespace string_utils
 
     namespace log
     {
@@ -1244,6 +1264,9 @@ namespace llmcpp
         void init_logging(const config& cfg);
     } // namespace log
 
+    template<typename Integer>
+    Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
+
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
 
     void set_static_builtin_variables(config& cfg);
@@ -1254,10 +1277,6 @@ namespace llmcpp
 
     std::string sanitize_as_filename(std::string_view name);
 
-    using code_blocks = string_unordered_map<std::string>;
-
-    code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
-
     std::string_view language_identifier_to_extension(std::string_view language_identifier);
 
     bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
@@ -1266,19 +1285,7 @@ namespace llmcpp
 
     std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path);
 
-    std::vector<std::string> parse_command_line_args(std::string_view args);
-
-    int parse_command_line(int argc, char** argv, config& cfg);
-
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
-
-    void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode = 0);
-
-    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
-
-    void write_code_block(const config& cfg, std::string_view markdown);
-
-    std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
 
     void generate_and_output(const config& cfg);
 
@@ -1539,168 +1546,6 @@ namespace llmcpp
             return cfg.llm.chat_completions_target;
         }
         llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
-    }
-
-    std::string base64_encode(std::string_view input)
-    {
-        using namespace boost::archive::iterators;
-        using iterator = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
-
-        const std::size_t missing_size{ (3 - input.size() % 3) % 3 };
-        std::string padded_input{ input };
-        padded_input.append(missing_size, '\0');
-
-        std::string encoded{ iterator{ padded_input.begin() }, iterator{ padded_input.end() } };
-        if (missing_size > 0)
-        {
-            encoded.replace(encoded.size() - missing_size, missing_size, missing_size, '=');
-        }
-        return encoded;
-    }
-
-    std::string base64_decode(std::string_view input)
-    {
-        using namespace boost::archive::iterators;
-        using iterator = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
-
-        std::size_t padding_count{};
-        while (padding_count < input.size() && input[input.size() - 1 - padding_count] == '=')
-        {
-            ++padding_count;
-        }
-
-        const std::string_view trimed_input{ input.substr(0, input.size() - padding_count) };
-        std::string decoded{ iterator{ input.begin() }, iterator{ input.end() } };
-
-        std::size_t expected_size{ input.size() / 4 * 3 - padding_count };
-        if (decoded.size() > expected_size)
-        {
-            decoded.resize(expected_size);
-        }
-
-        return decoded;
-    }
-
-    bool is_base64(std::string_view str, std::size_t threshold)
-    {
-        if (str.size() >= threshold && str.size() % 4 == 0)
-        {
-            std::size_t padding_count{};
-            for (std::size_t i{}; i < str.size(); ++i)
-            {
-                const char c = str[i];
-                if (std::isalnum(static_cast<unsigned char>(c)) || c == '+' || c == '/')
-                {
-                    if (padding_count > 0)
-                    {
-                        return false;
-                    }
-                }
-                else if (c == '=')
-                {
-                    ++padding_count;
-                    if (padding_count > 2 || i + padding_count < str.size())
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    return false;
-                }
-            }
-        }
-        return false;
-    }
-
-    bool has_base64(const nlohmann::json& json, std::size_t threshold)
-    {
-        if (json.is_array())
-        {
-            for (const auto& value : json)
-            {
-                if (has_base64(value, threshold))
-                {
-                    return true;
-                }
-            }
-        }
-        else if (json.is_object())
-        {
-            for (const auto& [key, value] : json.items())
-            {
-                if (has_base64(value, threshold))
-                {
-                    return true;
-                }
-            }
-        }
-        else if (json.is_string())
-        {
-            const std::string_view str{ json.get_ref<const std::string&>() };
-            if (is_base64(str, threshold))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    std::string trim(std::string_view str)
-    {
-        const std::regex leading_spaces{ R"(^\s+)", std::regex_constants::ECMAScript };
-        const std::regex trailing_spaces{ R"(\s+$)", std::regex_constants::ECMAScript };
-        std::string trimmed_string{ str };
-        trimmed_string = std::regex_replace(trimmed_string, leading_spaces, {});
-        trimmed_string = std::regex_replace(trimmed_string, trailing_spaces, {});
-        return trimmed_string;
-    }
-
-    std::string console_string_to_u8string(std::string_view input)
-    {
-#if BOOST_OS_WINDOWS
-        if (input.empty())
-        {
-            return std::string{};
-        }
-
-        const UINT cp{ GetConsoleOutputCP() };
-        if (cp == CP_UTF8)
-        {
-            return std::string{ input };
-        }
-
-        const int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
-        if (wstring_length <= 0)
-        {
-            return std::string{ input };
-        }
-
-        std::wstring wstring(wstring_length, L'\0');
-        MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
-
-        const int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
-        if (u8string_length <= 0)
-        {
-            return std::string{ input };
-        }
-
-        std::string u8_string(u8string_length, '\0');
-        WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, u8_string.data(), u8string_length, nullptr, nullptr);
-
-        return u8_string;
-#else
-        return std::string{ input };
-#endif
-    }
-
-    template<typename Integer>
-    Integer random(Integer min, Integer max)
-    {
-        static std::random_device seed_gen;
-        static std::default_random_engine random_engine{ seed_gen() };
-        static std::uniform_int_distribution<Integer> distribution{ min, max };
-        return distribution(random_engine);
     }
 
     namespace parser
@@ -3117,7 +2962,7 @@ namespace llmcpp
         {
             validate_arguments_size(args.arguments, 1, 1);
             const std::string_view filename{ get_or_throw<std::string>(args.arguments[0]) };
-            return read_text_file_to_string(filename, args.cfg);
+            return filesystem::read_text_file_to_string(filename, args.cfg);
         }
 
         primitive_type head(macro_argument_type args)
@@ -3148,10 +2993,10 @@ namespace llmcpp
             }
 
             std::string result;
-            const token_count_string truncate_head{ truncate_by_tokens(str, head_max_tokens, args.cfg, false) };
+            const token_count_string truncate_head{ string_utils::truncate_by_tokens(str, head_max_tokens, args.cfg, false) };
             result += truncate_head.str;
             result += ellipsis;
-            const token_count_string truncate_tail{ truncate_by_tokens(str, tail_max_tokens, args.cfg, true) };
+            const token_count_string truncate_tail{ string_utils::truncate_by_tokens(str, tail_max_tokens, args.cfg, true) };
             result += truncate_tail.str;
             return result;
         }
@@ -3159,7 +3004,7 @@ namespace llmcpp
         primitive_type json_literal(macro_argument_type args)
         {
             validate_arguments_size(args.arguments, 1, 1);
-            return json_escape_string(get_or_throw<std::string>(args.arguments[0]));
+            return string_utils::json_escape_string(get_or_throw<std::string>(args.arguments[0]));
         }
 
         primitive_type getenv(macro_argument_type args)
@@ -3262,7 +3107,7 @@ namespace llmcpp
 
             args.ctx.set("exit_code", exit_code);
 
-            return console_string_to_u8string(output);
+            return string_utils::console_string_to_u8string(output);
         }
 
         primitive_type code_block(macro_argument_type args)
@@ -3271,8 +3116,8 @@ namespace llmcpp
             const std::string_view markdown{ get_or_throw<std::string>(args.arguments[0]) };
             const std::string_view code_block{ get_or_throw<std::string>(args.arguments[1]) };
 
-            const code_blocks map{ extract_code_block_from_markdown(markdown) };
-            if (const code_blocks::const_iterator iter{ map.find(code_block) }; iter != map.end())
+            const llm::code_blocks map{ llm::extract_code_block_from_markdown(markdown) };
+            if (const llm::code_blocks::const_iterator iter{ map.find(code_block) }; iter != map.end())
             {
                 return iter->second;
             }
@@ -3297,7 +3142,7 @@ namespace llmcpp
                 output = remove_reasoning(output, args.cfg.llm.reasoning_prefix, args.cfg.llm.reasoning_suffix);
             }
 
-            const token_count_string truncated{ truncate_by_tokens(output, max_tokens, args.cfg, false) };
+            const token_count_string truncated{ string_utils::truncate_by_tokens(output, max_tokens, args.cfg, false) };
 
             return truncated.str;
         }
@@ -3402,7 +3247,7 @@ namespace llmcpp
                 const std::string_view str{ get_or_throw<std::string>(args.arguments[0]) };
                 const int max_tokens{ get_or_throw<int>(args.arguments[1]) };
 
-                const token_count_string truncated{ truncate_by_tokens(str, max_tokens, args.cfg, reverse) };
+                const token_count_string truncated{ string_utils::truncate_by_tokens(str, max_tokens, args.cfg, reverse) };
                 return truncated.str;
             }
         } // namespace detail
@@ -3413,173 +3258,6 @@ namespace llmcpp
         constexpr unsigned int max_depth{ 32 };
         context pushed{ ctx.make_pushed() };
         return parser::evaluate_document_recursive(std::string{ input }, cfg, max_depth, pushed);
-    }
-
-    token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse)
-    {
-        token_count_string result;
-
-        std::vector<std::string> lines;
-        boost::split(lines, string, boost::is_any_of("\n"));
-        std::vector<std::string> temp;
-
-        auto truncate = [&](auto first, auto last)
-            {
-                for (; first != last; ++first)
-                {
-                    const int next_tokens{ cfg.lru_cache.get_tokens(*first) };
-                    if (result.tokens + next_tokens > max_tokens)
-                    {
-                        break;
-                    }
-                    temp.push_back(*first);
-                    result.tokens += next_tokens;
-                }
-            };
-
-        if (reverse)
-        {
-            truncate(lines.rbegin(), lines.rend());
-            std::reverse(temp.begin(), temp.end());
-        }
-        else
-        {
-            truncate(lines.begin(), lines.end());
-        }
-
-        for (const std::string& line : temp)
-        {
-            result.str += line;
-        }
-
-        return result;
-    }
-
-    void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens)
-    {
-        const token_count_string cruncated{ truncate_by_tokens(string, remaining_tokens, cfg, reverse) };
-        result += cruncated.str;
-        remaining_tokens -= cruncated.tokens;
-    }
-
-    void create_parent_directories(const std::filesystem::path& path)
-    {
-        if (path.empty() || !path.has_parent_path())
-        {
-            return;
-        }
-
-        std::filesystem::create_directories(path.parent_path());
-    }
-
-    std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode)
-    {
-        std::string result;
-        if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
-        {
-            llmcpp::throw_exception(file_open_exception{} << error_info::path{ file });
-        }
-        boost::nowide::ifstream ifs{ file, openmode };
-        if (!ifs.is_open())
-        {
-            llmcpp::throw_exception(file_open_exception{} << error_info::path{ file });
-        }
-        const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
-        result = file_content;
-        return result;
-    }
-
-    std::string read_binary_file_to_string(std::string_view file, const config& cfg)
-    {
-        return read_file_to_string(string_to_path_by_config(file, cfg), std::ios::binary);
-    }
-
-    std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension)
-    {
-        return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), cfg));
-    };
-
-    std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg)
-    {
-        return base64_encode(read_binary_file_to_string(image_path, cfg));
-    }
-
-    std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg)
-    {
-        std::vector<std::string> encoded_images;
-        encoded_images.reserve(paths.size());
-        const auto unary_operator = [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); };
-        boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
-        return encoded_images;
-    }
-
-    std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type)
-    {
-        std::string url{ "data:image/" };
-        url.reserve(19 + mime_type.size() + base64_image.size());
-        url += mime_type;
-        url += ";base64,";
-        url += base64_image;
-        return url;
-    }
-
-    std::string_view extension_to_mime_type(std::string_view extension)
-    {
-        static const string_view_unordered_map<std::string_view> map
-        {
-            { ".jpg", "jpg" },
-            { ".jpeg", "jpg" },
-            { ".png", "png" },
-            { ".webp", "webp" },
-            { ".gif", "gif" },
-            { ".bmp", "bmp" },
-            { ".svg", "svg+xml" },
-            { ".avif", "avif" },
-            { ".tif", "tiff" },
-            { ".tiff", "tiff" },
-            { ".ico", "x-icon" }
-        };
-        if (const auto iter{ map.find(extension) }; iter != map.end())
-        {
-            return iter->second;
-        }
-        llmcpp::throw_exception(logic_error{});
-    }
-
-    std::string complement_extension(std::string_view filepath, std::string_view extension)
-    {
-        std::filesystem::path temp{ filepath };
-        if (!temp.has_extension())
-        {
-            temp.replace_extension(extension);
-        }
-        return temp.string();
-    }
-
-    std::string complement_codeblock_extension(std::string_view language_identifier)
-    {
-        const std::string_view extension{ language_identifier_to_extension(language_identifier) };
-        if (!extension.empty() && extension.front() != '.')
-        {
-            return std::string{ extension };
-        }
-
-        std::string result;
-        result.reserve(language_identifier.size() + extension.size());
-        result += language_identifier;
-        result += extension;
-        return result;
-    }
-
-    std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg)
-    {
-        const std::filesystem::path file_path{ expand_macro(path, cfg, cfg.ctx) };
-        if (file_path.is_relative())
-        {
-            const std::filesystem::path base_path{ expand_macro(cfg.base_path, cfg, cfg.ctx) };
-            return base_path / file_path;
-        }
-        return file_path;
     }
 
     // unused
@@ -3890,6 +3568,156 @@ namespace llmcpp
         bool connected{};
     };
 
+    namespace filesystem
+    {
+        void create_parent_directories(const std::filesystem::path& path)
+        {
+            if (path.empty() || !path.has_parent_path())
+            {
+                return;
+            }
+
+            std::filesystem::create_directories(path.parent_path());
+        }
+
+        std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode)
+        {
+            std::string result;
+            if (!std::filesystem::exists(file) || !std::filesystem::is_regular_file(file))
+            {
+                llmcpp::throw_exception(file_open_exception{} << error_info::path{ file });
+            }
+            boost::nowide::ifstream ifs{ file, openmode };
+            if (!ifs.is_open())
+            {
+                llmcpp::throw_exception(file_open_exception{} << error_info::path{ file });
+            }
+            const std::string file_content{ (std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>() };
+            result = file_content;
+            return result;
+        }
+
+        std::string read_binary_file_to_string(std::string_view file, const config& cfg)
+        {
+            return read_file_to_string(string_to_path_by_config(file, cfg), std::ios::binary);
+        }
+
+        std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension)
+        {
+            return read_file_to_string(string_to_path_by_config(complement_extension(path, extension), cfg));
+        }
+
+        std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg)
+        {
+            return string_utils::base64_encode(read_binary_file_to_string(image_path, cfg));
+        }
+
+        std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg)
+        {
+            std::vector<std::string> encoded_images;
+            encoded_images.reserve(paths.size());
+            const auto unary_operator = [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); };
+            boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
+            return encoded_images;
+        }
+
+        std::string complement_extension(std::string_view filepath, std::string_view extension)
+        {
+            std::filesystem::path temp{ filepath };
+            if (!temp.has_extension())
+            {
+                temp.replace_extension(extension);
+            }
+            return temp.string();
+        }
+
+        std::string complement_codeblock_extension(std::string_view language_identifier)
+        {
+            const std::string_view extension{ language_identifier_to_extension(language_identifier) };
+            if (!extension.empty() && extension.front() != '.')
+            {
+                return std::string{ extension };
+            }
+
+            std::string result;
+            result.reserve(language_identifier.size() + extension.size());
+            result += language_identifier;
+            result += extension;
+            return result;
+        }
+
+        std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg)
+        {
+            const std::filesystem::path file_path{ expand_macro(path, cfg, cfg.ctx) };
+            if (file_path.is_relative())
+            {
+                const std::filesystem::path base_path{ expand_macro(cfg.base_path, cfg, cfg.ctx) };
+                return base_path / file_path;
+            }
+            return file_path;
+        }
+
+        std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type)
+        {
+            std::string url{ "data:image/" };
+            url.reserve(19 + mime_type.size() + base64_image.size());
+            url += mime_type;
+            url += ";base64,";
+            url += base64_image;
+            return url;
+        }
+
+        std::string_view extension_to_mime_type(std::string_view extension)
+        {
+            static const string_view_unordered_map<std::string_view> map
+            {
+                { ".jpg", "jpg" },
+                { ".jpeg", "jpg" },
+                { ".png", "png" },
+                { ".webp", "webp" },
+                { ".gif", "gif" },
+                { ".bmp", "bmp" },
+                { ".svg", "svg+xml" },
+                { ".avif", "avif" },
+                { ".tif", "tiff" },
+                { ".tiff", "tiff" },
+                { ".ico", "x-icon" }
+            };
+            if (const auto iter{ map.find(extension) }; iter != map.end())
+            {
+                return iter->second;
+            }
+            llmcpp::throw_exception(logic_error{});
+        }
+
+        void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode)
+        {
+            const bool is_binary{ (mode & std::ios::binary) != 0 };
+            const std::string expanded{ expand_macro(filepath, cfg, cfg.ctx) };
+            const std::string complemented{ filesystem::complement_extension(expanded, ".txt") };
+            const std::filesystem::path file_path{ filesystem::string_to_path_by_config(is_binary ? filepath : complemented, cfg) };
+            filesystem::create_parent_directories(file_path);
+            boost::nowide::ofstream ofs{ file_path, mode };
+            if (!ofs.is_open())
+            {
+                llmcpp::throw_exception(file_open_exception{} << error_info::path{ file_path });
+            }
+            ofs.write(data, size);
+            const std::string_view file_type{ is_binary ? "binary" : "text" };
+            LLMCPP_LOG(info) << "Write " << file_type << " to " << file_path;
+        }
+
+        void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
+        {
+            return write_file(cfg, data.data(), data.size(), filepath, mode);
+        }
+
+        std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg)
+        {
+            return string.empty() ? filesystem::read_text_file_to_string(file_path, cfg) : std::string{ string };
+        }
+    } // namespace filesystem
+
     namespace llm
     {
         void init_llm_mode(config& cfg)
@@ -3897,7 +3725,7 @@ namespace llmcpp
             if (!cfg.llm.paragraphs_file.empty())
             {
                 cfg.phases.clear();
-                const std::string content{ read_text_file_to_string(cfg.llm.paragraphs_file, cfg) };
+                const std::string content{ filesystem::read_text_file_to_string(cfg.llm.paragraphs_file, cfg) };
                 std::vector<item> paragraphs{ parse_item_list(content) };
                 set_paragraphs_to_phases(paragraphs, cfg.phases);
             }
@@ -3966,7 +3794,7 @@ namespace llmcpp
                 }
                 if (std::smatch match; std::regex_match(line, match, item_regex))
                 {
-                    const std::string trimmed{ trim(match[1].str()) };
+                    const std::string trimmed{ boost::trim_copy(match[1].str()) };
                     if (!trimmed.empty())
                     {
                         result.push_back({ trimmed });
@@ -3975,7 +3803,7 @@ namespace llmcpp
                 }
                 else if (std::smatch match; is_prev_line_item && std::regex_match(line, match, sub_item_regex))
                 {
-                    const std::string trimmed{ trim(match[1].str()) };
+                    const std::string trimmed{ boost::trim_copy(match[1].str()) };
                     if (!trimmed.empty())
                     {
                         result.back().descriptions.push_back(trimmed);
@@ -4001,7 +3829,7 @@ namespace llmcpp
                 {
                     descriptions += description;
                 }
-                write_file(cfg, descriptions, item.head, std::ios::binary);
+                filesystem::write_file(cfg, descriptions, item.head, std::ios::binary);
             }
         }
 
@@ -4042,7 +3870,7 @@ namespace llmcpp
             const std::string request_body{ request_body_json.dump() };
 
             constexpr std::size_t threshold{ 64 };
-            if (has_base64(request_body_json, threshold))
+            if (string_utils::has_base64(request_body_json, threshold))
             {
                 LLMCPP_LOG(info) << "Send JSON";
             }
@@ -4127,13 +3955,13 @@ namespace llmcpp
 
         void completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx)
         {
-            const std::string truncated_prompt{ truncate_prompt_by_config(prompt, cfg) };
+            const std::string truncated_prompt{ string_utils::truncate_prompt_by_config(prompt, cfg) };
 
             std::string response{ completions(cfg, truncated_prompt, ctx) };
             response = remove_reasoning(response, cfg.llm.reasoning_prefix, cfg.llm.reasoning_suffix);
             response += cfg.llm.generation_suffix;
 
-            write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
+            filesystem::write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
             if (!cfg.verbose)
             {
@@ -4171,7 +3999,7 @@ namespace llmcpp
             std::string chat_file_content;
             try
             {
-                chat_file_content = read_text_file_to_string(cfg.llm.chat_file, cfg);
+                chat_file_content = filesystem::read_text_file_to_string(cfg.llm.chat_file, cfg);
             }
             catch (const file_open_exception&)
             {
@@ -4203,7 +4031,7 @@ namespace llmcpp
             if (!cfg.llm.image_file.empty())
             {
                 const image_info_type image_info{ image_info_type::from_file(cfg.llm.image_file, cfg) };
-                const std::string image_url{ base64_image_to_url(image_info.base64_image, image_info.mime_type) };
+                const std::string image_url{ filesystem::base64_image_to_url(image_info.base64_image, image_info.mime_type) };
                 content.push_back
                 (
                     {
@@ -4233,9 +4061,9 @@ namespace llmcpp
             );
 
 
-            write_file(cfg, messages.dump(), chat_filename);
+            filesystem::write_file(cfg, messages.dump(), chat_filename);
 
-            write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
+            filesystem::write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
 
             if (!cfg.verbose)
             {
@@ -4243,6 +4071,41 @@ namespace llmcpp
             }
 
             write_code_block(cfg, response);
+        }
+
+        void write_code_block(const config& cfg, std::string_view markdown)
+        {
+            if (cfg.llm.code_block_extract)
+            {
+                const code_blocks blocks{ extract_code_block_from_markdown(markdown) };
+                for (const auto& [name, code] : blocks)
+                {
+                    if (name == "stdout")
+                    {
+                        boost::nowide::cout << code << std::flush;
+                    }
+                    else
+                    {
+                        filesystem::write_file(cfg, code, filesystem::complement_codeblock_extension(name), 0);
+                    }
+                }
+            }
+        }
+
+        code_blocks extract_code_block_from_markdown(std::string_view markdown_content)
+        {
+            code_blocks result;
+            const std::regex code_block_regex{ R"(```(\S+)\s*\n([\s\S]*?)```)" };
+
+            for (std::cregex_iterator iter{ markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex }; iter != std::cregex_iterator{}; ++iter)
+            {
+                const std::cmatch match{ *iter };
+                const std::string name{ sanitize_as_filename(match[1].str()) };
+                const std::string code{ match[2].str() };
+                result[name] = code;
+            }
+
+            return result;
         }
     } // namespace llm
 
@@ -4295,12 +4158,12 @@ namespace llmcpp
         {
             nlohmann::json json;
 
-            json["sd_init_images"] = image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
+            json["sd_init_images"] = filesystem::image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
             json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
             json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
             json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
             json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
-            json["sd_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
+            json["sd_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
             json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
             json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
             json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
@@ -4310,7 +4173,7 @@ namespace llmcpp
             json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
             json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
             json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
-            json["sd_latent_mask"] = image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
+            json["sd_latent_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
 
             return json;
         }
@@ -4359,7 +4222,7 @@ namespace llmcpp
             json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
             if (!cfg.sd.firstpass_image.empty())
             {
-                json["firstpass_image"] = image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
+                json["firstpass_image"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
             }
             if (!cfg.sd.comments.empty())
             {
@@ -4475,7 +4338,7 @@ namespace llmcpp
                 llmcpp::throw_exception(image_generation_exception{} << error_info::description{ "No image data found in the response" });
             }
 
-            const std::string decoded_image{ base64_decode(base64_image_data) };
+            const std::string decoded_image{ string_utils::base64_decode(base64_image_data) };
 
             return decoded_image;
         }
@@ -4539,7 +4402,7 @@ namespace llmcpp
 
         std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite)
         {
-            const std::string image_data{ read_binary_file_to_string(image_path, cfg) };
+            const std::string image_data{ filesystem::read_binary_file_to_string(image_path, cfg) };
             const std::string boundary{ generate_boundary() };
             const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
 
@@ -4771,15 +4634,724 @@ namespace llmcpp
                     std::chrono::seconds{ cfg.timeout_request }
                 ) };
 
-                write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
+                filesystem::write_file(cfg, view_response.body(), relative_file_path.string(), std::ios::binary);
             }
         }
     } // namespace cu
 
+    namespace command_line
+    {
+        void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& ctx)
+        {
+            for (const std::string& key_value_pair : user_defined_variables)
+            {
+                const std::size_t separator_position{ key_value_pair.find('=') };
+                if (separator_position != std::string::npos)
+                {
+                    const std::string key{ key_value_pair.substr(0, separator_position) };
+                    const std::string value{ key_value_pair.substr(separator_position + 1) };
+                    if (!key.empty())
+                    {
+                        ctx.set(key, value);
+                        LLMCPP_LOG(info) << "Variable set " << key << " = " << value;
+                    }
+                }
+                else
+                {
+                    LLMCPP_LOG(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value";
+                }
+            }
+        }
+
+        std::vector<std::string> split_command_line_args(std::string_view args)
+        {
+            const boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
+            const boost::tokenizer<
+                boost::escaped_list_separator<char>,
+                std::string_view::const_iterator,
+                std::string
+            > tokenizer{ args, separator };
+
+            std::vector<std::string> result;
+            for (const std::string& token : tokenizer)
+            {
+                if (!token.empty())
+                {
+                    result.push_back(token);
+                }
+            }
+            return result;
+        }
+
+        int parse_command_line(int argc, char** argv, config& cfg)
+        {
+            namespace po = boost::program_options;
+
+            try
+            {
+                cfg.tg.stop = { "\\n\\n", ":", "***" };
+                cfg.tg.sampler_priority =
+                {
+                    "repetition_penalty",
+                    "presence_penalty",
+                    "frequency_penalty",
+                    "dry",
+                    "temperature",
+                    "dynamic_temperature",
+                    "quadratic_sampling",
+                    "top_n_sigma",
+                    "top_k",
+                    "top_p",
+                    "typical_p",
+                    "epsilon_cutoff",
+                    "eta_cutoff",
+                    "tfs",
+                    "top_a",
+                    "min_p",
+                    "mirostat",
+                    "xtc",
+                    "encoder_repetition_penalty",
+                    "no_repeat_ngram"
+                };
+                cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+
+                std::string command_mode_string;
+                std::string llm_mode_string;
+                std::string sd_mode_string;
+
+                po::options_description allowed_options("Allowed options");
+                allowed_options.add_options()
+                    ("help,h", "produce help message")
+                    ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
+                    ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
+                    ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
+                    ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
+                    ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
+                    ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
+                    ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
+                    ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
+                    ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
+                    ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
+
+                    ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
+                    ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
+                    ("png-file", po::value<std::string>(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
+                    ("server-executable-file", po::value<std::string>(&cfg.server_executable_file)->default_value(""), "server executable file")
+                    ("server-arguments", po::value<std::string>(&cfg.server_arguments), "server arguments")
+                    ("server-host", po::value<std::string>(&cfg.server_host)->default_value("localhost"), "server ip")
+                    ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
+                    ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
+                    ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
+                    ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
+                    ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
+
+                    ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
+                    ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
+                    ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
+                    ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
+                    ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
+                    ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
+                    ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
+                    ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
+                    ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
+                    ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
+                    ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
+                    ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
+                    ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
+                    ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
+                    ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
+                    ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
+                    ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
+                    ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+                    ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
+
+                    ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
+
+                    ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
+                    ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
+                    ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
+                    ("tg-frequency-penalty", po::value<double>(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
+                    //std::map<int, double> logit_bias;
+                    ("tg-logprobs", po::value<double>(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
+                    ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
+                    ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
+                    ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
+                    ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
+                    ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
+                    ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
+                    ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
+                    ("tg-top-p", po::value<double>(&cfg.tg.top_p)->default_value(1.0), "TG top p")
+                    ("tg-dynatemp-low", po::value<double>(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
+                    ("tg-dynatemp-high", po::value<double>(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
+                    ("tg-dynatemp-exponent", po::value<double>(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
+                    ("tg-smoothing-factor", po::value<double>(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
+                    ("tg-smoothing-curve", po::value<double>(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
+                    ("tg-min-p", po::value<double>(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
+                    ("tg-top-k", po::value<int>(&cfg.tg.top_k)->default_value(0), "TG top k")
+                    ("tg-typical-p", po::value<double>(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
+                    ("tg-xtc-threshold", po::value<double>(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
+                    ("tg-xtc-probability", po::value<double>(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
+                    ("tg-epsilon-cutoff", po::value<double>(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
+                    ("tg-eta-cutoff", po::value<double>(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
+                    ("tg-tfs", po::value<double>(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
+                    ("tg-top-a", po::value<double>(&cfg.tg.top_a)->default_value(0.0), "TG top a")
+                    ("tg-top-n-sigma", po::value<double>(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
+                    ("tg-dry-multiplier", po::value<double>(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
+                    ("tg-dry-allowed-length", po::value<int>(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
+                    ("tg-dry-base", po::value<double>(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
+                    ("tg-repetition-penalty", po::value<double>(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
+                    ("tg-encoder-repetition-penalty", po::value<double>(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
+                    ("tg-no-repeat-ngram-size", po::value<int>(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
+                    ("tg-repetition-penalty-range", po::value<int>(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
+                    ("tg-penalty-alpha", po::value<double>(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
+                    ("tg-guidance-scale", po::value<double>(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
+                    ("tg-mirostat-mode", po::value<int>(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
+                    ("tg-mirostat-tau", po::value<double>(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
+                    ("tg-mirostat-eta", po::value<double>(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
+                    ("tg-prompt-lookup-num-tokens", po::value<int>(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
+                    ("tg-max-tokens-second", po::value<int>(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
+                    ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
+                    ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
+                    ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
+                    ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
+                    ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
+                    ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
+                    ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+                    ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
+                    ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
+                    ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
+                    ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
+                    ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
+                    ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
+                    ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
+
+                    ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+                    ("kc-max-length", po::value<int>(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+                    ("kc-rep-pen", po::value<double>(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+                    ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+                    ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+                    ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+                    ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+                    ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
+                    ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+                    ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+                    ("kc-top-k", po::value<double>(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+                    ("kc-top-p", po::value<double>(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                    ("kc-min-p", po::value<double>(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                    ("kc-typical", po::value<double>(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+                    ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+                    ("kc-dynatemp_range", po::value<double>(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+                    ("kc-smoothing-factor", po::value<double>(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+                    ("kc-dynatemp-exponent", po::value<double>(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+                    ("kc-mirostat", po::value<int>(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+                    ("kc-mirostat-tau", po::value<double>(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+                    ("kc-mirostat-eta", po::value<double>(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+                    ("kc-genkey", po::value<std::string>(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+                    ("kc-grammar", po::value<std::string>(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+                    ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+                    ("kc-memory", po::value<std::string>(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+                    ("kc-images", po::value<std::vector<std::string>>(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+                    ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+                    ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+                    ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+                    ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+                    ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+                    ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+                    ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+                    ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+                    ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+                    ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+                    ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+                    ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+                    ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+                    ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
+
+                    ("sd-host", po::value<std::string>(&cfg.sd.host)->default_value("localhost"), "SD host")
+                    ("sd-port", po::value<std::string>(&cfg.sd.port)->default_value("7860"), "SD port")
+                    ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
+                    ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
+                    ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
+                    ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
+                    ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
+                    ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
+                    ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
+                    ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
+                    ("sd-subseed-strength", po::value<double>(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
+                    ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+                    ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+                    ("sd-sampler-name", po::value<std::string>(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
+                    ("sd-scheduler", po::value<std::string>(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
+                    ("sd-batch_size", po::value<int>(&cfg.sd.batch_size)->default_value(1), "SD batch size")
+                    ("sd-n-iter", po::value<int>(&cfg.sd.n_iter)->default_value(1), "SD n iter")
+                    ("sd-steps", po::value<int>(&cfg.sd.steps)->default_value(30), "SD steps")
+                    ("sd-cfg-scale", po::value<double>(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
+                    ("sd-width", po::value<int>(&cfg.sd.width)->default_value(1024), "SD image width")
+                    ("sd-height", po::value<int>(&cfg.sd.height)->default_value(1024), "SD image height")
+                    ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
+                    ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
+                    ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
+                    ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
+                    ("sd-eta", po::value<int>(&cfg.sd.eta)->default_value(0), "SD eta")
+                    ("sd-denoising-strength", po::value<double>(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
+                    ("sd-s-min-uncond", po::value<int>(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
+                    ("sd-s-churn", po::value<int>(&cfg.sd.s_churn)->default_value(0), "SD s churn")
+                    ("sd-s-tmax", po::value<int>(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
+                    ("sd-s-tmin", po::value<int>(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
+                    ("sd-s-noise", po::value<int>(&cfg.sd.s_noise)->default_value(1), "SD s noise")
+                    ("sd-override-settings", po::value<std::string>(&cfg.sd.override_settings)->default_value(""), "SD override settings")
+                    ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+                    ("sd-refiner-checkpoint", po::value<std::string>(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+                    ("sd-refiner-switch-at", po::value<double>(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
+                    ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
+                    ("sd-firstpass-image", po::value<std::string>(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
+                    ("sd-comments", po::value<std::string>(&cfg.sd.comments)->default_value(""), "SD comments")
+                    ("sd-force-task-id", po::value<std::string>(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
+                    ("sd-sampler-index", po::value<std::string>(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
+                    ("sd-script-name", po::value<std::string>(&cfg.sd.script_name)->default_value(""), "SD script name")
+                    ("sd-script-args", po::value<std::vector<std::string>>(&cfg.sd.script_args), "SD script_args")
+                    ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
+                    ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
+                    ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+                    ("sd-ad-model", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+                    ("sd-ad-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+                    ("sd-ad-negative-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+                    ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
+                    ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+
+                    ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
+
+                    ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+                    ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
+                    ("sd-firstphase-width", po::value<int>(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
+                    ("sd-firstphase-height", po::value<int>(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
+                    ("sd-hr-scale", po::value<double>(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
+                    ("sd-hr-upscaler", po::value<std::string>(&cfg.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
+                    ("sd-hr-second-pass-steps", po::value<int>(&cfg.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+                    ("sd-hr-resize-x", po::value<int>(&cfg.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
+                    ("sd-hr-resize-y", po::value<int>(&cfg.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
+                    ("sd-hr-checkpoint-name", po::value<std::string>(&cfg.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+                    //("sd-hr-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+                    //("sd-hr-negative-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
+
+                    ("sd-img2img-target", po::value<std::string>(&cfg.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
+                    ("sd-init-images", po::value<std::vector<std::string>>(&cfg.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
+                    ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
+                    ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
+                    ("sd-resize-mode", po::value<int>(&cfg.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
+                    ("sd-image-cfg-scale", po::value<double>(&cfg.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
+                    ("sd-mask", po::value<std::string>(&cfg.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
+                    ("sd-mask-blur-x", po::value<int>(&cfg.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
+                    ("sd-mask-blur-y", po::value<int>(&cfg.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
+                    ("sd-mask-blur", po::value<int>(&cfg.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
+                    ("sd-mask-round", po::bool_switch(&cfg.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
+                    ("sd-inpainting-fill", po::value<int>(&cfg.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
+                    ("sd-inpaint-full-res", po::bool_switch(&cfg.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
+                    ("sd-inpaint-full-res-padding", po::value<int>(&cfg.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
+                    ("sd-inpainting-mask-invert", po::value<int>(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
+                    ("sd-initial-noise-multiplier", po::value<double>(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
+                    ("sd-latent-mask", po::value<std::string>(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
+
+                    ("sb-host", po::value<std::string>(&cfg.sb.host)->default_value("localhost"), "SB host")
+                    ("sb-port", po::value<std::string>(&cfg.sb.port)->default_value("5001"), "SB port")
+                    ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
+                    ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
+                    ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
+                    ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
+                    ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
+                    ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
+                    ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
+                    ("sb-speaker-id", po::value<int>(&cfg.sb.speaker_id)->default_value(0), "SB speaker id")
+                    ("sb-sdp-ratio", po::value<double>(&cfg.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
+                    ("sb-noise", po::value<double>(&cfg.sb.noise)->default_value(0.6, "0.6"), "SB noise")
+                    ("sb-noisew", po::value<double>(&cfg.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
+                    ("sb-length", po::value<double>(&cfg.sb.length)->default_value(1), "SB length")
+                    ("sb-language", po::value<std::string>(&cfg.sb.language)->default_value(""), "SB language")
+                    ("sb-auto-split", po::bool_switch(&cfg.sb.auto_split)->default_value(true), "SB auto split")
+                    ("sb-split-interval", po::value<double>(&cfg.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
+                    ("sb-assist-text", po::value<std::string>(&cfg.sb.assist_text)->default_value(""), "SB assist text")
+                    ("sb-assist-text-weight", po::value<double>(&cfg.sb.assist_text_weight)->default_value(1), "SB assist text weight")
+                    ("sb-style", po::value<std::string>(&cfg.sb.style)->default_value(""), "SB style")
+                    ("sb-style-weight", po::value<double>(&cfg.sb.style_weight)->default_value(1), "SB style weight")
+                    ("sb-reference-audio-path", po::value<std::string>(&cfg.sb.reference_audio_path)->default_value(""), "SB reference audio path")
+
+                    ("cu-host", po::value<std::string>(&cfg.cu.host)->default_value("localhost"), "Comfy UI host")
+                    ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
+                    ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
+                    ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
+                    ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
+                    ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
+                    ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
+                    ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
+                    ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
+                    ;
+
+                po::options_description config_file_options;
+                config_file_options.add(allowed_options);
+
+                po::variables_map vm;
+                po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
+                po::notify(vm);
+
+                try
+                {
+                    cfg.command_mode = string_to_command_mode(command_mode_string);
+                }
+                catch (const command_line_exception&)
+                {
+                    LLMCPP_LOG(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
+                    return 1;
+                }
+
+                cfg.llm.mode = string_to_llm_mode(llm_mode_string);
+                cfg.sd.mode = string_to_sd_mode(sd_mode_string);
+
+                if (!cfg.config_file.empty())
+                {
+                    std::istringstream config_file{ filesystem::read_text_file_to_string(cfg.config_file, cfg, ".ini") };
+                    po::store(po::parse_config_file(config_file, allowed_options), vm, true);
+                    po::notify(vm);
+                }
+
+                if (vm.find("help") != vm.end())
+                {
+                    boost::nowide::cout << allowed_options << std::endl;
+                    return 1;
+                }
+
+                log::init_logging(cfg);
+
+                if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+                {
+                    llm::init_llm_mode(cfg);
+                }
+
+                if (cfg.phases.empty())
+                {
+                    cfg.phases = { "" };
+                }
+
+                unescape_parameters(cfg);
+                parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
+            }
+            catch (const po::error& e)
+            {
+                llmcpp::throw_exception(command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() });
+            }
+
+            return 0;
+        }
+
+        void unescape_parameters(config& cfg)
+        {
+            boost::transform(cfg.user_defined_variables, cfg.user_defined_variables.begin(), string_utils::unescape_string);
+            boost::transform(cfg.phases, cfg.phases.begin(), string_utils::unescape_string);
+            cfg.llm.prompt = string_utils::unescape_string(cfg.llm.prompt);
+            cfg.llm.generation_prefix = string_utils::unescape_string(cfg.llm.generation_prefix);
+            cfg.llm.generation_suffix = string_utils::unescape_string(cfg.llm.generation_suffix);
+            cfg.llm.reasoning_prefix = string_utils::unescape_string(cfg.llm.reasoning_prefix);
+            cfg.llm.reasoning_suffix = string_utils::unescape_string(cfg.llm.reasoning_suffix);
+            boost::transform(cfg.tg.stop, cfg.tg.stop.begin(), string_utils::unescape_string);
+            cfg.tg.dry_sequence_breakers = string_utils::unescape_string(cfg.tg.dry_sequence_breakers);
+            boost::transform(cfg.kc.stop_sequence, cfg.kc.stop_sequence.begin(), string_utils::unescape_string);
+            boost::transform(cfg.kc.banned_tokens, cfg.kc.banned_tokens.begin(), string_utils::unescape_string);
+            boost::transform(cfg.kc.dry_sequence_breakers, cfg.kc.dry_sequence_breakers.begin(), string_utils::unescape_string);
+            cfg.sd.prompt = string_utils::unescape_string(cfg.sd.prompt);
+            cfg.sd.negative_prompt = string_utils::unescape_string(cfg.sd.negative_prompt);
+            cfg.sb.text = string_utils::unescape_string(cfg.sb.text);
+            cfg.cu.prompt = string_utils::unescape_string(cfg.cu.prompt);
+        }
+    } // namespace command_line
+
+    namespace string_utils
+    {
+        std::string unescape_string(std::string_view str)
+        {
+            std::string result;
+            result.reserve(str.size());
+
+            bool in_escape{};
+
+            for (const char c : str)
+            {
+                if (in_escape)
+                {
+                    switch (c)
+                    {
+                    case '\"': result += '\"'; break;
+                    case '\'': result += '\''; break;
+                    case '\\': result += '\\'; break;
+                    case 'a':  result += '\a'; break;
+                    case 'b':  result += '\b'; break;
+                    case 'f':  result += '\f'; break;
+                    case 'n':  result += '\n'; break;
+                    case 'r':  result += '\r'; break;
+                    case 't':  result += '\t'; break;
+                    default:
+                        result += '\\';
+                        result += c;
+                        break;
+                    }
+                    in_escape = false;
+                }
+                else
+                {
+                    if (c == '\\')
+                    {
+                        in_escape = true;
+                    }
+                    else
+                    {
+                        result += c;
+                    }
+                }
+            }
+
+            if (in_escape)
+            {
+                result += '\\';
+            }
+
+            return result;
+        }
+
+        std::string json_escape_string(std::string_view str)
+        {
+            constexpr std::size_t escape_overhead_denominator{ 8 };
+            std::string result;
+            result.reserve(str.size() + str.size() / escape_overhead_denominator);
+
+            for (const char c : str)
+            {
+                switch (c)
+                {
+                case '"':   result += "\\\""; break;
+                case '\\':  result += "\\\\"; break;
+                case '\b':  result += "\\b"; break;
+                case '\f':  result += "\\f"; break;
+                case '\n':  result += "\\n"; break;
+                case '\r':  result += "\\r"; break;
+                case '\t':  result += "\\t"; break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20)
+                    {
+                        char buf[7];
+                        std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                        result.append(buf, std::size(buf) - 1);
+                    }
+                    else
+                    {
+                        result.push_back(c);
+                    }
+                    break;
+                }
+            }
+
+            return result;
+        }
+
+        std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg)
+        {
+            std::string result;
+            int remaining_tokens{ cfg.tg.truncation_length - cfg.tg.max_tokens };
+            truncate_prompt(prompt, cfg, false, result, remaining_tokens);
+            return result;
+        }
+
+        std::string base64_encode(std::string_view input)
+        {
+            using namespace boost::archive::iterators;
+            using iterator = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
+
+            const std::size_t missing_size{ (3 - input.size() % 3) % 3 };
+            std::string padded_input{ input };
+            padded_input.append(missing_size, '\0');
+
+            std::string encoded{ iterator{ padded_input.begin() }, iterator{ padded_input.end() } };
+            if (missing_size > 0)
+            {
+                encoded.replace(encoded.size() - missing_size, missing_size, missing_size, '=');
+            }
+            return encoded;
+        }
+
+        std::string base64_decode(std::string_view input)
+        {
+            using namespace boost::archive::iterators;
+            using iterator = transform_width<binary_from_base64<std::string_view::const_iterator>, 8, 6>;
+
+            std::size_t padding_count{};
+            while (padding_count < input.size() && input[input.size() - 1 - padding_count] == '=')
+            {
+                ++padding_count;
+            }
+
+            const std::string_view trimed_input{ input.substr(0, input.size() - padding_count) };
+            std::string decoded{ iterator{ input.begin() }, iterator{ input.end() } };
+
+            std::size_t expected_size{ input.size() / 4 * 3 - padding_count };
+            if (decoded.size() > expected_size)
+            {
+                decoded.resize(expected_size);
+            }
+
+            return decoded;
+        }
+
+        bool is_base64(std::string_view str, std::size_t threshold)
+        {
+            if (str.size() >= threshold && str.size() % 4 == 0)
+            {
+                std::size_t padding_count{};
+                for (std::size_t i{}; i < str.size(); ++i)
+                {
+                    const char c = str[i];
+                    if (std::isalnum(static_cast<unsigned char>(c)) || c == '+' || c == '/')
+                    {
+                        if (padding_count > 0)
+                        {
+                            return false;
+                        }
+                    }
+                    else if (c == '=')
+                    {
+                        ++padding_count;
+                        if (padding_count > 2 || i + padding_count < str.size())
+                        {
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+            }
+            return false;
+        }
+
+        bool has_base64(const nlohmann::json& json, std::size_t threshold)
+        {
+            if (json.is_array())
+            {
+                for (const auto& value : json)
+                {
+                    if (has_base64(value, threshold))
+                    {
+                        return true;
+                    }
+                }
+            }
+            else if (json.is_object())
+            {
+                for (const auto& [key, value] : json.items())
+                {
+                    if (has_base64(value, threshold))
+                    {
+                        return true;
+                    }
+                }
+            }
+            else if (json.is_string())
+            {
+                const std::string_view str{ json.get_ref<const std::string&>() };
+                if (is_base64(str, threshold))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        std::string console_string_to_u8string(std::string_view input)
+        {
+#if BOOST_OS_WINDOWS
+            if (input.empty())
+            {
+                return std::string{};
+            }
+
+            const UINT cp{ GetConsoleOutputCP() };
+            if (cp == CP_UTF8)
+            {
+                return std::string{ input };
+            }
+
+            const int wstring_length{ MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), nullptr, 0) };
+            if (wstring_length <= 0)
+            {
+                return std::string{ input };
+            }
+
+            std::wstring wstring(wstring_length, L'\0');
+            MultiByteToWideChar(cp, 0, input.data(), static_cast<int>(input.size()), wstring.data(), wstring_length);
+
+            const int u8string_length{ WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, nullptr, 0, nullptr, nullptr) };
+            if (u8string_length <= 0)
+            {
+                return std::string{ input };
+            }
+
+            std::string u8_string(u8string_length, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, wstring.data(), wstring_length, u8_string.data(), u8string_length, nullptr, nullptr);
+
+            return u8_string;
+#else
+            return std::string{ input };
+#endif
+        }
+
+        token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse)
+        {
+            token_count_string result;
+
+            std::vector<std::string> lines;
+            boost::split(lines, string, boost::is_any_of("\n"));
+            std::vector<std::string> temp;
+
+            auto truncate = [&](auto first, auto last)
+                {
+                    for (; first != last; ++first)
+                    {
+                        const int next_tokens{ cfg.lru_cache.get_tokens(*first) };
+                        if (result.tokens + next_tokens > max_tokens)
+                        {
+                            break;
+                        }
+                        temp.push_back(*first);
+                        result.tokens += next_tokens;
+                    }
+                };
+
+            if (reverse)
+            {
+                truncate(lines.rbegin(), lines.rend());
+                std::reverse(temp.begin(), temp.end());
+            }
+            else
+            {
+                truncate(lines.begin(), lines.end());
+            }
+
+            for (const std::string& line : temp)
+            {
+                result.str += line;
+            }
+
+            return result;
+        }
+
+        void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens)
+        {
+            const token_count_string cruncated{ truncate_by_tokens(string, remaining_tokens, cfg, reverse) };
+            result += cruncated.str;
+            remaining_tokens -= cruncated.tokens;
+        }
+    } // namespace string_utils
+
     image_info_type image_info_type::from_file(std::string_view path, const config& cfg)
     {
-        const std::string base64_image{ image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
-        const std::string mime_type{ extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
+        const std::string base64_image{ filesystem::image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
+        const std::string mime_type{ filesystem::extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
         return image_info_type{ base64_image, mime_type };
     }
 
@@ -5114,12 +5686,12 @@ namespace llmcpp
         }
         nlohmann::json json{ { "cache", std::move(cache) } };
         const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
-        write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
+        filesystem::write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
     }
 
     void lru_cache::from_file(const config& cfg)
     {
-        const std::filesystem::path cache_path{ string_to_path_by_config(".token_cache.bin", cfg) };
+        const std::filesystem::path cache_path{ filesystem::string_to_path_by_config(".token_cache.bin", cfg) };
 
         if (!std::filesystem::exists(cache_path))
         {
@@ -5162,133 +5734,6 @@ namespace llmcpp
         catch (const nlohmann::json::exception& e)
         {
             LLMCPP_LOG(warning) << boost::diagnostic_information(e);
-        }
-    }
-
-    std::string unescape_string(std::string_view str)
-    {
-        std::string result;
-        result.reserve(str.size());
-
-        bool in_escape{};
-
-        for (const char c : str)
-        {
-            if (in_escape)
-            {
-                switch (c)
-                {
-                case '\"': result += '\"'; break;
-                case '\'': result += '\''; break;
-                case '\\': result += '\\'; break;
-                case 'a':  result += '\a'; break;
-                case 'b':  result += '\b'; break;
-                case 'f':  result += '\f'; break;
-                case 'n':  result += '\n'; break;
-                case 'r':  result += '\r'; break;
-                case 't':  result += '\t'; break;
-                default:
-                    result += '\\';
-                    result += c;
-                    break;
-                }
-                in_escape = false;
-            }
-            else
-            {
-                if (c == '\\')
-                {
-                    in_escape = true;
-                }
-                else
-                {
-                    result += c;
-                }
-            }
-        }
-
-        if (in_escape)
-        {
-            result += '\\';
-        }
-
-        return result;
-    }
-
-    std::string json_escape_string(std::string_view str)
-    {
-        constexpr std::size_t escape_overhead_denominator{ 8 };
-        std::string result;
-        result.reserve(str.size() + str.size() / escape_overhead_denominator);
-
-        for (const char c : str)
-        {
-            switch (c)
-            {
-            case '"':   result += "\\\""; break;
-            case '\\':  result += "\\\\"; break;
-            case '\b':  result += "\\b"; break;
-            case '\f':  result += "\\f"; break;
-            case '\n':  result += "\\n"; break;
-            case '\r':  result += "\\r"; break;
-            case '\t':  result += "\\t"; break;
-            default:
-                if (static_cast<unsigned char>(c) < 0x20)
-                {
-                    char buf[7];
-                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                    result.append(buf, std::size(buf) - 1);
-                }
-                else
-                {
-                    result.push_back(c);
-                }
-                break;
-            }
-        }
-
-        return result;
-    }
-
-    void unescape_parameters(config& cfg)
-    {
-        boost::transform(cfg.user_defined_variables, cfg.user_defined_variables.begin(), unescape_string);
-        boost::transform(cfg.phases, cfg.phases.begin(), unescape_string);
-        cfg.llm.prompt = unescape_string(cfg.llm.prompt);
-        cfg.llm.generation_prefix = unescape_string(cfg.llm.generation_prefix);
-        cfg.llm.generation_suffix = unescape_string(cfg.llm.generation_suffix);
-        cfg.llm.reasoning_prefix = unescape_string(cfg.llm.reasoning_prefix);
-        cfg.llm.reasoning_suffix = unescape_string(cfg.llm.reasoning_suffix);
-        boost::transform(cfg.tg.stop, cfg.tg.stop.begin(), unescape_string);
-        cfg.tg.dry_sequence_breakers = unescape_string(cfg.tg.dry_sequence_breakers);
-        boost::transform(cfg.kc.stop_sequence, cfg.kc.stop_sequence.begin(), unescape_string);
-        boost::transform(cfg.kc.banned_tokens, cfg.kc.banned_tokens.begin(), unescape_string);
-        boost::transform(cfg.kc.dry_sequence_breakers, cfg.kc.dry_sequence_breakers.begin(), unescape_string);
-        cfg.sd.prompt = unescape_string(cfg.sd.prompt);
-        cfg.sd.negative_prompt = unescape_string(cfg.sd.negative_prompt);
-        cfg.sb.text = unescape_string(cfg.sb.text);
-        cfg.cu.prompt = unescape_string(cfg.cu.prompt);
-    }
-
-    void parse_user_defined_variables(const std::vector<std::string>& user_defined_variables, context& ctx)
-    {
-        for (const std::string& key_value_pair : user_defined_variables)
-        {
-            const std::size_t separator_position{ key_value_pair.find('=') };
-            if (separator_position != std::string::npos)
-            {
-                const std::string key{ key_value_pair.substr(0, separator_position) };
-                const std::string value{ key_value_pair.substr(separator_position + 1) };
-                if (!key.empty())
-                {
-                    ctx.set(key, value);
-                    LLMCPP_LOG(info) << "Variable set " << key << " = " << value;
-                }
-            }
-            else
-            {
-                LLMCPP_LOG(warning) << "Invalid define format: " << key_value_pair << ". Expected key=value";
-            }
         }
     }
 
@@ -5345,7 +5790,7 @@ namespace llmcpp
         void init_logging_file(const std::filesystem::path& log)
         {
             const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
-            create_parent_directories(log);
+            filesystem::create_parent_directories(log);
             boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
             if (!ofs->is_open())
             {
@@ -5402,13 +5847,22 @@ namespace llmcpp
 
             if (!cfg.log_file.empty())
             {
-                const std::filesystem::path log_file_path{ string_to_path_by_config(complement_extension(cfg.log_file, ".txt"), cfg) };
+                const std::filesystem::path log_file_path{ filesystem::string_to_path_by_config(filesystem::complement_extension(cfg.log_file, ".txt"), cfg) };
                 init_logging_file(log_file_path);
             }
 
             boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
         }
     } // namespace log
+
+    template<typename Integer>
+    Integer random(Integer min, Integer max)
+    {
+        static std::random_device seed_gen;
+        static std::default_random_engine random_engine{ seed_gen() };
+        static std::uniform_int_distribution<Integer> distribution{ min, max };
+        return distribution(random_engine);
+    }
 
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, context& ctx)
     {
@@ -5464,22 +5918,6 @@ namespace llmcpp
         sanitized = std::regex_replace(sanitized, illegal_chars, "");
         boost::algorithm::trim(sanitized);
         return sanitized;
-    }
-
-    code_blocks extract_code_block_from_markdown(std::string_view markdown_content)
-    {
-        code_blocks result;
-        const std::regex code_block_regex{ R"(```(\S+)\s*\n([\s\S]*?)```)" };
-
-        for (std::cregex_iterator iter{ markdown_content.data(), markdown_content.data() + markdown_content.size(), code_block_regex }; iter != std::cregex_iterator{}; ++iter)
-        {
-            const std::cmatch match{ *iter };
-            const std::string name{ sanitize_as_filename(match[1].str()) };
-            const std::string code{ match[2].str() };
-            result[name] = code;
-        }
-
-        return result;
     }
 
     std::string_view language_identifier_to_extension(std::string_view language_identifier)
@@ -5662,384 +6100,6 @@ namespace llmcpp
         return terminated_count;
     }
 
-    std::vector<std::string> parse_command_line_args(std::string_view args)
-    {
-        const boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
-        const boost::tokenizer<
-            boost::escaped_list_separator<char>,
-            std::string_view::const_iterator,
-            std::string
-        > tokenizer{ args, separator };
-
-        std::vector<std::string> result;
-        for (const std::string& token : tokenizer)
-        {
-            if (!token.empty())
-            {
-                result.push_back(token);
-            }
-        }
-        return result;
-    }
-
-    int parse_command_line(int argc, char** argv, config& cfg)
-    {
-        namespace po = boost::program_options;
-
-        try
-        {
-            cfg.tg.stop = { "\\n\\n", ":", "***" };
-            cfg.tg.sampler_priority =
-            {
-                "repetition_penalty",
-                "presence_penalty",
-                "frequency_penalty",
-                "dry",
-                "temperature",
-                "dynamic_temperature",
-                "quadratic_sampling",
-                "top_n_sigma",
-                "top_k",
-                "top_p",
-                "typical_p",
-                "epsilon_cutoff",
-                "eta_cutoff",
-                "tfs",
-                "top_a",
-                "min_p",
-                "mirostat",
-                "xtc",
-                "encoder_repetition_penalty",
-                "no_repeat_ngram"
-            };
-            cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
-
-            std::string command_mode_string;
-            std::string llm_mode_string;
-            std::string sd_mode_string;
-
-            po::options_description allowed_options("Allowed options");
-            allowed_options.add_options()
-                ("help,h", "produce help message")
-                ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
-                ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
-                ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
-                ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
-                ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
-                ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
-                ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-                ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
-                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
-                ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
-
-                ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
-                ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
-                ("png-file", po::value<std::string>(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
-                ("server-executable-file", po::value<std::string>(&cfg.server_executable_file)->default_value(""), "server executable file")
-                ("server-arguments", po::value<std::string>(&cfg.server_arguments), "server arguments")
-                ("server-host", po::value<std::string>(&cfg.server_host)->default_value("localhost"), "server ip")
-                ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
-                ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
-                ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
-                ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
-                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
-
-                ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
-                ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
-                ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
-                ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
-                ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
-                ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
-                ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
-                ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
-                ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
-                ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
-                ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
-                ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
-                ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
-                ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
-                ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
-                ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
-                ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-                ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-                ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
-
-                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
-
-                ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
-                ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
-                ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
-                ("tg-frequency-penalty", po::value<double>(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
-                //std::map<int, double> logit_bias;
-                ("tg-logprobs", po::value<double>(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
-                ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
-                ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
-                ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
-                ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
-                ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
-                ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
-                ("tg-top-p", po::value<double>(&cfg.tg.top_p)->default_value(1.0), "TG top p")
-                ("tg-dynatemp-low", po::value<double>(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
-                ("tg-dynatemp-high", po::value<double>(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
-                ("tg-dynatemp-exponent", po::value<double>(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
-                ("tg-smoothing-factor", po::value<double>(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
-                ("tg-smoothing-curve", po::value<double>(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
-                ("tg-min-p", po::value<double>(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
-                ("tg-top-k", po::value<int>(&cfg.tg.top_k)->default_value(0), "TG top k")
-                ("tg-typical-p", po::value<double>(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
-                ("tg-xtc-threshold", po::value<double>(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
-                ("tg-xtc-probability", po::value<double>(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
-                ("tg-epsilon-cutoff", po::value<double>(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
-                ("tg-eta-cutoff", po::value<double>(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
-                ("tg-tfs", po::value<double>(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
-                ("tg-top-a", po::value<double>(&cfg.tg.top_a)->default_value(0.0), "TG top a")
-                ("tg-top-n-sigma", po::value<double>(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
-                ("tg-dry-multiplier", po::value<double>(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
-                ("tg-dry-allowed-length", po::value<int>(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
-                ("tg-dry-base", po::value<double>(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
-                ("tg-repetition-penalty", po::value<double>(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
-                ("tg-encoder-repetition-penalty", po::value<double>(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
-                ("tg-no-repeat-ngram-size", po::value<int>(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
-                ("tg-repetition-penalty-range", po::value<int>(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
-                ("tg-penalty-alpha", po::value<double>(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
-                ("tg-guidance-scale", po::value<double>(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
-                ("tg-mirostat-mode", po::value<int>(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
-                ("tg-mirostat-tau", po::value<double>(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
-                ("tg-mirostat-eta", po::value<double>(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
-                ("tg-prompt-lookup-num-tokens", po::value<int>(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
-                ("tg-max-tokens-second", po::value<int>(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
-                ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
-                ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
-                ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
-                ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
-                ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
-                ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
-                ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-                ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
-                ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
-                ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
-                ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
-                ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
-                ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
-
-                ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
-                ("kc-max-length", po::value<int>(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
-                ("kc-rep-pen", po::value<double>(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
-                ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-                ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
-                ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-                ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
-                ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
-                ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
-                ("kc-top-k", po::value<double>(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
-                ("kc-top-p", po::value<double>(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-min-p", po::value<double>(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-typical", po::value<double>(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
-                ("kc-dynatemp_range", po::value<double>(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
-                ("kc-smoothing-factor", po::value<double>(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
-                ("kc-dynatemp-exponent", po::value<double>(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
-                ("kc-mirostat", po::value<int>(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
-                ("kc-mirostat-tau", po::value<double>(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
-                ("kc-mirostat-eta", po::value<double>(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
-                ("kc-genkey", po::value<std::string>(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
-                ("kc-grammar", po::value<std::string>(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
-                ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
-                ("kc-memory", po::value<std::string>(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
-                ("kc-images", po::value<std::vector<std::string>>(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
-                ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
-                ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
-                ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-                ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
-                ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
-                ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
-                ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
-                ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
-                ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
-                ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
-                ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
-                ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
-                ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
-
-                ("sd-host", po::value<std::string>(&cfg.sd.host)->default_value("localhost"), "SD host")
-                ("sd-port", po::value<std::string>(&cfg.sd.port)->default_value("7860"), "SD port")
-                ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
-                ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
-                ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-                ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
-                ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
-                ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
-                ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
-                ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
-                ("sd-subseed-strength", po::value<double>(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
-                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
-                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-                ("sd-sampler-name", po::value<std::string>(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
-                ("sd-scheduler", po::value<std::string>(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
-                ("sd-batch_size", po::value<int>(&cfg.sd.batch_size)->default_value(1), "SD batch size")
-                ("sd-n-iter", po::value<int>(&cfg.sd.n_iter)->default_value(1), "SD n iter")
-                ("sd-steps", po::value<int>(&cfg.sd.steps)->default_value(30), "SD steps")
-                ("sd-cfg-scale", po::value<double>(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
-                ("sd-width", po::value<int>(&cfg.sd.width)->default_value(1024), "SD image width")
-                ("sd-height", po::value<int>(&cfg.sd.height)->default_value(1024), "SD image height")
-                ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
-                ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
-                ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
-                ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
-                ("sd-eta", po::value<int>(&cfg.sd.eta)->default_value(0), "SD eta")
-                ("sd-denoising-strength", po::value<double>(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
-                ("sd-s-min-uncond", po::value<int>(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
-                ("sd-s-churn", po::value<int>(&cfg.sd.s_churn)->default_value(0), "SD s churn")
-                ("sd-s-tmax", po::value<int>(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
-                ("sd-s-tmin", po::value<int>(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
-                ("sd-s-noise", po::value<int>(&cfg.sd.s_noise)->default_value(1), "SD s noise")
-                ("sd-override-settings", po::value<std::string>(&cfg.sd.override_settings)->default_value(""), "SD override settings")
-                ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
-                ("sd-refiner-checkpoint", po::value<std::string>(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-                ("sd-refiner-switch-at", po::value<double>(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
-                ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
-                ("sd-firstpass-image", po::value<std::string>(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
-                ("sd-comments", po::value<std::string>(&cfg.sd.comments)->default_value(""), "SD comments")
-                ("sd-force-task-id", po::value<std::string>(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
-                ("sd-sampler-index", po::value<std::string>(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
-                ("sd-script-name", po::value<std::string>(&cfg.sd.script_name)->default_value(""), "SD script name")
-                ("sd-script-args", po::value<std::vector<std::string>>(&cfg.sd.script_args), "SD script_args")
-                ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
-                ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
-                ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-                ("sd-ad-model", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-                ("sd-ad-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-                ("sd-ad-negative-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
-                ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
-                ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
-
-                ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
-
-                ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
-                ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
-                ("sd-firstphase-width", po::value<int>(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
-                ("sd-firstphase-height", po::value<int>(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
-                ("sd-hr-scale", po::value<double>(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
-                ("sd-hr-upscaler", po::value<std::string>(&cfg.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-                ("sd-hr-second-pass-steps", po::value<int>(&cfg.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
-                ("sd-hr-resize-x", po::value<int>(&cfg.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
-                ("sd-hr-resize-y", po::value<int>(&cfg.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
-                ("sd-hr-checkpoint-name", po::value<std::string>(&cfg.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
-                //("sd-hr-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
-                //("sd-hr-negative-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
-
-                ("sd-img2img-target", po::value<std::string>(&cfg.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
-                ("sd-init-images", po::value<std::vector<std::string>>(&cfg.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
-                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
-                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
-                ("sd-resize-mode", po::value<int>(&cfg.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
-                ("sd-image-cfg-scale", po::value<double>(&cfg.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
-                ("sd-mask", po::value<std::string>(&cfg.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
-                ("sd-mask-blur-x", po::value<int>(&cfg.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
-                ("sd-mask-blur-y", po::value<int>(&cfg.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
-                ("sd-mask-blur", po::value<int>(&cfg.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
-                ("sd-mask-round", po::bool_switch(&cfg.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
-                ("sd-inpainting-fill", po::value<int>(&cfg.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
-                ("sd-inpaint-full-res", po::bool_switch(&cfg.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
-                ("sd-inpaint-full-res-padding", po::value<int>(&cfg.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
-                ("sd-inpainting-mask-invert", po::value<int>(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
-                ("sd-initial-noise-multiplier", po::value<double>(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
-                ("sd-latent-mask", po::value<std::string>(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
-
-                ("sb-host", po::value<std::string>(&cfg.sb.host)->default_value("localhost"), "SB host")
-                ("sb-port", po::value<std::string>(&cfg.sb.port)->default_value("5001"), "SB port")
-                ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
-                ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
-                ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
-                ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
-                ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
-                ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
-                ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
-                ("sb-speaker-id", po::value<int>(&cfg.sb.speaker_id)->default_value(0), "SB speaker id")
-                ("sb-sdp-ratio", po::value<double>(&cfg.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
-                ("sb-noise", po::value<double>(&cfg.sb.noise)->default_value(0.6, "0.6"), "SB noise")
-                ("sb-noisew", po::value<double>(&cfg.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
-                ("sb-length", po::value<double>(&cfg.sb.length)->default_value(1), "SB length")
-                ("sb-language", po::value<std::string>(&cfg.sb.language)->default_value(""), "SB language")
-                ("sb-auto-split", po::bool_switch(&cfg.sb.auto_split)->default_value(true), "SB auto split")
-                ("sb-split-interval", po::value<double>(&cfg.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
-                ("sb-assist-text", po::value<std::string>(&cfg.sb.assist_text)->default_value(""), "SB assist text")
-                ("sb-assist-text-weight", po::value<double>(&cfg.sb.assist_text_weight)->default_value(1), "SB assist text weight")
-                ("sb-style", po::value<std::string>(&cfg.sb.style)->default_value(""), "SB style")
-                ("sb-style-weight", po::value<double>(&cfg.sb.style_weight)->default_value(1), "SB style weight")
-                ("sb-reference-audio-path", po::value<std::string>(&cfg.sb.reference_audio_path)->default_value(""), "SB reference audio path")
-
-                ("cu-host", po::value<std::string>(&cfg.cu.host)->default_value("localhost"), "Comfy UI host")
-                ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
-                ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
-                ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
-                ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
-                ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
-                ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
-                ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
-                ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
-                ;
-
-            po::options_description config_file_options;
-            config_file_options.add(allowed_options);
-
-            po::variables_map vm;
-            po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
-            po::notify(vm);
-
-            try
-            {
-                cfg.command_mode = string_to_command_mode(command_mode_string);
-            }
-            catch (const command_line_exception&)
-            {
-                LLMCPP_LOG(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
-                return 1;
-            }
-
-            cfg.llm.mode = string_to_llm_mode(llm_mode_string);
-            cfg.sd.mode = string_to_sd_mode(sd_mode_string);
-
-            if (!cfg.config_file.empty())
-            {
-                std::istringstream config_file{ read_text_file_to_string(cfg.config_file, cfg, ".ini") };
-                po::store(po::parse_config_file(config_file, allowed_options), vm, true);
-                po::notify(vm);
-            }
-
-            if (vm.find("help") != vm.end())
-            {
-                boost::nowide::cout << allowed_options << std::endl;
-                return 1;
-            }
-
-            log::init_logging(cfg);
-
-            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
-            {
-                llm::init_llm_mode(cfg);
-            }
-
-            if (cfg.phases.empty())
-            {
-                cfg.phases = { "" };
-            }
-
-            unescape_parameters(cfg);
-            parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
-        }
-        catch (const po::error& e)
-        {
-            llmcpp::throw_exception(command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() });
-        }
-
-        return 0;
-    }
-
     template<typename T>
     url_params_setter& url_params_setter::operator()(std::string_view key, T value)
     {
@@ -6087,14 +6147,6 @@ namespace llmcpp
         return *this;
     }
 
-    std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg)
-    {
-        std::string result;
-        int remaining_tokens{ cfg.tg.truncation_length - cfg.tg.max_tokens };
-        truncate_prompt(prompt, cfg, false, result, remaining_tokens);
-        return result;
-    }
-
     std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix)
     {
         std::string result{ response };
@@ -6128,83 +6180,37 @@ namespace llmcpp
         return result;
     }
 
-    void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode)
-    {
-        const bool is_binary{ (mode & std::ios::binary) != 0 };
-        const std::string expanded{ expand_macro(filepath, cfg, cfg.ctx) };
-        const std::string complemented{ complement_extension(expanded, ".txt") };
-        const std::filesystem::path file_path{ string_to_path_by_config(is_binary ? filepath : complemented, cfg) };
-        create_parent_directories(file_path);
-        boost::nowide::ofstream ofs{ file_path, mode };
-        if (!ofs.is_open())
-        {
-            llmcpp::throw_exception(file_open_exception{} << error_info::path{ file_path });
-        }
-        ofs.write(data, size);
-        const std::string_view file_type{ is_binary ? "binary" : "text" };
-        LLMCPP_LOG(info) << "Write " << file_type << " to " << file_path;
-    }
-
-    void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode)
-    {
-        return write_file(cfg, data.data(), data.size(), filepath, mode);
-    }
-
-    void write_code_block(const config& cfg, std::string_view markdown)
-    {
-        if (cfg.llm.code_block_extract)
-        {
-            const code_blocks blocks{ extract_code_block_from_markdown(markdown) };
-            for (const auto& [name, code] : blocks)
-            {
-                if (name == "stdout")
-                {
-                    boost::nowide::cout << code << std::flush;
-                }
-                else
-                {
-                    write_file(cfg, code, complement_codeblock_extension(name), 0);
-                }
-            }
-        }
-    }
-
-    std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg)
-    {
-        return string.empty() ? read_text_file_to_string(file_path, cfg) : std::string{ string };
-    }
-
     void generate_and_output(const config& cfg)
     {
         if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
         {
             if (cfg.llm.mode == llm_mode::completions)
             {
-                const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
+                const std::string prompt{ filesystem::prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
                 llm::completions_and_write_file(cfg, prompt, cfg.ctx);
             }
             else if (cfg.llm.mode == llm_mode::chat_completions)
             {
-                const std::string prompt{ prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
+                const std::string prompt{ filesystem::prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
                 llm::chat_completions_and_write_file(cfg, prompt, cfg.ctx);
             }
         }
         else if (cfg.command_mode == command_mode::sd)
         {
-            const std::string prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
-            const std::string negative_prompt_string{ expand_macro(prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string negative_prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
             const std::string image{ sd::send_request(cfg, prompt_string, negative_prompt_string) };
-            write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
+            filesystem::write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
         }
         else if (cfg.command_mode == command_mode::sb)
         {
-            const std::string text{ expand_macro(prompt_from_string_or_file_path(cfg.sb.text, cfg.sb.text_file, cfg), cfg, cfg.ctx) };
+            const std::string text{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sb.text, cfg.sb.text_file, cfg), cfg, cfg.ctx) };
             const std::string voice{ sb::send_request(cfg, text) };
-            write_file(cfg, voice, cfg.sb.output_file, std::ios::binary);
+            filesystem::write_file(cfg, voice, cfg.sb.output_file, std::ios::binary);
         }
         else if (cfg.command_mode == command_mode::cu)
         {
-            const std::string prompt{ expand_macro(prompt_from_string_or_file_path(cfg.cu.prompt, cfg.cu.prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string prompt{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.cu.prompt, cfg.cu.prompt_file, cfg), cfg, cfg.ctx) };
             cu::send_request(cfg, prompt);
         }
     }
@@ -6229,7 +6235,7 @@ namespace llmcpp
     {
         if (!cfg.server_executable_file.empty())
         {
-            const std::vector<std::string> arguments{ parse_command_line_args(cfg.server_arguments) };
+            const std::vector<std::string> arguments{ command_line::split_command_line_args(cfg.server_arguments) };
             create_process_async(cfg.server_executable_file, arguments);
             if (!wait_for_port(cfg.server_host, cfg.server_port, cfg.server_max_retries, cfg.server_wait_ms))
             {
@@ -6294,7 +6300,7 @@ namespace llmcpp
         {
             config cfg;
 
-            if (parse_command_line(argc, argv, cfg))
+            if (command_line::parse_command_line(argc, argv, cfg))
             {
                 return 0;
             }
@@ -6307,7 +6313,7 @@ namespace llmcpp
 
             if (cfg.command_mode == command_mode::extract_png_parameters)
             {
-                const std::string parameters{ tEXt::extract_parameters(read_binary_file_to_string(cfg.png_file, cfg)) };
+                const std::string parameters{ tEXt::extract_parameters(filesystem::read_binary_file_to_string(cfg.png_file, cfg)) };
                 boost::nowide::cout << parameters << std::flush;
             }
 
