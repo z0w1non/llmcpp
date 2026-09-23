@@ -19,15 +19,24 @@
     <Filter Include="ヘッダー ファイル\third_party\nlohmann">
       <UniqueIdentifier>{4f7c8d34-0194-46bb-944c-b4ad69fee1e3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\llmcpp">
+      <UniqueIdentifier>{0812166b-d288-4aaa-8f7f-64eb78d5abf0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\llmcpp">
+      <UniqueIdentifier>{86cef6bf-ab40-490e-b3bb-90dfcb5ee30d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>ソース ファイル\llmcpp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\third_party\nlohmann\json.hpp">
       <Filter>ヘッダー ファイル\third_party\nlohmann</Filter>
+    </ClInclude>
+    <ClInclude Include="llmcpp.hpp">
+      <Filter>ヘッダー ファイル\llmcpp</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
