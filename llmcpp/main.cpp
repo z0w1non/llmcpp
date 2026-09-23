@@ -3595,7 +3595,7 @@ namespace llmcpp
                 std::uint32_t value{ i };
                 for (std::size_t k{}; k < 8; k++)
                 {
-                    value = (value & 1) ? (0xEDB88320L ^ (value >> 1)) : (value >> 1);
+                    value = (value & 1) ? (UINT32_C(0xEDB88320) ^ (value >> 1)) : (value >> 1);
                 }
                 result[i] = value;
             }
@@ -3606,12 +3606,12 @@ namespace llmcpp
 
         std::uint32_t calculate_crc32(const std::uint8_t* data, size_t length)
         {
-            std::uint32_t c{ 0xFFFFFFFFL };
+            std::uint32_t c{ UINT32_C(0xFFFFFFFF) };
             for (std::size_t i{}; i < length; ++i)
             {
                 c = crc_table[(c ^ data[i]) & 0xFF] ^ (c >> 8);
             }
-            return c ^ 0xFFFFFFFFL;
+            return c ^ UINT32_C(0xFFFFFFFF);
         }
 
         void append_uint32_be(std::uint32_t val, std::vector<unsigned char>& buffer)
@@ -4147,11 +4147,11 @@ namespace llmcpp
         {
             std::ostringstream oss;
             oss << std::hex << std::setfill('0');
-            oss << std::setw(8) << (random<std::uint32_t>() & 0xFFFFFFFF) << '-'
-                << std::setw(4) << (random<std::uint32_t>() & 0xFFFF) << '-'
-                << '4' << std::setw(3) << (random<std::uint32_t>() & 0xFFF) << '-'
-                << std::setw(4) << ((random<std::uint32_t>() & 0x3FFF) | 0x8000) << '-'
-                << std::setw(12) << (random<std::uint64_t>() & 0xFFFFFFFFFFFFULL)
+            oss << std::setw(8) << random<std::uint32_t>() << '-'
+                << std::setw(4) << (random<std::uint32_t>() & UINT32_C(0xFFFF)) << '-'
+                << '4' << std::setw(3) << (random<std::uint32_t>() & UINT32_C(0xFFF)) << '-'
+                << std::setw(4) << ((random<std::uint32_t>() & UINT32_C(0x3FFF)) | UINT32_C(0x8000)) << '-'
+                << std::setw(12) << random<std::uint64_t>()
                 ;
             return oss.str();
         }
