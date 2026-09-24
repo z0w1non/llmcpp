@@ -173,3 +173,22 @@ TEST(lru_cache, get_tokens)
     const std::string str{ "test" };
     EXPECT_EQ(cache.get_tokens(str), callback(str));
 }
+
+TEST(lru_cache, lru)
+{
+    using cache_type = llmcpp::lru_cache<3>;
+    int count{};
+    auto callback{ [&count](std::string_view str) mutable -> int { return count++; } };
+
+    cache_type cache{ callback };
+    EXPECT_EQ(cache.get_tokens("a"), 0);
+    EXPECT_EQ(cache.get_tokens("b"), 1);
+    EXPECT_EQ(cache.get_tokens("a"), 0);
+    EXPECT_EQ(cache.get_tokens("b"), 1);
+    EXPECT_EQ(cache.get_tokens("c"), 2);
+    EXPECT_EQ(cache.get_tokens("a"), 0);
+    EXPECT_EQ(cache.get_tokens("b"), 1);
+    EXPECT_EQ(cache.get_tokens("c"), 2);
+    EXPECT_EQ(cache.get_tokens("d"), 3);
+    EXPECT_EQ(cache.get_tokens("a"), 4);
+}

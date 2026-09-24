@@ -1343,50 +1343,104 @@ BOOST_FUSION_ADAPT_STRUCT
     expressions, terminated
 )
 
-#endif // LLMCPP_HPP
-
-#ifdef LLMCPP_IMPLEMENTATION
-
-#if BOOST_OS_WINDOWS
-#include <boost/process/v2/windows/creation_flags.hpp>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef STRICT
-#define STRICT
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#include <tlhelp32.h>
-#undef IN
-#undef OUT
-#undef NEAR
-#undef FAR
-#endif
-
-#if BOOST_OS_WINDOWS
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 namespace llmcpp
 {
-    exception::exception()
+    template<std::size_t Capacity>
+    lru_cache<Capacity>::lru_cache(const lru_cache::callback_type& callback)
+        : callback{ callback }
     {
-        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
     }
 
-    command_mode string_to_command_mode(std::string_view name)
+    template<std::size_t Capacity>
+    int lru_cache<Capacity>::get_tokens(std::string_view str)
     {
-        command_mode result{};
-        if (boost::describe::enum_from_string(name, result))
+        int tokens{};
+
+        if (const lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
         {
-            return result;
+            tokens = iter->tokens;
+            get<by_lru>().relocate(get<by_lru>().end(), get<by_lru>().iterator_to(*iter));
         }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ name } });
+        else
+        {
+            tokens = callback(str);
+            insert({ std::string{ str }, tokens });
+        }
+
+        if (size() > capacity)
+        {
+            get<by_lru>().pop_front();
+        }
+
+        return tokens;
+    }
+
+    template<std::size_t Capacity>
+    void lru_cache<Capacity>::to_file(const config& cfg) const
+    {
+        nlohmann::json cache{ nlohmann::json::array() };
+        for (const token_count_string& element : get<by_lru>())
+        {
+            cache.push_back
+            (
+                {
+                    { "string", element.str },
+                    { "tokens", element.tokens }
+                }
+            );
+        }
+        nlohmann::json json{ { "cache", std::move(cache) } };
+        const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
+        filesystem::write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
+    }
+
+    template<std::size_t Capacity>
+    void lru_cache<Capacity>::from_file(const config& cfg)
+    {
+        const std::filesystem::path cache_path{ filesystem::string_to_path_by_config(".token_cache.bin", cfg) };
+
+        if (!std::filesystem::exists(cache_path))
+        {
+            return;
+        }
+
+        try
+        {
+            boost::nowide::ifstream ifs{ cache_path, std::ios::binary };
+            if (!ifs.is_open())
+            {
+                return;
+            }
+
+            const std::vector<std::uint8_t> cbor{ std::istreambuf_iterator<char>{ ifs }, std::istreambuf_iterator<char>{} };
+
+            nlohmann::json json{ nlohmann::json::from_cbor(cbor) };
+            if (!json.is_object() || !json.contains("cache") || !json["cache"].is_array())
+            {
+                return;
+            }
+
+            lru_cache temp_lru_cache{ callback };
+            const nlohmann::json caches{ json["cache"] };
+            for (const nlohmann::json& cache : caches)
+            {
+                if (cache.is_object() && cache.contains("string") && cache.contains("tokens"))
+                {
+                    temp_lru_cache.insert
+                    (
+                        {
+                            cache["string"].get<std::string>(),
+                            cache["tokens"].get<int>()
+                        }
+                    );
+                }
+            }
+            *this = std::move(temp_lru_cache);
+        }
+        catch (const nlohmann::json::exception& e)
+        {
+            LLMCPP_LOG(warning) << boost::diagnostic_information(e);
+        }
     }
 
     struct x_primitive_to_string_visitor
@@ -1450,16 +1504,6 @@ namespace llmcpp
     template<typename T>
     using decay_t = std::decay_t<unwrap_type_t<T>>;
 
-    std::string primitive_to_string(const primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
-
-    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
-
     template<typename Result, typename Exception>
     const Result& get_or_throw(const primitive_type& value)
     {
@@ -1478,6 +1522,117 @@ namespace llmcpp
             return *ptr;
         }
         return std::nullopt;
+    }
+
+    namespace parser
+    {
+        template<typename Iterator>
+        document_grammar<Iterator>::document_grammar()
+            : document_grammar::base_type(document)
+        {
+            namespace qi = boost::spirit::qi;
+
+            using qi::bool_;
+            using qi::char_;
+            using qi::int_;
+            using qi::double_;
+            using qi::lit;
+            using qi::lexeme;
+            using qi::space;
+            using qi::skip;
+            using qi::matches;
+
+            document = *node;
+            node = placeholder | plain_text;
+            plain_text = +(!lit("{{") >> char_);
+            placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
+
+            expression = (assignment_expression % lit(';')) >> matches[lit(';')];
+            assignment_expression = assignment_expression_node | conditional_expression;
+            assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
+            conditional_expression = conditional_expression_node | logical_or_expression;
+            conditional_expression_node = logical_or_expression >> lit('?') >> expression >> lit(':') >> conditional_expression;
+            logical_or_expression = logical_and_expression % lit("||");
+            logical_and_expression = or_expression % lit("&&");
+            or_expression = xor_expression % lit('|');
+            xor_expression = and_expression % lit('^');
+            and_expression = equality_expression % lit('&');
+            equality_expression = relational_expression >> *(equality_operator_ >> relational_expression);
+            relational_expression = shift_expression >> *(relational_operator_ >> shift_expression);
+            shift_expression = additive_expression >> *(shift_operator_ >> additive_expression);
+            additive_expression = multiplicative_expression >> *(additive_operator_ >> multiplicative_expression);
+            multiplicative_expression = prefix_expression >> *(multiplicative_operator_ >> prefix_expression);
+            prefix_expression = prefix_expression_node | suffix_expression;
+            prefix_expression_node = prefix_operator_ >> prefix_expression;
+            suffix_expression = parentheses_expression >> *suffix_operator_;
+            parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
+            macro_expression = macro_expression_node | primary;
+            macro_expression_node = name >> arguments;
+            arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
+            primary = variable | primitive;
+            variable = name;
+            primitive = bool_ | character | int_ | double_ | string;
+            name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
+            character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
+            string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
+        }
+    } // namespace parser
+} // namespace llmcpp
+
+#endif // LLMCPP_HPP
+
+#ifdef LLMCPP_IMPLEMENTATION
+
+#if BOOST_OS_WINDOWS
+#include <boost/process/v2/windows/creation_flags.hpp>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef STRICT
+#define STRICT
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <tlhelp32.h>
+#undef IN
+#undef OUT
+#undef NEAR
+#undef FAR
+#endif
+
+#if BOOST_OS_WINDOWS
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
+namespace llmcpp
+{
+    exception::exception()
+    {
+        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
+    }
+
+    command_mode string_to_command_mode(std::string_view name)
+    {
+        command_mode result{};
+        if (boost::describe::enum_from_string(name, result))
+        {
+            return result;
+        }
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ name } });
+    }
+
+    std::string primitive_to_string(const primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
     }
 
     context::context()
@@ -1699,57 +1854,6 @@ namespace llmcpp
                     ;
             }
         } escaped_char;
-
-        template<typename Iterator>
-        document_grammar<Iterator>::document_grammar()
-            : document_grammar::base_type(document)
-        {
-            namespace qi = boost::spirit::qi;
-
-            using qi::bool_;
-            using qi::char_;
-            using qi::int_;
-            using qi::double_;
-            using qi::lit;
-            using qi::lexeme;
-            using qi::space;
-            using qi::skip;
-            using qi::matches;
-
-            document = *node;
-            node = placeholder | plain_text;
-            plain_text = +(!lit("{{") >> char_);
-            placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
-
-            expression = (assignment_expression % lit(';')) >> matches[lit(';')];
-            assignment_expression = assignment_expression_node | conditional_expression;
-            assignment_expression_node = conditional_expression >> assignment_operator_ >> assignment_expression;
-            conditional_expression = conditional_expression_node | logical_or_expression;
-            conditional_expression_node = logical_or_expression >> lit('?') >> expression >> lit(':') >> conditional_expression;
-            logical_or_expression = logical_and_expression % lit("||");
-            logical_and_expression = or_expression % lit("&&");
-            or_expression = xor_expression % lit('|');
-            xor_expression = and_expression % lit('^');
-            and_expression = equality_expression % lit('&');
-            equality_expression = relational_expression >> *(equality_operator_ >> relational_expression);
-            relational_expression = shift_expression >> *(relational_operator_ >> shift_expression);
-            shift_expression = additive_expression >> *(shift_operator_ >> additive_expression);
-            additive_expression = multiplicative_expression >> *(additive_operator_ >> multiplicative_expression);
-            multiplicative_expression = prefix_expression >> *(multiplicative_operator_ >> prefix_expression);
-            prefix_expression = prefix_expression_node | suffix_expression;
-            prefix_expression_node = prefix_operator_ >> prefix_expression;
-            suffix_expression = parentheses_expression >> *suffix_operator_;
-            parentheses_expression = (lit('(') >> expression >> lit(')')) | macro_expression;
-            macro_expression = macro_expression_node | primary;
-            macro_expression_node = name >> arguments;
-            arguments = lit('(') >> -(assignment_expression % ',') >> lit(')');
-            primary = variable | primitive;
-            variable = name;
-            primitive = bool_ | character | int_ | double_ | string;
-            name = lexeme[char_("a-zA-Z_") >> *(char_("a-zA-Z0-9_"))];
-            character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
-            string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
-        }
 
         namespace detail
         {
@@ -5695,104 +5799,6 @@ namespace llmcpp
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
 
         return cfg.llm.backend->parse_response_for_token_count(response.body());
-    }
-
-    template<std::size_t Capacity>
-    lru_cache<Capacity>::lru_cache(const lru_cache::callback_type& callback)
-        : callback{ callback }
-    {
-    }
-
-    template<std::size_t Capacity>
-    int lru_cache<Capacity>::get_tokens(std::string_view str)
-    {
-        int tokens{};
-
-        if (const lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
-        {
-            tokens = iter->tokens;
-            get<by_lru>().relocate(get<by_lru>().end(), get<by_lru>().iterator_to(*iter));
-        }
-        else
-        {
-            tokens = callback(str);
-            insert({ std::string{ str }, tokens });
-        }
-
-        if (size() > capacity)
-        {
-            get<by_lru>().pop_front();
-        }
-
-        return tokens;
-    }
-
-    template<std::size_t Capacity>
-    void lru_cache<Capacity>::to_file(const config& cfg) const
-    {
-        nlohmann::json cache{ nlohmann::json::array() };
-        for (const token_count_string& element : get<by_lru>())
-        {
-            cache.push_back
-            (
-                {
-                    { "string", element.str },
-                    { "tokens", element.tokens }
-                }
-            );
-        }
-        nlohmann::json json{ { "cache", std::move(cache) } };
-        const std::vector<std::uint8_t> cbor{ nlohmann::json::to_cbor(json) };
-        filesystem::write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
-    }
-
-    template<std::size_t Capacity>
-    void lru_cache<Capacity>::from_file(const config& cfg)
-    {
-        const std::filesystem::path cache_path{ filesystem::string_to_path_by_config(".token_cache.bin", cfg) };
-
-        if (!std::filesystem::exists(cache_path))
-        {
-            return;
-        }
-
-        try
-        {
-            boost::nowide::ifstream ifs{ cache_path, std::ios::binary };
-            if (!ifs.is_open())
-            {
-                return;
-            }
-
-            const std::vector<std::uint8_t> cbor{ std::istreambuf_iterator<char>{ ifs }, std::istreambuf_iterator<char>{} };
-
-            nlohmann::json json{ nlohmann::json::from_cbor(cbor) };
-            if (!json.is_object() || !json.contains("cache") || !json["cache"].is_array())
-            {
-                return;
-            }
-
-            lru_cache temp_lru_cache{ callback };
-            const nlohmann::json caches{ json["cache"] };
-            for (const nlohmann::json& cache : caches)
-            {
-                if (cache.is_object() && cache.contains("string") && cache.contains("tokens"))
-                {
-                    temp_lru_cache.insert
-                    (
-                        {
-                            cache["string"].get<std::string>(),
-                            cache["tokens"].get<int>()
-                        }
-                    );
-                }
-            }
-            *this = std::move(temp_lru_cache);
-        }
-        catch (const nlohmann::json::exception& e)
-        {
-            LLMCPP_LOG(warning) << boost::diagnostic_information(e);
-        }
     }
 
     namespace log
