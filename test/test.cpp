@@ -163,3 +163,13 @@ TEST(exception_safe_main, help_short)
     EXPECT_EQ(result, 0);
 }
 
+TEST(lru_cache, get_tokens)
+{
+    using cache_type = llmcpp::lru_cache<1000>;
+    constexpr int factor{ 2 };
+    auto callback{ [](std::string_view str) -> int { return static_cast<int>(str.size()) * factor; } };
+
+    cache_type cache{ callback };
+    const std::string str{ "test" };
+    EXPECT_EQ(cache.get_tokens(str), callback(str));
+}

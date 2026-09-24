@@ -679,6 +679,7 @@ namespace llmcpp
     struct by_key {};
     struct by_lru {};
 
+    template<std::size_t Capacity>
     struct lru_cache
         : private boost::multi_index::multi_index_container<
         token_count_string,
@@ -693,6 +694,7 @@ namespace llmcpp
         >
         >
     {
+        static constexpr std::size_t capacity{ Capacity };
         using callback_type = std::function<int(std::string_view)>;
         lru_cache(const callback_type& callback);
         lru_cache(const lru_cache&) = default;
@@ -721,6 +723,8 @@ namespace llmcpp
 
     struct config
     {
+        using cache_type = lru_cache<1000>;
+
         command_mode command_mode;
         std::string base_path;
         std::string log_level;
@@ -754,10 +758,10 @@ namespace llmcpp
         sb_parameters sb;
         cu_parameters cu;
 
-        mutable lru_cache lru_cache{ make_lru_cache_callback() };
+        mutable cache_type lru_cache{ make_lru_cache_callback() };
         context ctx;
 
-        lru_cache::callback_type make_lru_cache_callback();
+        cache_type::callback_type make_lru_cache_callback();
     };
 
     namespace builtin
@@ -2463,7 +2467,7 @@ namespace llmcpp
 
 namespace llmcpp
 {
-    lru_cache::callback_type config::make_lru_cache_callback()
+    config::cache_type::callback_type config::make_lru_cache_callback()
     {
         return [this](std::string_view str) { return send_token_count_request(*this, str); };
     }
@@ -5693,14 +5697,15 @@ namespace llmcpp
         return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
 
-    lru_cache::lru_cache(const lru_cache::callback_type& callback)
+    template<std::size_t Capacity>
+    lru_cache<Capacity>::lru_cache(const lru_cache::callback_type& callback)
         : callback{ callback }
     {
     }
 
-    int lru_cache::get_tokens(std::string_view str)
+    template<std::size_t Capacity>
+    int lru_cache<Capacity>::get_tokens(std::string_view str)
     {
-        constexpr std::size_t capacity{ 1000 };
         int tokens{};
 
         if (const lru_cache::const_iterator iter{ get<by_key>().find(str) }; iter != get<by_key>().end())
@@ -5722,7 +5727,8 @@ namespace llmcpp
         return tokens;
     }
 
-    void lru_cache::to_file(const config& cfg) const
+    template<std::size_t Capacity>
+    void lru_cache<Capacity>::to_file(const config& cfg) const
     {
         nlohmann::json cache{ nlohmann::json::array() };
         for (const token_count_string& element : get<by_lru>())
@@ -5740,7 +5746,8 @@ namespace llmcpp
         filesystem::write_file(cfg, reinterpret_cast<const char*>(cbor.data()), cbor.size(), ".token_cache.bin", std::ios::binary);
     }
 
-    void lru_cache::from_file(const config& cfg)
+    template<std::size_t Capacity>
+    void lru_cache<Capacity>::from_file(const config& cfg)
     {
         const std::filesystem::path cache_path{ filesystem::string_to_path_by_config(".token_cache.bin", cfg) };
 
