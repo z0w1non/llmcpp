@@ -139,7 +139,7 @@ TEST(test_exception_safe_main, unrecognised_option)
     EXPECT_NE(result, 0);
 }
 
-TEST(test_exception_safe_main, help)
+TEST(exception_safe_main, help)
 {
     commandline_args args{ "llmcpp.exe", "--help" };
     const scoped_ostream_redirect cout{ boost::nowide::cout };
@@ -151,7 +151,7 @@ TEST(test_exception_safe_main, help)
     EXPECT_EQ(result, 0);
 }
 
-TEST(test_exception_safe_main, help_short)
+TEST(exception_safe_main, help_short)
 {
     commandline_args args{ "llmcpp.exe", "-h" };
     const scoped_ostream_redirect cout{ boost::nowide::cout };

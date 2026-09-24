@@ -5040,7 +5040,7 @@ namespace llmcpp
 
             try
             {
-                po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
+                po::store(po::parse_command_line(argc, argv, allowed_options), vm);
                 po::notify(vm);
             }
             catch (const po::error& e)
@@ -5058,8 +5058,15 @@ namespace llmcpp
             log::init_logging(cfg);
 
             cfg.command_mode = string_to_command_mode(command_mode_string);
-            cfg.llm.mode = string_to_llm_mode(llm_mode_string);
-            cfg.sd.mode = string_to_sd_mode(sd_mode_string);
+
+            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+            {
+                cfg.llm.mode = string_to_llm_mode(llm_mode_string);
+            }
+            else if (cfg.command_mode == command_mode::sd)
+            {
+                cfg.sd.mode = string_to_sd_mode(sd_mode_string);
+            }
 
             if (!cfg.config_file.empty())
             {
@@ -6313,7 +6320,7 @@ namespace llmcpp
         {
             config cfg;
 
-            command_line::parse_result result{ command_line::parse_command_line(argc, argv, cfg) };
+            const command_line::parse_result result{ command_line::parse_command_line(argc, argv, cfg) };
             if (result == command_line::parse_result::help)
             {
                 return 0;
