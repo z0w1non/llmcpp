@@ -2353,6 +2353,84 @@ namespace llmcpp
             }
         };
     } // namespace parser
+
+    struct tcp
+    {
+        using body_type = boost::beast::http::string_body;
+        using request_type = boost::beast::http::request<body_type>;
+        using response_type = boost::beast::http::response<body_type>;
+
+        tcp();
+        ~tcp();
+        tcp(const tcp&) = delete;
+        tcp& operator=(const tcp&) = delete;
+        tcp(tcp&&) = default;
+        tcp& operator=(tcp&&) = default;
+
+        void connect(std::string_view host, std::string_view port);
+
+        void close() noexcept;
+
+        response_type request(request_type& request);
+
+        template <typename Rep, typename Period>
+        tcp& expires_after(std::chrono::duration<Rep, Period> timeout)
+        {
+            if (timeout <= std::chrono::duration<Rep, Period>::zero())
+            {
+                tcp_stream.expires_never();
+            }
+            else
+            {
+                tcp_stream.expires_after(timeout);
+            }
+            return *this;
+        }
+
+        static request_type make_request
+        (
+            boost::beast::http::verb method,
+            std::string_view host,
+            std::string_view target,
+            std::optional<std::string_view> content_type = std::nullopt,
+            std::optional<std::string_view> body = std::nullopt
+        );
+
+        static request_type make_post_json_request
+        (
+            std::string_view host,
+            std::string_view target,
+            std::string_view body
+        );
+
+        static request_type make_get_json_request
+        (
+            std::string_view host,
+            std::string_view target
+        );
+
+        template <typename Duration1, typename Duration2>
+        static response_type send_http_get
+        (
+            std::string_view host,
+            std::string_view port,
+            std::string_view target,
+            Duration1 connect_timeout,
+            Duration2 request_timeout
+        )
+        {
+            tcp tcp;
+            tcp.expires_after(connect_timeout).connect(host, port);
+            request_type request{ make_request(boost::beast::http::verb::get, host, target) };
+            return tcp.expires_after(request_timeout).request(request);
+        };
+
+    private:
+        boost::beast::error_code error_code;
+        boost::asio::io_context ioc;
+        boost::beast::tcp_stream tcp_stream{ ioc };
+        bool connected{};
+    };
 } // namespace llmcpp
 
 #endif // LLMCPP_HPP
@@ -3568,150 +3646,102 @@ namespace llmcpp
         }
     }
 
-    struct tcp
+    tcp::tcp()
     {
-        using body_type = boost::beast::http::string_body;
-        using request_type = boost::beast::http::request<body_type>;
-        using response_type = boost::beast::http::response<body_type>;
+    }
 
-        tcp()
+    tcp::~tcp()
+    {
+        close();
+    }
+
+    void tcp::connect(std::string_view host, std::string_view port)
+    {
+        boost::asio::ip::tcp::resolver resolver{ ioc };
+        const boost::asio::ip::tcp::resolver::results_type endpoints{ resolver.resolve(host, port) };
+        tcp_stream.connect(endpoints, error_code);
+        if_error_throw<connect_exception>(error_code);
+        connected = true;
+        LLMCPP_LOG(info) << "Connect " << host << ":" << port;;
+    }
+
+    void tcp::close() noexcept
+    {
+        if (connected)
         {
+            tcp_stream.socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, error_code);
+            tcp_stream.socket().close(error_code);
+            connected = false;
+        }
+    }
+
+    tcp::response_type tcp::request(tcp::request_type& request)
+    {
+        request.prepare_payload();
+        boost::beast::http::write(tcp_stream, request, error_code);
+        if_error_throw<http_send_exception>(error_code);
+
+        boost::beast::flat_buffer buffer;
+        boost::beast::http::response_parser<body_type> parser;
+        parser.body_limit(boost::none);
+        boost::beast::http::read(tcp_stream, buffer, parser, error_code);
+        if_error_throw<http_receive_exception>(error_code);
+        const response_type response{ parser.release() };
+
+        if (response.result() != boost::beast::http::status::ok)
+        {
+            llmcpp::throw_exception
+            (
+                http_status_exception{}
+                << error_info::http::response::status{ response.result() }
+                << error_info::http::response::reason{ std::to_string(response.result_int()) }
+            );
         }
 
-        ~tcp()
+        return response;
+    }
+
+    tcp::request_type tcp::make_request
+    (
+        boost::beast::http::verb method,
+        std::string_view host,
+        std::string_view target,
+        std::optional<std::string_view> content_type,
+        std::optional<std::string_view> body
+    )
+    {
+        request_type request{ method, target, 11 };
+        request.set(boost::beast::http::field::host, host);
+        request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+        if (content_type)
         {
-            close();
+            request.set(boost::beast::http::field::content_type, *content_type);
         }
-
-        tcp(const tcp&) = delete;
-        tcp& operator=(const tcp&) = delete;
-        tcp(tcp&&) = default;
-        tcp& operator=(tcp&&) = default;
-
-        void connect(std::string_view host, std::string_view port)
+        if (body)
         {
-            boost::asio::ip::tcp::resolver resolver{ ioc };
-            const boost::asio::ip::tcp::resolver::results_type endpoints{ resolver.resolve(host, port) };
-            tcp_stream.connect(endpoints, error_code);
-            if_error_throw<connect_exception>(error_code);
-            connected = true;
-            LLMCPP_LOG(info) << "Connect " << host << ":" << port;;
+            request.body() = *body;
         }
+        return request;
+    }
 
-        void close() noexcept
-        {
-            if (connected)
-            {
-                tcp_stream.socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, error_code);
-                tcp_stream.socket().close(error_code);
-                connected = false;
-            }
-        }
+    tcp::request_type tcp::make_post_json_request
+    (
+        std::string_view host,
+        std::string_view target,
+        std::string_view body
+    )
+    {
+        return make_request(boost::beast::http::verb::post, host, target, "application/json; charset=UTF-8", body);
+    }
 
-        response_type request(request_type& request)
-        {
-            request.prepare_payload();
-            boost::beast::http::write(tcp_stream, request, error_code);
-            if_error_throw<http_send_exception>(error_code);
-
-            boost::beast::flat_buffer buffer;
-            boost::beast::http::response_parser<body_type> parser;
-            parser.body_limit(boost::none);
-            boost::beast::http::read(tcp_stream, buffer, parser, error_code);
-            if_error_throw<http_receive_exception>(error_code);
-            const response_type response{ parser.release() };
-
-            if (response.result() != boost::beast::http::status::ok)
-            {
-                llmcpp::throw_exception
-                (
-                    http_status_exception{}
-                    << error_info::http::response::status{ response.result() }
-                    << error_info::http::response::reason{ std::to_string(response.result_int()) }
-                );
-            }
-
-            return response;
-        }
-
-        template <typename Rep, typename Period>
-        tcp& expires_after(std::chrono::duration<Rep, Period> timeout)
-        {
-            if (timeout <= std::chrono::duration<Rep, Period>::zero())
-            {
-                tcp_stream.expires_never();
-            }
-            else
-            {
-                tcp_stream.expires_after(timeout);
-            }
-            return *this;
-        }
-
-        static request_type make_request
-        (
-            boost::beast::http::verb method,
-            std::string_view host,
-            std::string_view target,
-            std::optional<std::string_view> content_type = std::nullopt,
-            std::optional<std::string_view> body = std::nullopt
-        )
-        {
-            request_type request{ method, target, 11 };
-            request.set(boost::beast::http::field::host, host);
-            request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-            if (content_type)
-            {
-                request.set(boost::beast::http::field::content_type, *content_type);
-            }
-            if (body)
-            {
-                request.body() = *body;
-            }
-            return request;
-        }
-
-        static request_type make_post_json_request
-        (
-            std::string_view host,
-            std::string_view target,
-            std::string_view body
-        )
-        {
-            return make_request(boost::beast::http::verb::post, host, target, "application/json; charset=UTF-8", body);
-        }
-
-        static request_type make_get_json_request
-        (
-            std::string_view host,
-            std::string_view target
-        )
-        {
-            return make_request(boost::beast::http::verb::get, host, target, "application/json; charset=UTF-8", std::nullopt);
-        }
-
-        template <typename Duration1, typename Duration2>
-        static response_type send_http_get
-        (
-            std::string_view host,
-            std::string_view port,
-            std::string_view target,
-            Duration1 connect_timeout,
-            Duration2 request_timeout
-        )
-        {
-            tcp tcp;
-            tcp.expires_after(connect_timeout).connect(host, port);
-            request_type request{ make_request(boost::beast::http::verb::get, host, target) };
-            return tcp.expires_after(request_timeout).request(request);
-        };
-
-    private:
-        boost::beast::error_code error_code;
-        boost::asio::io_context ioc;
-        boost::beast::tcp_stream tcp_stream{ ioc };
-        bool connected{};
-    };
+    tcp::request_type tcp::make_get_json_request
+    (
+        std::string_view host,
+        std::string_view target
+    )
+    {
+        return make_request(boost::beast::http::verb::get, host, target, "application/json; charset=UTF-8", std::nullopt);
+    }
 
     namespace filesystem
     {
