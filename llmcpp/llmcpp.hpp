@@ -998,6 +998,16 @@ namespace llmcpp
             template<typename ... Args>
             using skipped_rule = boost::spirit::qi::rule<Iterator, boost::spirit::qi::space_type, Args ...>;
 
+            assignment_symbols assignment_operator_;
+            equality_symbols equality_operator_;
+            relational_symbols relational_operator_;
+            shift_symbols shift_operator_;
+            additive_symbols additive_operator_;
+            multiplicative_symbols multiplicative_operator_;
+            prefix_symbols prefix_operator_;
+            suffix_symbols suffix_operator_;
+            escaped_chars escaped_char;
+
             rule<std::vector<node_type>()> document;
             rule<node_type()> node;
             rule<std::string()> plain_text;
@@ -1526,6 +1536,60 @@ namespace llmcpp
 
     namespace parser
     {
+        struct assignment_symbols
+            : boost::spirit::qi::symbols<char, assignment_operator>
+        {
+            assignment_symbols();
+        };
+
+        struct equality_symbols
+            : boost::spirit::qi::symbols<char, equality_operator>
+        {
+            equality_symbols();
+        };
+
+        struct relational_symbols
+            : boost::spirit::qi::symbols<char, relational_operator>
+        {
+            relational_symbols();
+        };
+
+        struct shift_symbols
+            : boost::spirit::qi::symbols<char, shift_operator>
+        {
+            shift_symbols();
+        };
+
+        struct additive_symbols
+            : boost::spirit::qi::symbols<char, additive_operator>
+        {
+            additive_symbols();
+        };
+
+        struct multiplicative_symbols
+            : boost::spirit::qi::symbols<char, multiplicative_operator>
+        {
+            multiplicative_symbols();
+        };
+
+        struct prefix_symbols
+            : boost::spirit::qi::symbols<char, prefix_operator>
+        {
+            prefix_symbols();
+        };
+
+        struct suffix_symbols
+            : boost::spirit::qi::symbols<char, suffix_operator>
+        {
+            suffix_symbols();
+        };
+
+        struct escaped_chars
+            : boost::spirit::qi::symbols<char, char>
+        {
+            escaped_chars();
+        };
+
         template<typename Iterator>
         document_grammar<Iterator>::document_grammar()
             : document_grammar::base_type(document)
@@ -1576,284 +1640,6 @@ namespace llmcpp
             character = lexeme['\'' >> (('\\' >> escaped_char) | (char_ - '\'' - '\\')) >> '\''];
             string = lexeme['"' >> *(('\\' >> escaped_char) | (char_ - '"' - '\\')) >> '"'];
         }
-    } // namespace parser
-} // namespace llmcpp
-
-#endif // LLMCPP_HPP
-
-#ifdef LLMCPP_IMPLEMENTATION
-
-#if BOOST_OS_WINDOWS
-#include <boost/process/v2/windows/creation_flags.hpp>
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef STRICT
-#define STRICT
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#include <tlhelp32.h>
-#undef IN
-#undef OUT
-#undef NEAR
-#undef FAR
-#endif
-
-#if BOOST_OS_WINDOWS
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
-namespace llmcpp
-{
-    exception::exception()
-    {
-        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
-    }
-
-    command_mode string_to_command_mode(std::string_view name)
-    {
-        command_mode result{};
-        if (boost::describe::enum_from_string(name, result))
-        {
-            return result;
-        }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ name } });
-    }
-
-    std::string primitive_to_string(const primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
-
-    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
-    {
-        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
-    }
-
-    context::context()
-    {
-    }
-
-    context::context(const context& ctx)
-        : base{ &ctx }
-    {
-    }
-
-    context context::make_pushed() const
-    {
-        return context{ *this };
-    }
-
-    void context::set(std::string_view key, const primitive_type& value)
-    {
-        variable_map[std::string{ key }] = value;
-    }
-
-    const primitive_type* context::get(std::string_view key) const
-    {
-        const std::string key_string{ key };
-        const context* current{ this };
-
-        while (current != nullptr)
-        {
-            const context::variable_map_type::const_iterator map_iterator{ current->variable_map.find(key_string) };
-            if (map_iterator != current->variable_map.end())
-            {
-                return &map_iterator->second;
-            }
-            current = current->base;
-        }
-        return nullptr;
-    }
-
-    primitive_type* context::get(std::string_view key)
-    {
-        return const_cast<primitive_type*>(static_cast<const context&>(*this).get(key));
-    }
-
-    sd_mode string_to_sd_mode(std::string_view name)
-    {
-        sd_mode result{};
-        if (boost::describe::enum_from_string(name, result))
-        {
-            return result;
-        }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown sd-mode string " + std::string{ name } });
-    }
-
-    std::string sd_mode_to_target(sd_mode mode, const config& cfg)
-    {
-        if (mode == sd_mode::txt2img)
-        {
-            return cfg.sd.txt2img.target;
-        }
-        else if (mode == sd_mode::img2img)
-        {
-            return cfg.sd.img2img.target;
-        }
-        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
-    }
-
-    llm_mode string_to_llm_mode(std::string_view name)
-    {
-        llm_mode result{};
-        if (boost::describe::enum_from_string(name, result))
-        {
-            return result;
-        }
-        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown llm-mode string " + std::string{ name } });
-    }
-
-    std::string llm_mode_to_target(llm_mode mode, const config& cfg)
-    {
-        if (mode == llm_mode::completions)
-        {
-            return cfg.llm.completions_target;
-        }
-        else if (mode == llm_mode::chat_completions)
-        {
-            return cfg.llm.chat_completions_target;
-        }
-        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
-    }
-
-    namespace parser
-    {
-        struct assignment_symbols
-            : boost::spirit::qi::symbols<char, assignment_operator>
-        {
-            assignment_symbols()
-            {
-                add
-                ("=", assignment_operator::assign)
-                    ("+=", assignment_operator::plus_assign)
-                    ("-=", assignment_operator::minus_assign)
-                    ("*=", assignment_operator::multiplies_assign)
-                    ("/=", assignment_operator::divides_assign)
-                    ("%=", assignment_operator::modulus_assign)
-                    ("<<=", assignment_operator::shift_left_assign)
-                    (">>=", assignment_operator::shift_right_assign)
-                    ("&=", assignment_operator::and_assign)
-                    ("^=", assignment_operator::xor_assign)
-                    ("|=", assignment_operator::or_assign)
-                    ;
-            }
-        } assignment_operator_;
-
-        struct equality_symbols
-            : boost::spirit::qi::symbols<char, equality_operator>
-        {
-            equality_symbols()
-            {
-                add
-                ("==", equality_operator::equal)
-                    ("!=", equality_operator::not_equal)
-                    ;
-            }
-        } equality_operator_;
-
-        struct relational_symbols
-            : boost::spirit::qi::symbols<char, relational_operator>
-        {
-            relational_symbols()
-            {
-                add
-                ("<", relational_operator::less)
-                    (">", relational_operator::greater)
-                    ("<=", relational_operator::less_equal)
-                    (">=", relational_operator::greater_equal)
-                    ;
-            }
-        } relational_operator_;
-
-        struct shift_symbols
-            : boost::spirit::qi::symbols<char, shift_operator>
-        {
-            shift_symbols()
-            {
-                add
-                ("<<", shift_operator::shift_left)
-                    (">>", shift_operator::shift_right)
-                    ;
-            }
-        } shift_operator_;
-
-        struct additive_symbols
-            : boost::spirit::qi::symbols<char, additive_operator>
-        {
-            additive_symbols()
-            {
-                add
-                ("+", additive_operator::plus)
-                    ("-", additive_operator::minus)
-                    ;
-            }
-        } additive_operator_;
-
-        struct multiplicative_symbols
-            : boost::spirit::qi::symbols<char, multiplicative_operator>
-        {
-            multiplicative_symbols()
-            {
-                add
-                ("*", multiplicative_operator::multiplies)
-                    ("/", multiplicative_operator::divides)
-                    ("%", multiplicative_operator::modulus)
-                    ;
-            }
-        } multiplicative_operator_;
-
-        struct prefix_symbols
-            : boost::spirit::qi::symbols<char, prefix_operator>
-        {
-            prefix_symbols()
-            {
-                add
-                ("++", prefix_operator::prefix_increment)
-                    ("--", prefix_operator::prefix_decrement)
-                    ("+", prefix_operator::prefix_plus)
-                    ("-", prefix_operator::prefix_minus)
-                    ("!", prefix_operator::logical_not)
-                    ("~", prefix_operator::bitwise_not)
-                    ;
-            }
-        } prefix_operator_;
-
-        struct suffix_symbols
-            : boost::spirit::qi::symbols<char, suffix_operator>
-        {
-            suffix_symbols()
-            {
-                add
-                ("++", suffix_operator::suffix_increment)
-                    ("--", suffix_operator::suffix_decrement)
-                    ;
-            }
-        } suffix_operator_;
-
-        struct escaped_chars
-            : boost::spirit::qi::symbols<char, char>
-        {
-            escaped_chars()
-            {
-                add
-                ("\"", '\"')
-                    ("\'", '\'')
-                    ("\\", '\\')
-                    ("a", '\a')
-                    ("b", '\b')
-                    ("f", '\f')
-                    ("n", '\n')
-                    ("r", '\r')
-                    ("t", '\t')
-                    ;
-            }
-        } escaped_char;
 
         namespace detail
         {
@@ -2566,11 +2352,152 @@ namespace llmcpp
                 llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
             }
         };
-    } // namespace paraser
+    } // namespace parser
 } // namespace llmcpp
+
+#endif // LLMCPP_HPP
+
+#ifdef LLMCPP_IMPLEMENTATION
+
+#if BOOST_OS_WINDOWS
+#include <boost/process/v2/windows/creation_flags.hpp>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef STRICT
+#define STRICT
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <tlhelp32.h>
+#undef IN
+#undef OUT
+#undef NEAR
+#undef FAR
+#endif
+
+#if BOOST_OS_WINDOWS
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace llmcpp
 {
+    exception::exception()
+    {
+        *this << error_info::stacktrace{ boost::stacktrace::stacktrace() };
+    }
+
+    command_mode string_to_command_mode(std::string_view name)
+    {
+        command_mode result{};
+        if (boost::describe::enum_from_string(name, result))
+        {
+            return result;
+        }
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ name } });
+    }
+
+    std::string primitive_to_string(const primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    std::string vr_primitive_to_string(const vr_primitive_type& primitive)
+    {
+        return boost::apply_visitor(x_primitive_to_string_visitor{}, primitive);
+    }
+
+    context::context()
+    {
+    }
+
+    context::context(const context& ctx)
+        : base{ &ctx }
+    {
+    }
+
+    context context::make_pushed() const
+    {
+        return context{ *this };
+    }
+
+    void context::set(std::string_view key, const primitive_type& value)
+    {
+        variable_map[std::string{ key }] = value;
+    }
+
+    const primitive_type* context::get(std::string_view key) const
+    {
+        const std::string key_string{ key };
+        const context* current{ this };
+
+        while (current != nullptr)
+        {
+            const context::variable_map_type::const_iterator map_iterator{ current->variable_map.find(key_string) };
+            if (map_iterator != current->variable_map.end())
+            {
+                return &map_iterator->second;
+            }
+            current = current->base;
+        }
+        return nullptr;
+    }
+
+    primitive_type* context::get(std::string_view key)
+    {
+        return const_cast<primitive_type*>(static_cast<const context&>(*this).get(key));
+    }
+
+    sd_mode string_to_sd_mode(std::string_view name)
+    {
+        sd_mode result{};
+        if (boost::describe::enum_from_string(name, result))
+        {
+            return result;
+        }
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown sd-mode string " + std::string{ name } });
+    }
+
+    std::string sd_mode_to_target(sd_mode mode, const config& cfg)
+    {
+        if (mode == sd_mode::txt2img)
+        {
+            return cfg.sd.txt2img.target;
+        }
+        else if (mode == sd_mode::img2img)
+        {
+            return cfg.sd.img2img.target;
+        }
+        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
+    }
+
+    llm_mode string_to_llm_mode(std::string_view name)
+    {
+        llm_mode result{};
+        if (boost::describe::enum_from_string(name, result))
+        {
+            return result;
+        }
+        llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown llm-mode string " + std::string{ name } });
+    }
+
+    std::string llm_mode_to_target(llm_mode mode, const config& cfg)
+    {
+        if (mode == llm_mode::completions)
+        {
+            return cfg.llm.completions_target;
+        }
+        else if (mode == llm_mode::chat_completions)
+        {
+            return cfg.llm.chat_completions_target;
+        }
+        llmcpp::throw_exception(logic_error{} << error_info::description{ "Unknown sd-mode" });
+    }
+
     config::cache_type::callback_type config::make_lru_cache_callback()
     {
         return [this](std::string_view str) { return send_token_count_request(*this, str); };
@@ -2580,6 +2507,101 @@ namespace llmcpp
 
     namespace parser
     {
+        assignment_symbols::assignment_symbols()
+        {
+            add
+            ("=", assignment_operator::assign)
+                ("+=", assignment_operator::plus_assign)
+                ("-=", assignment_operator::minus_assign)
+                ("*=", assignment_operator::multiplies_assign)
+                ("/=", assignment_operator::divides_assign)
+                ("%=", assignment_operator::modulus_assign)
+                ("<<=", assignment_operator::shift_left_assign)
+                (">>=", assignment_operator::shift_right_assign)
+                ("&=", assignment_operator::and_assign)
+                ("^=", assignment_operator::xor_assign)
+                ("|=", assignment_operator::or_assign)
+                ;
+        }
+
+        equality_symbols::equality_symbols()
+        {
+            add
+            ("==", equality_operator::equal)
+                ("!=", equality_operator::not_equal)
+                ;
+        }
+
+        relational_symbols::relational_symbols()
+        {
+            add
+            ("<", relational_operator::less)
+                (">", relational_operator::greater)
+                ("<=", relational_operator::less_equal)
+                (">=", relational_operator::greater_equal)
+                ;
+        }
+
+        shift_symbols::shift_symbols()
+        {
+            add
+            ("<<", shift_operator::shift_left)
+                (">>", shift_operator::shift_right)
+                ;
+        }
+
+        additive_symbols::additive_symbols()
+        {
+            add
+            ("+", additive_operator::plus)
+                ("-", additive_operator::minus)
+                ;
+        }
+
+        multiplicative_symbols::multiplicative_symbols()
+        {
+            add
+            ("*", multiplicative_operator::multiplies)
+                ("/", multiplicative_operator::divides)
+                ("%", multiplicative_operator::modulus)
+                ;
+        }
+
+        prefix_symbols::prefix_symbols()
+        {
+            add
+            ("++", prefix_operator::prefix_increment)
+                ("--", prefix_operator::prefix_decrement)
+                ("+", prefix_operator::prefix_plus)
+                ("-", prefix_operator::prefix_minus)
+                ("!", prefix_operator::logical_not)
+                ("~", prefix_operator::bitwise_not)
+                ;
+        }
+
+        suffix_symbols::suffix_symbols()
+        {
+            add
+            ("++", suffix_operator::suffix_increment)
+                ("--", suffix_operator::suffix_decrement)
+                ;
+        }
+
+        escaped_chars::escaped_chars()
+        {
+            add
+            ("\"", '\"')
+                ("\'", '\'')
+                ("\\", '\\')
+                ("a", '\a')
+                ("b", '\b')
+                ("f", '\f')
+                ("n", '\n')
+                ("r", '\r')
+                ("t", '\t')
+                ;
+        }
+
         std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx)
         {
             grammar grammar;

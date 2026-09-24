@@ -165,7 +165,7 @@ TEST(exception_safe_main, help_short)
 
 TEST(lru_cache, get_tokens)
 {
-    using cache_type = llmcpp::lru_cache<1000>;
+    using cache_type = llmcpp::lru_cache<1>;
     constexpr int factor{ 2 };
     auto callback{ [](std::string_view str) -> int { return static_cast<int>(str.size()) * factor; } };
 
