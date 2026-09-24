@@ -71,6 +71,7 @@
 #include <boost/process/v2/stdio.hpp>
 #include <boost/program_options.hpp>
 #include <boost/range/algorithm.hpp>
+#include <boost/scope/scope_exit.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/stacktrace.hpp>
@@ -1114,6 +1115,8 @@ namespace llmcpp
 
     namespace llm
     {
+        void read_paragraphs_file(config& cfg);
+
         void init_llm_mode(config& cfg);
 
         void init_chat_mode(config& cfg);
@@ -1188,7 +1191,9 @@ namespace llmcpp
 
         std::vector<std::string> split_command_line_args(std::string_view args);
 
-        int parse_command_line(int argc, char** argv, config& cfg);
+        BOOST_DEFINE_ENUM_CLASS(parse_result, success, help, program_options_error);
+
+        parse_result parse_command_line(int argc, char** argv, config& cfg);
 
         void unescape_parameters(config& cfg);
     } // command_line
@@ -3730,7 +3735,7 @@ namespace llmcpp
 
     namespace llm
     {
-        void init_llm_mode(config& cfg)
+        void read_paragraphs_file(config& cfg)
         {
             if (!cfg.llm.paragraphs_file.empty())
             {
@@ -3739,7 +3744,10 @@ namespace llmcpp
                 std::vector<item> paragraphs{ parse_item_list(content) };
                 set_paragraphs_to_phases(paragraphs, cfg.phases);
             }
+        }
 
+        void init_llm_mode(config& cfg)
+        {
             if (cfg.command_mode == command_mode::tg)
             {
                 cfg.llm.backend = &cfg.tg;
@@ -4726,362 +4734,355 @@ namespace llmcpp
             return result;
         }
 
-        int parse_command_line(int argc, char** argv, config& cfg)
+        parse_result parse_command_line(int argc, char** argv, config& cfg)
         {
             namespace po = boost::program_options;
 
+            cfg.tg.stop = { "\\n\\n", ":", "***" };
+            cfg.tg.sampler_priority =
+            {
+                "repetition_penalty",
+                "presence_penalty",
+                "frequency_penalty",
+                "dry",
+                "temperature",
+                "dynamic_temperature",
+                "quadratic_sampling",
+                "top_n_sigma",
+                "top_k",
+                "top_p",
+                "typical_p",
+                "epsilon_cutoff",
+                "eta_cutoff",
+                "tfs",
+                "top_a",
+                "min_p",
+                "mirostat",
+                "xtc",
+                "encoder_repetition_penalty",
+                "no_repeat_ngram"
+            };
+            cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
+
+            std::string command_mode_string;
+            std::string llm_mode_string;
+            std::string sd_mode_string;
+
+            po::options_description allowed_options("Allowed options");
+            allowed_options.add_options()
+                ("help,h", "produce help message")
+                ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
+                ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
+                ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
+                ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
+                ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
+                ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
+                ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
+                ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
+                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
+                ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
+
+                ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
+                ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
+                ("png-file", po::value<std::string>(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
+                ("server-executable-file", po::value<std::string>(&cfg.server_executable_file)->default_value(""), "server executable file")
+                ("server-arguments", po::value<std::string>(&cfg.server_arguments), "server arguments")
+                ("server-host", po::value<std::string>(&cfg.server_host)->default_value("localhost"), "server ip")
+                ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
+                ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
+                ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
+                ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
+                ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
+
+                ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
+                ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
+                ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
+                ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
+                ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
+                ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
+                ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
+                ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
+                ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
+                ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
+                ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
+                ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
+                ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
+                ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
+                ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
+                ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
+                ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
+                ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+                ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
+
+                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
+
+                ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
+                ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
+                ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
+                ("tg-frequency-penalty", po::value<double>(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
+                //std::map<int, double> logit_bias;
+                ("tg-logprobs", po::value<double>(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
+                ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
+                ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
+                ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
+                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
+                ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
+                ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
+                ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
+                ("tg-top-p", po::value<double>(&cfg.tg.top_p)->default_value(1.0), "TG top p")
+                ("tg-dynatemp-low", po::value<double>(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
+                ("tg-dynatemp-high", po::value<double>(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
+                ("tg-dynatemp-exponent", po::value<double>(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
+                ("tg-smoothing-factor", po::value<double>(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
+                ("tg-smoothing-curve", po::value<double>(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
+                ("tg-min-p", po::value<double>(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
+                ("tg-top-k", po::value<int>(&cfg.tg.top_k)->default_value(0), "TG top k")
+                ("tg-typical-p", po::value<double>(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
+                ("tg-xtc-threshold", po::value<double>(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
+                ("tg-xtc-probability", po::value<double>(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
+                ("tg-epsilon-cutoff", po::value<double>(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
+                ("tg-eta-cutoff", po::value<double>(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
+                ("tg-tfs", po::value<double>(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
+                ("tg-top-a", po::value<double>(&cfg.tg.top_a)->default_value(0.0), "TG top a")
+                ("tg-top-n-sigma", po::value<double>(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
+                ("tg-dry-multiplier", po::value<double>(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
+                ("tg-dry-allowed-length", po::value<int>(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
+                ("tg-dry-base", po::value<double>(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
+                ("tg-repetition-penalty", po::value<double>(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
+                ("tg-encoder-repetition-penalty", po::value<double>(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
+                ("tg-no-repeat-ngram-size", po::value<int>(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
+                ("tg-repetition-penalty-range", po::value<int>(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
+                ("tg-penalty-alpha", po::value<double>(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
+                ("tg-guidance-scale", po::value<double>(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
+                ("tg-mirostat-mode", po::value<int>(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
+                ("tg-mirostat-tau", po::value<double>(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
+                ("tg-mirostat-eta", po::value<double>(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
+                ("tg-prompt-lookup-num-tokens", po::value<int>(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
+                ("tg-max-tokens-second", po::value<int>(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
+                ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
+                ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
+                ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
+                ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
+                ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
+                ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
+                ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+                ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
+                ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
+                ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
+                ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
+                ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
+                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
+                ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
+
+                ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+                ("kc-max-length", po::value<int>(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+                ("kc-rep-pen", po::value<double>(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+                ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+                ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+                ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+                ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+                ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
+                ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+                ("kc-top-k", po::value<double>(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+                ("kc-top-p", po::value<double>(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-min-p", po::value<double>(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-typical", po::value<double>(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+                ("kc-dynatemp_range", po::value<double>(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+                ("kc-smoothing-factor", po::value<double>(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+                ("kc-dynatemp-exponent", po::value<double>(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+                ("kc-mirostat", po::value<int>(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+                ("kc-mirostat-tau", po::value<double>(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+                ("kc-mirostat-eta", po::value<double>(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+                ("kc-genkey", po::value<std::string>(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+                ("kc-grammar", po::value<std::string>(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+                ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+                ("kc-memory", po::value<std::string>(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+                ("kc-images", po::value<std::vector<std::string>>(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+                ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+                ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+                ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+                ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+                ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+                ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+                ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+                ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+                ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+                ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+                ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+                ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+                ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
+
+                ("sd-host", po::value<std::string>(&cfg.sd.host)->default_value("localhost"), "SD host")
+                ("sd-port", po::value<std::string>(&cfg.sd.port)->default_value("7860"), "SD port")
+                ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
+                ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
+                ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
+                ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
+                ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
+                ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
+                ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
+                ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
+                ("sd-subseed-strength", po::value<double>(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
+                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+                ("sd-sampler-name", po::value<std::string>(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
+                ("sd-scheduler", po::value<std::string>(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
+                ("sd-batch_size", po::value<int>(&cfg.sd.batch_size)->default_value(1), "SD batch size")
+                ("sd-n-iter", po::value<int>(&cfg.sd.n_iter)->default_value(1), "SD n iter")
+                ("sd-steps", po::value<int>(&cfg.sd.steps)->default_value(30), "SD steps")
+                ("sd-cfg-scale", po::value<double>(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
+                ("sd-width", po::value<int>(&cfg.sd.width)->default_value(1024), "SD image width")
+                ("sd-height", po::value<int>(&cfg.sd.height)->default_value(1024), "SD image height")
+                ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
+                ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
+                ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
+                ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
+                ("sd-eta", po::value<int>(&cfg.sd.eta)->default_value(0), "SD eta")
+                ("sd-denoising-strength", po::value<double>(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
+                ("sd-s-min-uncond", po::value<int>(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
+                ("sd-s-churn", po::value<int>(&cfg.sd.s_churn)->default_value(0), "SD s churn")
+                ("sd-s-tmax", po::value<int>(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
+                ("sd-s-tmin", po::value<int>(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
+                ("sd-s-noise", po::value<int>(&cfg.sd.s_noise)->default_value(1), "SD s noise")
+                ("sd-override-settings", po::value<std::string>(&cfg.sd.override_settings)->default_value(""), "SD override settings")
+                ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+                ("sd-refiner-checkpoint", po::value<std::string>(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+                ("sd-refiner-switch-at", po::value<double>(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
+                ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
+                ("sd-firstpass-image", po::value<std::string>(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
+                ("sd-comments", po::value<std::string>(&cfg.sd.comments)->default_value(""), "SD comments")
+                ("sd-force-task-id", po::value<std::string>(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
+                ("sd-sampler-index", po::value<std::string>(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
+                ("sd-script-name", po::value<std::string>(&cfg.sd.script_name)->default_value(""), "SD script name")
+                ("sd-script-args", po::value<std::vector<std::string>>(&cfg.sd.script_args), "SD script_args")
+                ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
+                ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
+                ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+                ("sd-ad-model", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+                ("sd-ad-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+                ("sd-ad-negative-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+                ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
+                ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+
+                ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
+
+                ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
+                ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
+                ("sd-firstphase-width", po::value<int>(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
+                ("sd-firstphase-height", po::value<int>(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
+                ("sd-hr-scale", po::value<double>(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
+                ("sd-hr-upscaler", po::value<std::string>(&cfg.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
+                ("sd-hr-second-pass-steps", po::value<int>(&cfg.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
+                ("sd-hr-resize-x", po::value<int>(&cfg.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
+                ("sd-hr-resize-y", po::value<int>(&cfg.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
+                ("sd-hr-checkpoint-name", po::value<std::string>(&cfg.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
+                //("sd-hr-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
+                //("sd-hr-negative-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
+
+                ("sd-img2img-target", po::value<std::string>(&cfg.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
+                ("sd-init-images", po::value<std::vector<std::string>>(&cfg.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
+                ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
+                ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
+                ("sd-resize-mode", po::value<int>(&cfg.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
+                ("sd-image-cfg-scale", po::value<double>(&cfg.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
+                ("sd-mask", po::value<std::string>(&cfg.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
+                ("sd-mask-blur-x", po::value<int>(&cfg.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
+                ("sd-mask-blur-y", po::value<int>(&cfg.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
+                ("sd-mask-blur", po::value<int>(&cfg.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
+                ("sd-mask-round", po::bool_switch(&cfg.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
+                ("sd-inpainting-fill", po::value<int>(&cfg.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
+                ("sd-inpaint-full-res", po::bool_switch(&cfg.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
+                ("sd-inpaint-full-res-padding", po::value<int>(&cfg.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
+                ("sd-inpainting-mask-invert", po::value<int>(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
+                ("sd-initial-noise-multiplier", po::value<double>(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
+                ("sd-latent-mask", po::value<std::string>(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
+
+                ("sb-host", po::value<std::string>(&cfg.sb.host)->default_value("localhost"), "SB host")
+                ("sb-port", po::value<std::string>(&cfg.sb.port)->default_value("5001"), "SB port")
+                ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
+                ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
+                ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
+                ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
+                ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
+                ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
+                ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
+                ("sb-speaker-id", po::value<int>(&cfg.sb.speaker_id)->default_value(0), "SB speaker id")
+                ("sb-sdp-ratio", po::value<double>(&cfg.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
+                ("sb-noise", po::value<double>(&cfg.sb.noise)->default_value(0.6, "0.6"), "SB noise")
+                ("sb-noisew", po::value<double>(&cfg.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
+                ("sb-length", po::value<double>(&cfg.sb.length)->default_value(1), "SB length")
+                ("sb-language", po::value<std::string>(&cfg.sb.language)->default_value(""), "SB language")
+                ("sb-auto-split", po::bool_switch(&cfg.sb.auto_split)->default_value(true), "SB auto split")
+                ("sb-split-interval", po::value<double>(&cfg.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
+                ("sb-assist-text", po::value<std::string>(&cfg.sb.assist_text)->default_value(""), "SB assist text")
+                ("sb-assist-text-weight", po::value<double>(&cfg.sb.assist_text_weight)->default_value(1), "SB assist text weight")
+                ("sb-style", po::value<std::string>(&cfg.sb.style)->default_value(""), "SB style")
+                ("sb-style-weight", po::value<double>(&cfg.sb.style_weight)->default_value(1), "SB style weight")
+                ("sb-reference-audio-path", po::value<std::string>(&cfg.sb.reference_audio_path)->default_value(""), "SB reference audio path")
+
+                ("cu-host", po::value<std::string>(&cfg.cu.host)->default_value("localhost"), "Comfy UI host")
+                ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
+                ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
+                ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
+                ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
+                ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
+                ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
+                ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
+                ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
+                ;
+
+            po::options_description config_file_options;
+            config_file_options.add(allowed_options);
+            po::variables_map vm;
+
             try
             {
-                cfg.tg.stop = { "\\n\\n", ":", "***" };
-                cfg.tg.sampler_priority =
-                {
-                    "repetition_penalty",
-                    "presence_penalty",
-                    "frequency_penalty",
-                    "dry",
-                    "temperature",
-                    "dynamic_temperature",
-                    "quadratic_sampling",
-                    "top_n_sigma",
-                    "top_k",
-                    "top_p",
-                    "typical_p",
-                    "epsilon_cutoff",
-                    "eta_cutoff",
-                    "tfs",
-                    "top_a",
-                    "min_p",
-                    "mirostat",
-                    "xtc",
-                    "encoder_repetition_penalty",
-                    "no_repeat_ngram"
-                };
-                cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
-
-                std::string command_mode_string;
-                std::string llm_mode_string;
-                std::string sd_mode_string;
-
-                po::options_description allowed_options("Allowed options");
-                allowed_options.add_options()
-                    ("help,h", "produce help message")
-                    ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
-                    ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
-                    ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
-                    ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
-                    ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
-                    ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
-                    ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-                    ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
-                    ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
-                    ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
-
-                    ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
-                    ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
-                    ("png-file", po::value<std::string>(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
-                    ("server-executable-file", po::value<std::string>(&cfg.server_executable_file)->default_value(""), "server executable file")
-                    ("server-arguments", po::value<std::string>(&cfg.server_arguments), "server arguments")
-                    ("server-host", po::value<std::string>(&cfg.server_host)->default_value("localhost"), "server ip")
-                    ("server-port", po::value<std::string>(&cfg.server_port)->default_value("5000"), "server port")
-                    ("server-max-retries", po::value<int>(&cfg.server_max_retries)->default_value(60), "server max retries")
-                    ("server-wait-ms", po::value<int>(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
-                    ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
-                    ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
-
-                    ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
-                    ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
-                    ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
-                    ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
-                    ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
-                    ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
-                    ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
-                    ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
-                    ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
-                    ("llm-port", po::value<std::string>(&cfg.llm.port)->default_value("5000"), "LLM port")
-                    ("llm-api-key", po::value<std::string>(&cfg.llm.api_key)->default_value(""), "LLM API key")
-                    ("llm-completions-target", po::value<std::string>(&cfg.llm.completions_target)->default_value(""), "LLM completions target")
-                    ("llm-token-count-target", po::value<std::string>(&cfg.llm.token_count_target)->default_value(""), "LLM token count target")
-                    ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
-                    ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
-                    ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
-                    ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-                    ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
-                    ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
-
-                    ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
-
-                    ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
-                    ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
-                    ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
-                    ("tg-frequency-penalty", po::value<double>(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
-                    //std::map<int, double> logit_bias;
-                    ("tg-logprobs", po::value<double>(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
-                    ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
-                    ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
-                    ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                    ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
-                    ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
-                    ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
-                    ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
-                    ("tg-top-p", po::value<double>(&cfg.tg.top_p)->default_value(1.0), "TG top p")
-                    ("tg-dynatemp-low", po::value<double>(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
-                    ("tg-dynatemp-high", po::value<double>(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
-                    ("tg-dynatemp-exponent", po::value<double>(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
-                    ("tg-smoothing-factor", po::value<double>(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
-                    ("tg-smoothing-curve", po::value<double>(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
-                    ("tg-min-p", po::value<double>(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
-                    ("tg-top-k", po::value<int>(&cfg.tg.top_k)->default_value(0), "TG top k")
-                    ("tg-typical-p", po::value<double>(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
-                    ("tg-xtc-threshold", po::value<double>(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
-                    ("tg-xtc-probability", po::value<double>(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
-                    ("tg-epsilon-cutoff", po::value<double>(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
-                    ("tg-eta-cutoff", po::value<double>(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
-                    ("tg-tfs", po::value<double>(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
-                    ("tg-top-a", po::value<double>(&cfg.tg.top_a)->default_value(0.0), "TG top a")
-                    ("tg-top-n-sigma", po::value<double>(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
-                    ("tg-dry-multiplier", po::value<double>(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
-                    ("tg-dry-allowed-length", po::value<int>(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
-                    ("tg-dry-base", po::value<double>(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
-                    ("tg-repetition-penalty", po::value<double>(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
-                    ("tg-encoder-repetition-penalty", po::value<double>(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
-                    ("tg-no-repeat-ngram-size", po::value<int>(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
-                    ("tg-repetition-penalty-range", po::value<int>(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
-                    ("tg-penalty-alpha", po::value<double>(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
-                    ("tg-guidance-scale", po::value<double>(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
-                    ("tg-mirostat-mode", po::value<int>(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
-                    ("tg-mirostat-tau", po::value<double>(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
-                    ("tg-mirostat-eta", po::value<double>(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
-                    ("tg-prompt-lookup-num-tokens", po::value<int>(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
-                    ("tg-max-tokens-second", po::value<int>(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
-                    ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
-                    ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
-                    ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
-                    ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
-                    ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
-                    ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
-                    ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-                    ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
-                    ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
-                    ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
-                    ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
-                    ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                    ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
-                    ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
-
-                    ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
-                    ("kc-max-length", po::value<int>(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
-                    ("kc-rep-pen", po::value<double>(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
-                    ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-                    ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
-                    ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-                    ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
-                    ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
-                    ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
-                    ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
-                    ("kc-top-k", po::value<double>(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
-                    ("kc-top-p", po::value<double>(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                    ("kc-min-p", po::value<double>(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                    ("kc-typical", po::value<double>(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
-                    ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
-                    ("kc-dynatemp_range", po::value<double>(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
-                    ("kc-smoothing-factor", po::value<double>(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
-                    ("kc-dynatemp-exponent", po::value<double>(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
-                    ("kc-mirostat", po::value<int>(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
-                    ("kc-mirostat-tau", po::value<double>(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
-                    ("kc-mirostat-eta", po::value<double>(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
-                    ("kc-genkey", po::value<std::string>(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
-                    ("kc-grammar", po::value<std::string>(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
-                    ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
-                    ("kc-memory", po::value<std::string>(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
-                    ("kc-images", po::value<std::vector<std::string>>(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
-                    ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
-                    ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
-                    ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-                    ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
-                    ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
-                    ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
-                    ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
-                    ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-                    ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
-                    ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
-                    ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
-                    ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
-                    ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
-                    ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
-
-                    ("sd-host", po::value<std::string>(&cfg.sd.host)->default_value("localhost"), "SD host")
-                    ("sd-port", po::value<std::string>(&cfg.sd.port)->default_value("7860"), "SD port")
-                    ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
-                    ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
-                    ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-                    ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
-                    ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
-                    ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
-                    ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
-                    ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
-                    ("sd-subseed-strength", po::value<double>(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
-                    ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
-                    ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-                    ("sd-sampler-name", po::value<std::string>(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
-                    ("sd-scheduler", po::value<std::string>(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
-                    ("sd-batch_size", po::value<int>(&cfg.sd.batch_size)->default_value(1), "SD batch size")
-                    ("sd-n-iter", po::value<int>(&cfg.sd.n_iter)->default_value(1), "SD n iter")
-                    ("sd-steps", po::value<int>(&cfg.sd.steps)->default_value(30), "SD steps")
-                    ("sd-cfg-scale", po::value<double>(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
-                    ("sd-width", po::value<int>(&cfg.sd.width)->default_value(1024), "SD image width")
-                    ("sd-height", po::value<int>(&cfg.sd.height)->default_value(1024), "SD image height")
-                    ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
-                    ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
-                    ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
-                    ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
-                    ("sd-eta", po::value<int>(&cfg.sd.eta)->default_value(0), "SD eta")
-                    ("sd-denoising-strength", po::value<double>(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
-                    ("sd-s-min-uncond", po::value<int>(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
-                    ("sd-s-churn", po::value<int>(&cfg.sd.s_churn)->default_value(0), "SD s churn")
-                    ("sd-s-tmax", po::value<int>(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
-                    ("sd-s-tmin", po::value<int>(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
-                    ("sd-s-noise", po::value<int>(&cfg.sd.s_noise)->default_value(1), "SD s noise")
-                    ("sd-override-settings", po::value<std::string>(&cfg.sd.override_settings)->default_value(""), "SD override settings")
-                    ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
-                    ("sd-refiner-checkpoint", po::value<std::string>(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-                    ("sd-refiner-switch-at", po::value<double>(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
-                    ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
-                    ("sd-firstpass-image", po::value<std::string>(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
-                    ("sd-comments", po::value<std::string>(&cfg.sd.comments)->default_value(""), "SD comments")
-                    ("sd-force-task-id", po::value<std::string>(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
-                    ("sd-sampler-index", po::value<std::string>(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
-                    ("sd-script-name", po::value<std::string>(&cfg.sd.script_name)->default_value(""), "SD script name")
-                    ("sd-script-args", po::value<std::vector<std::string>>(&cfg.sd.script_args), "SD script_args")
-                    ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
-                    ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
-                    ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-                    ("sd-ad-model", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-                    ("sd-ad-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-                    ("sd-ad-negative-prompt", po::value<std::string>(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
-                    ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
-                    ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
-
-                    ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
-
-                    ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
-                    ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
-                    ("sd-firstphase-width", po::value<int>(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
-                    ("sd-firstphase-height", po::value<int>(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
-                    ("sd-hr-scale", po::value<double>(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
-                    ("sd-hr-upscaler", po::value<std::string>(&cfg.sd.txt2img.hr_upscaler)->default_value("SwinIR_4x"), "SD hr upscaler")
-                    ("sd-hr-second-pass-steps", po::value<int>(&cfg.sd.txt2img.hr_second_pass_steps)->default_value(0), "SD hr second pass steps")
-                    ("sd-hr-resize-x", po::value<int>(&cfg.sd.txt2img.hr_resize_x)->default_value(0), "SD hr resize x")
-                    ("sd-hr-resize-y", po::value<int>(&cfg.sd.txt2img.hr_resize_y)->default_value(0), "SD hr resize y")
-                    ("sd-hr-checkpoint-name", po::value<std::string>(&cfg.sd.txt2img.hr_checkpoint_name)->default_value(""), "SD hr checkpoint name")
-                    //("sd-hr-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_prompt)->default_value(""), "SD hr prompt")
-                    //("sd-hr-negative-prompt", po::value<std::string>(&cfg.sd_txt2img_params.hr_negative_prompt)->default_value(""), "SD hr negative prompt")
-
-                    ("sd-img2img-target", po::value<std::string>(&cfg.sd.img2img.target)->default_value("/sdapi/v1/img2img"), "SD img2img target")
-                    ("sd-init-images", po::value<std::vector<std::string>>(&cfg.sd.img2img.init_images)->multitoken(), "SD img2img init_images (Base64 encoded images)")
-                    ("sd-seed-resize-from-h", po::value<int>(&cfg.sd.img2img.seed_resize_from_h)->default_value(-1), "SD img2img seed_resize_from_h")
-                    ("sd-seed-resize-from-w", po::value<int>(&cfg.sd.img2img.seed_resize_from_w)->default_value(-1), "SD img2img seed_resize_from_w")
-                    ("sd-resize-mode", po::value<int>(&cfg.sd.img2img.resize_mode)->default_value(0), "SD img2img resize_mode [0 - 3] (0: Just resize, 1: Crop and resize, 2: Resize and fill, 3: Just resize)")
-                    ("sd-image-cfg-scale", po::value<double>(&cfg.sd.img2img.image_cfg_scale)->default_value(1.0), "SD img2img image_cfg_scale")
-                    ("sd-mask", po::value<std::string>(&cfg.sd.img2img.mask)->default_value(""), "SD img2img mask (Base64 encoded image)")
-                    ("sd-mask-blur-x", po::value<int>(&cfg.sd.img2img.mask_blur_x)->default_value(4), "SD img2img mask_blur_x")
-                    ("sd-mask-blur-y", po::value<int>(&cfg.sd.img2img.mask_blur_y)->default_value(4), "SD img2img mask_blur_y")
-                    ("sd-mask-blur", po::value<int>(&cfg.sd.img2img.mask_blur)->default_value(4), "SD img2img mask_blur")
-                    ("sd-mask-round", po::bool_switch(&cfg.sd.img2img.mask_round)->default_value(true), "SD img2img mask_round")
-                    ("sd-inpainting-fill", po::value<int>(&cfg.sd.img2img.inpainting_fill)->default_value(0), "SD img2img inpainting_fill")
-                    ("sd-inpaint-full-res", po::bool_switch(&cfg.sd.img2img.inpaint_full_res)->default_value(true), "SD img2img inpaint_full_res")
-                    ("sd-inpaint-full-res-padding", po::value<int>(&cfg.sd.img2img.inpaint_full_res_padding)->default_value(0), "SD img2img inpaint_full_res_padding")
-                    ("sd-inpainting-mask-invert", po::value<int>(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
-                    ("sd-initial-noise-multiplier", po::value<double>(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
-                    ("sd-latent-mask", po::value<std::string>(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
-
-                    ("sb-host", po::value<std::string>(&cfg.sb.host)->default_value("localhost"), "SB host")
-                    ("sb-port", po::value<std::string>(&cfg.sb.port)->default_value("5001"), "SB port")
-                    ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
-                    ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
-                    ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
-                    ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
-                    ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
-                    ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
-                    ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
-                    ("sb-speaker-id", po::value<int>(&cfg.sb.speaker_id)->default_value(0), "SB speaker id")
-                    ("sb-sdp-ratio", po::value<double>(&cfg.sb.sdp_ratio)->default_value(0.2, "0.2"), "SB sdp ratio")
-                    ("sb-noise", po::value<double>(&cfg.sb.noise)->default_value(0.6, "0.6"), "SB noise")
-                    ("sb-noisew", po::value<double>(&cfg.sb.noisew)->default_value(0.8, "0.8"), "SB noisew")
-                    ("sb-length", po::value<double>(&cfg.sb.length)->default_value(1), "SB length")
-                    ("sb-language", po::value<std::string>(&cfg.sb.language)->default_value(""), "SB language")
-                    ("sb-auto-split", po::bool_switch(&cfg.sb.auto_split)->default_value(true), "SB auto split")
-                    ("sb-split-interval", po::value<double>(&cfg.sb.split_interval)->default_value(0.5, "0.5"), "SB split interval")
-                    ("sb-assist-text", po::value<std::string>(&cfg.sb.assist_text)->default_value(""), "SB assist text")
-                    ("sb-assist-text-weight", po::value<double>(&cfg.sb.assist_text_weight)->default_value(1), "SB assist text weight")
-                    ("sb-style", po::value<std::string>(&cfg.sb.style)->default_value(""), "SB style")
-                    ("sb-style-weight", po::value<double>(&cfg.sb.style_weight)->default_value(1), "SB style weight")
-                    ("sb-reference-audio-path", po::value<std::string>(&cfg.sb.reference_audio_path)->default_value(""), "SB reference audio path")
-
-                    ("cu-host", po::value<std::string>(&cfg.cu.host)->default_value("localhost"), "Comfy UI host")
-                    ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
-                    ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
-                    ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
-                    ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
-                    ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
-                    ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
-                    ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
-                    ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
-                    ;
-
-                po::options_description config_file_options;
-                config_file_options.add(allowed_options);
-
-                po::variables_map vm;
                 po::store(po::parse_command_line(argc, argv, allowed_options), vm, true);
                 po::notify(vm);
-
-                if (vm.find("help") != vm.end())
-                {
-                    boost::nowide::cout << allowed_options << std::endl;
-                    return 1;
-                }
-
-                try
-                {
-                    cfg.command_mode = string_to_command_mode(command_mode_string);
-                }
-                catch (const command_line_exception&)
-                {
-                    LLMCPP_LOG(error) << "mode options must be (tg | kc | sd | sb | cu | extract-png-parameters).";
-                    return 1;
-                }
-
-                cfg.llm.mode = string_to_llm_mode(llm_mode_string);
-                cfg.sd.mode = string_to_sd_mode(sd_mode_string);
-
-                if (!cfg.config_file.empty())
-                {
-                    std::istringstream config_file{ filesystem::read_text_file_to_string(cfg.config_file, cfg, ".ini") };
-                    po::store(po::parse_config_file(config_file, allowed_options), vm, true);
-                    po::notify(vm);
-                }
-
-                log::init_logging(cfg);
-
-                if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
-                {
-                    llm::init_llm_mode(cfg);
-                }
-
-                if (cfg.phases.empty())
-                {
-                    cfg.phases = { "" };
-                }
-
-                unescape_parameters(cfg);
-                parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
             }
             catch (const po::error& e)
             {
-                llmcpp::throw_exception(command_line_exception{} << error_info::description{ std::string{ "boost::program_options::error: " } + e.what() });
+                boost::nowide::cout << e.what();
+                return parse_result::program_options_error;
             }
 
-            return 0;
+            if (vm.find("help") != vm.end())
+            {
+                boost::nowide::cout << allowed_options << std::endl;
+                return parse_result::help;
+            }
+
+            log::init_logging(cfg);
+
+            cfg.command_mode = string_to_command_mode(command_mode_string);
+            cfg.llm.mode = string_to_llm_mode(llm_mode_string);
+            cfg.sd.mode = string_to_sd_mode(sd_mode_string);
+
+            if (!cfg.config_file.empty())
+            {
+                std::istringstream config_file{ filesystem::read_text_file_to_string(cfg.config_file, cfg, ".ini") };
+                po::store(po::parse_config_file(config_file, allowed_options), vm, true);
+                po::notify(vm);
+            }
+
+            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+            {
+                llm::init_llm_mode(cfg);
+                llm::read_paragraphs_file(cfg);
+            }
+
+            if (cfg.phases.empty())
+            {
+                cfg.phases = { "" };
+            }
+
+            unescape_parameters(cfg);
+            parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
+
+            return parse_result::success;
         }
 
         void unescape_parameters(config& cfg)
@@ -5853,6 +5854,8 @@ namespace llmcpp
 
         void init_logging(const config& cfg)
         {
+            boost::log::core::get()->remove_all_sinks();
+
             boost::log::trivial::severity_level level = boost::log::trivial::info;
             if (cfg.log_level == "trace")
             {
@@ -6310,9 +6313,14 @@ namespace llmcpp
         {
             config cfg;
 
-            if (command_line::parse_command_line(argc, argv, cfg))
+            command_line::parse_result result{ command_line::parse_command_line(argc, argv, cfg) };
+            if (result == command_line::parse_result::help)
             {
                 return 0;
+            }
+            else if (result == command_line::parse_result::program_options_error)
+            {
+                return -1;
             }
 
             if (cfg.create_process || cfg.terminate_process)

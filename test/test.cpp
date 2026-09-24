@@ -13,21 +13,21 @@ int main(int argc, char** argv) {
 
 struct commandline_args
 {
-    commandline_args(const std::vector<std::string>& args)
+    explicit commandline_args(const std::vector<std::string>& args)
         : args_{ args }
     {
         build_argv();
     }
 
     commandline_args(std::initializer_list<std::string> args)
-        : args_{ args.begin(), args.end()}
+        : args_{ args.begin(), args.end() }
     {
         build_argv();
     }
 
     commandline_args(const commandline_args&) = delete;
-    commandline_args& operator=(const commandline_args&) = delete;
     commandline_args(commandline_args&&) = delete;
+    commandline_args& operator=(const commandline_args&) = delete;
     commandline_args& operator=(commandline_args&&) = delete;
 
     int argc() const
@@ -56,16 +56,23 @@ private:
     std::vector<char*> argv_;
 };
 
-struct scoped_nowide_cout_redirect
+struct scoped_ostream_redirect
 {
-    scoped_nowide_cout_redirect()
-        : old_buf_(boost::nowide::cout.rdbuf(buffer_.rdbuf()))
-    {}
-
-    ~scoped_nowide_cout_redirect()
+    scoped_ostream_redirect(std::ostream& ostream)
+        : ostream_{ ostream }
+        , old_buf_{ ostream_.rdbuf(buffer_.rdbuf()) }
     {
-        boost::nowide::cout.rdbuf(old_buf_);
     }
+
+    ~scoped_ostream_redirect()
+    {
+        ostream_.rdbuf(old_buf_);
+    }
+
+    scoped_ostream_redirect(const scoped_ostream_redirect&) = delete;
+    scoped_ostream_redirect(scoped_ostream_redirect&&) = delete;
+    scoped_ostream_redirect& operator=(const scoped_ostream_redirect&) = delete;
+    scoped_ostream_redirect& operator=(scoped_ostream_redirect&&) = delete;
 
     std::string str() const
     {
@@ -73,28 +80,86 @@ struct scoped_nowide_cout_redirect
     }
 
 private:
+    std::ostream& ostream_;
     std::ostringstream buffer_;
     std::streambuf* old_buf_;
 };
 
-TEST(test_exception_safe_main, invalid_option)
+struct help_option_test : testing::TestWithParam<const char*> {};
+
+TEST_P(help_option_test, help)
 {
-    commandline_args args{ "llmcpp.exe", "--invalid-option"};
+    const char* option{ GetParam() };
+    commandline_args args{ "llmcpp.exe", option };
+    const scoped_ostream_redirect cout{ boost::nowide::cout };
 
-    scoped_nowide_cout_redirect cout;
-    EXPECT_NO_THROW(llmcpp::exception_safe_main(args.argc(), args.argv()));
-    const std::string stdout_output{ cout.str() };
+    llmcpp::command_line::parse_result result{};
+    llmcpp::config cfg;
+    EXPECT_NO_THROW({
+        result = llmcpp::command_line::parse_command_line(args.argc(), args.argv(), cfg);
+        });
+    EXPECT_EQ(result, llmcpp::command_line::parse_result::help);
 
-    EXPECT_THAT(stdout_output, testing::HasSubstr("[error]"));
+    const std::string cout_output{ cout.str() };
+    EXPECT_THAT(cout_output, testing::HasSubstr("Allowed options"));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    parse_command_line,
+    help_option_test,
+    testing::Values("--help", "-h")
+);
+
+TEST(parse_command_line, unrecognised_options)
+{
+    commandline_args args{ "llmcpp.exe", "--unrecognised-option" };
+    const scoped_ostream_redirect cout{ boost::nowide::cout };
+
+    llmcpp::command_line::parse_result result{};
+    llmcpp::config cfg;
+    EXPECT_NO_THROW({
+        result = llmcpp::command_line::parse_command_line(args.argc(), args.argv(), cfg);
+        });
+    EXPECT_EQ(result, llmcpp::command_line::parse_result::program_options_error);
+
+    const std::string cout_output{ cout.str() };
+    EXPECT_THAT(cout_output, testing::HasSubstr("unrecognised option"));
+    EXPECT_THAT(cout_output, testing::HasSubstr("--unrecognised-option"));
+}
+
+TEST(test_exception_safe_main, unrecognised_option)
+{
+    commandline_args args{ "llmcpp.exe", "--unrecognised-option" };
+    const scoped_ostream_redirect cout{ boost::nowide::cout };
+
+    int result{};
+    EXPECT_NO_THROW({
+        result = llmcpp::exception_safe_main(args.argc(), args.argv());
+        });
+    EXPECT_NE(result, 0);
 }
 
 TEST(test_exception_safe_main, help)
 {
     commandline_args args{ "llmcpp.exe", "--help" };
+    const scoped_ostream_redirect cout{ boost::nowide::cout };
 
-    scoped_nowide_cout_redirect cout;
-    EXPECT_NO_THROW(llmcpp::exception_safe_main(args.argc(), args.argv()));
-    const std::string stdout_output{ cout.str() };
-
-    EXPECT_THAT(stdout_output, testing::HasSubstr("Allowed options"));
+    int result{};
+    EXPECT_NO_THROW({
+        result = llmcpp::exception_safe_main(args.argc(), args.argv());
+        });
+    EXPECT_EQ(result, 0);
 }
+
+TEST(test_exception_safe_main, help_short)
+{
+    commandline_args args{ "llmcpp.exe", "-h" };
+    const scoped_ostream_redirect cout{ boost::nowide::cout };
+
+    int result{};
+    EXPECT_NO_THROW({
+        result = llmcpp::exception_safe_main(args.argc(), args.argv());
+        });
+    EXPECT_EQ(result, 0);
+}
+
