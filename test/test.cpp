@@ -176,7 +176,7 @@ TEST(lru_cache, get_tokens)
 {
     using cache_type = llmcpp::lru_cache<1>;
     constexpr int factor{ 2 };
-    auto callback{ [](std::string_view str) -> int { return static_cast<int>(str.size()) * factor; } };
+    const auto callback{ [](std::string_view str) -> int { return static_cast<int>(str.size()) * factor; } };
 
     cache_type cache{ callback };
     const std::string str{ "test" };
@@ -188,7 +188,7 @@ TEST(lru_cache, lru)
 {
     using cache_type = llmcpp::lru_cache<3>;
     int count{};
-    auto callback{ [&count](std::string_view str) -> int { return count++; } };
+    const auto callback{ [&count](std::string_view str) -> int { return count++; } };
 
     cache_type cache{ callback };
     EXPECT_EQ(cache.get_tokens("a"), 0);
