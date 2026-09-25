@@ -85,14 +85,14 @@ private:
     std::streambuf* old_buf_;
 };
 
-TEST(parse_command_line, noexcept_set_verbose)
+TEST(parse_command_line, set_verbose)
 {
     commandline_args args{ "llmcpp.exe", "--verbose" };
     llmcpp::config cfg;
     boost::program_options::options_description od{ llmcpp::command_line::make_options_description(cfg) };
     boost::program_options::variables_map vm;
-    EXPECT_NO_THROW(llmcpp::command_line::parse_command_line(od, args.argc(), args.argv(), vm));
-    EXPECT_NO_THROW(boost::program_options::notify(vm));
+    llmcpp::command_line::parse_command_line(od, args.argc(), args.argv(), vm);
+    boost::program_options::notify(vm);
     EXPECT_EQ(cfg.verbose, true);
 }
 
@@ -128,9 +128,7 @@ TEST(parse, unrecognised_options)
 
     llmcpp::command_line::parse_result result{};
     llmcpp::config cfg;
-    EXPECT_NO_THROW({
-        result = llmcpp::command_line::parse(args.argc(), args.argv(), cfg);
-        });
+    result = llmcpp::command_line::parse(args.argc(), args.argv(), cfg);
     EXPECT_EQ(result, llmcpp::command_line::parse_result::program_options_error);
 
     const std::string cerr_output{ cerr.str() };
@@ -183,22 +181,23 @@ TEST(lru_cache, get_tokens)
     cache_type cache{ callback };
     const std::string str{ "test" };
     EXPECT_EQ(cache.get_tokens(str), callback(str));
+    EXPECT_EQ(cache.get_tokens(str), callback(str));
 }
 
 TEST(lru_cache, lru)
 {
     using cache_type = llmcpp::lru_cache<3>;
     int count{};
-    auto callback{ [&count](std::string_view str) mutable -> int { return count++; } };
+    auto callback{ [&count](std::string_view str) -> int { return count++; } };
 
     cache_type cache{ callback };
     EXPECT_EQ(cache.get_tokens("a"), 0);
+    EXPECT_EQ(cache.get_tokens("a"), 0);
+    EXPECT_EQ(cache.get_tokens("b"), 1);
     EXPECT_EQ(cache.get_tokens("b"), 1);
     EXPECT_EQ(cache.get_tokens("a"), 0);
     EXPECT_EQ(cache.get_tokens("b"), 1);
     EXPECT_EQ(cache.get_tokens("c"), 2);
-    EXPECT_EQ(cache.get_tokens("a"), 0);
-    EXPECT_EQ(cache.get_tokens("b"), 1);
     EXPECT_EQ(cache.get_tokens("c"), 2);
     EXPECT_EQ(cache.get_tokens("d"), 3);
     EXPECT_EQ(cache.get_tokens("a"), 4);
