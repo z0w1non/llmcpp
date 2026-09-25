@@ -96,7 +96,7 @@ TEST_P(help_option_test, help)
     llmcpp::command_line::parse_result result{};
     llmcpp::config cfg;
     EXPECT_NO_THROW({
-        result = llmcpp::command_line::parse_command_line(args.argc(), args.argv(), cfg);
+        result = llmcpp::command_line::parse(args.argc(), args.argv(), cfg);
         });
     EXPECT_EQ(result, llmcpp::command_line::parse_result::help);
 
@@ -105,32 +105,32 @@ TEST_P(help_option_test, help)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    parse_command_line,
+    parse,
     help_option_test,
     testing::Values("--help", "-h")
 );
 
-TEST(parse_command_line, unrecognised_options)
+TEST(parse, unrecognised_options)
 {
     commandline_args args{ "llmcpp.exe", "--unrecognised-option" };
-    const scoped_ostream_redirect cout{ boost::nowide::cout };
+    const scoped_ostream_redirect cerr{ boost::nowide::cerr };
 
     llmcpp::command_line::parse_result result{};
     llmcpp::config cfg;
     EXPECT_NO_THROW({
-        result = llmcpp::command_line::parse_command_line(args.argc(), args.argv(), cfg);
+        result = llmcpp::command_line::parse(args.argc(), args.argv(), cfg);
         });
     EXPECT_EQ(result, llmcpp::command_line::parse_result::program_options_error);
 
-    const std::string cout_output{ cout.str() };
-    EXPECT_THAT(cout_output, testing::HasSubstr("unrecognised option"));
-    EXPECT_THAT(cout_output, testing::HasSubstr("--unrecognised-option"));
+    const std::string cerr_output{ cerr.str() };
+    EXPECT_THAT(cerr_output, testing::HasSubstr("unrecognised option"));
+    EXPECT_THAT(cerr_output, testing::HasSubstr("--unrecognised-option"));
 }
 
 TEST(test_exception_safe_main, unrecognised_option)
 {
     commandline_args args{ "llmcpp.exe", "--unrecognised-option" };
-    const scoped_ostream_redirect cout{ boost::nowide::cout };
+    const scoped_ostream_redirect cerr{ boost::nowide::cerr };
 
     int result{};
     EXPECT_NO_THROW({

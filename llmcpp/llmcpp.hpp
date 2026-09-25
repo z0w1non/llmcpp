@@ -1207,7 +1207,15 @@ namespace llmcpp
 
         BOOST_DEFINE_ENUM_CLASS(parse_result, success, help, program_options_error);
 
-        parse_result parse_command_line(int argc, char** argv, config& cfg);
+        boost::program_options::options_description make_options_description(config& cfg);
+
+        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, config& cfg, boost::program_options::variables_map& vm);
+
+        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, config& cfg, boost::program_options::variables_map& vm);
+
+        parse_result parse(int argc, char** argv, config& cfg);
+
+        void after_parse(config& cfg);
 
         void unescape_parameters(config& cfg);
     } // command_line
@@ -4894,12 +4902,12 @@ namespace llmcpp
             return result;
         }
 
-        parse_result parse_command_line(int argc, char** argv, config& cfg)
+        boost::program_options::options_description make_options_description(config& cfg)
         {
             namespace po = boost::program_options;
 
-            cfg.tg.stop = { "\\n\\n", ":", "***" };
-            cfg.tg.sampler_priority =
+            const std::vector<std::string> default_stop{ "\\n\\n", ":", "***" };
+            const std::vector<std::string> default_sampler_priority
             {
                 "repetition_penalty",
                 "presence_penalty",
@@ -4922,16 +4930,11 @@ namespace llmcpp
                 "encoder_repetition_penalty",
                 "no_repeat_ngram"
             };
-            cfg.tg.dry_sequence_breakers = "(\"\\n\", \":\", \"\\\"\", \"*\")";
 
-            std::string command_mode_string;
-            std::string llm_mode_string;
-            std::string sd_mode_string;
-
-            po::options_description allowed_options("Allowed options");
-            allowed_options.add_options()
+            po::options_description options_description("Allowed options");
+            options_description.add_options()
                 ("help,h", "produce help message")
-                ("mode", po::value<std::string>(&command_mode_string)->default_value(""), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
+                ("mode", po::value<std::string>()->notifier([&cfg](const std::string& value) { cfg.command_mode = string_to_command_mode(value); }), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
                 ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
                 ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
                 ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
@@ -4939,7 +4942,7 @@ namespace llmcpp
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
                 ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
                 ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
-                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken(), "phases name list")
+                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken()->default_value(std::vector<std::string>{ "" }, ""), "phases name list")
                 ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
 
                 ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
@@ -4974,7 +4977,7 @@ namespace llmcpp
                 ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
                 ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
 
-                ("llm-mode", po::value<std::string>(&llm_mode_string)->default_value("completions"), "LLM mode (completions | chat-completions)")
+                ("llm-mode", po::value<std::string>()->default_value("completions")->notifier([&cfg](const std::string& value) { cfg.llm.mode = string_to_llm_mode(value); }), "LLM mode (completions | chat-completions)")
 
                 ("tg-model", po::value<std::string>(&cfg.tg.model)->default_value("", "TG model"))
                 ("tg-num-best-of", po::value<int>(&cfg.tg.best_of)->default_value(1), "TG best of")
@@ -4985,7 +4988,7 @@ namespace llmcpp
                 ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
                 ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
                 ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken(), "TG stop sequences")
+                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken()->default_value(default_stop, boost::algorithm::join(default_stop, " ")), "TG stop sequences")
                 ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
                 ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
                 ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
@@ -5028,10 +5031,10 @@ namespace llmcpp
                 ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
                 ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
                 ("tg-truncation-length", po::value<int>(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
-                ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken(), "TG sampler priority")
+                ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken()->default_value(default_sampler_priority, boost::algorithm::join(default_sampler_priority, " ")), "TG sampler priority")
                 ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
                 ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value(""), "TG dry sequence breakers")
+                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value("(\"\\n\", \":\", \"\\\"\", \"*\")"), "TG dry sequence breakers")
                 ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
 
                 ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
@@ -5127,7 +5130,7 @@ namespace llmcpp
                 ("sd-infotext", po::value<std::string>(&cfg.sd.infotext)->default_value(""), "SD infotext")
                 ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
-                ("sd-mode", po::value<std::string>(&sd_mode_string)->default_value("txt2img"), "SD mode (txt2img | img2img)")
+                ("sd-mode", po::value<std::string>()->default_value("txt2img")->notifier([&cfg](const std::string& value) { cfg.sd.mode = string_to_sd_mode(value); }), "SD mode (txt2img | img2img)")
 
                 ("sd-txt2img-target", po::value<std::string>(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
                 ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
@@ -5194,46 +5197,57 @@ namespace llmcpp
                 ("cu-preserve-subdirectories", po::bool_switch(&cfg.cu.preserve_subdirectories)->default_value(false), "Comfy UI preserve server side sub-directories")
                 ;
 
-            po::options_description config_file_options;
-            config_file_options.add(allowed_options);
-            po::variables_map vm;
+            return options_description;
+        }
+
+        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, config& cfg, boost::program_options::variables_map& vm)
+        {
+            boost::program_options::store(boost::program_options::parse_command_line(argc, argv, options_description), vm);
+        }
+
+        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, config& cfg, boost::program_options::variables_map& vm)
+        {
+            boost::program_options::store(boost::program_options::parse_config_file(config_stream, options_description), vm);
+        }
+
+        parse_result parse(int argc, char** argv, config& cfg)
+        {
+            const boost::program_options::options_description options_description{ make_options_description(cfg) };
+            boost::program_options::variables_map vm;
 
             try
             {
-                po::store(po::parse_command_line(argc, argv, allowed_options), vm);
-                po::notify(vm);
+                parse_command_line(options_description, argc, argv, cfg, vm);
+
+                if (!cfg.config_file.empty())
+                {
+                    std::ifstream config_stream{ cfg.config_file };
+                    if (config_stream.is_open())
+                    {
+                        parse_config_stream(options_description, config_stream, cfg, vm);
+                    }
+                }
+
+                boost::program_options::notify(vm);
             }
-            catch (const po::error& e)
+            catch (boost::program_options::error& error)
             {
-                boost::nowide::cout << e.what();
+                boost::nowide::cerr << error.what() << std::endl;
                 return parse_result::program_options_error;
             }
 
             if (vm.find("help") != vm.end())
             {
-                boost::nowide::cout << allowed_options << std::endl;
+                boost::nowide::cout << options_description << std::endl;
                 return parse_result::help;
             }
 
+            return parse_result::success;
+        }
+
+        void after_parse(config& cfg)
+        {
             log::init_logging(cfg);
-
-            cfg.command_mode = string_to_command_mode(command_mode_string);
-
-            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
-            {
-                cfg.llm.mode = string_to_llm_mode(llm_mode_string);
-            }
-            else if (cfg.command_mode == command_mode::sd)
-            {
-                cfg.sd.mode = string_to_sd_mode(sd_mode_string);
-            }
-
-            if (!cfg.config_file.empty())
-            {
-                std::istringstream config_file{ filesystem::read_text_file_to_string(cfg.config_file, cfg, ".ini") };
-                po::store(po::parse_config_file(config_file, allowed_options), vm, true);
-                po::notify(vm);
-            }
 
             if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
             {
@@ -5241,15 +5255,8 @@ namespace llmcpp
                 llm::read_paragraphs_file(cfg);
             }
 
-            if (cfg.phases.empty())
-            {
-                cfg.phases = { "" };
-            }
-
             unescape_parameters(cfg);
             parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
-
-            return parse_result::success;
         }
 
         void unescape_parameters(config& cfg)
@@ -6385,7 +6392,7 @@ namespace llmcpp
         {
             config cfg;
 
-            const command_line::parse_result result{ command_line::parse_command_line(argc, argv, cfg) };
+            const command_line::parse_result result{ command_line::parse(argc, argv, cfg) };
             if (result == command_line::parse_result::help)
             {
                 return 0;
@@ -6394,6 +6401,7 @@ namespace llmcpp
             {
                 return -1;
             }
+            command_line::after_parse(cfg);
 
             if (cfg.create_process || cfg.terminate_process)
             {
