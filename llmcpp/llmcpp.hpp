@@ -5551,7 +5551,7 @@ namespace llmcpp
             boost::split(lines, string, boost::is_any_of("\n"));
             std::vector<std::string> temp;
 
-            auto truncate = [&](auto first, auto last)
+            const auto truncate = [&](auto first, auto last)
                 {
                     for (; first != last; ++first)
                     {
