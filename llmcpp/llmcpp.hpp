@@ -1131,8 +1131,6 @@ namespace llmcpp
     {
         void read_paragraphs_file(config& cfg);
 
-        void init_llm_mode(config& cfg);
-
         void init_chat_mode(config& cfg);
 
         std::vector<item> parse_item_list(std::string_view str);
@@ -3939,42 +3937,6 @@ namespace llmcpp
             }
         }
 
-        void init_llm_mode(config& cfg)
-        {
-            if (cfg.command_mode == command_mode::tg)
-            {
-                cfg.llm.backend = &cfg.tg;
-                if (cfg.llm.completions_target.empty())
-                {
-                    cfg.llm.completions_target = "/v1/completions";
-                }
-                if (cfg.llm.token_count_target.empty())
-                {
-                    cfg.llm.token_count_target = "/v1/internal/token-count";
-                }
-                if (cfg.llm.chat_completions_target.empty())
-                {
-                    cfg.llm.chat_completions_target = "/v1/chat/completions";
-                }
-            }
-            else if (cfg.command_mode == command_mode::kc)
-            {
-                cfg.llm.backend = &cfg.kc;
-                if (cfg.llm.completions_target.empty())
-                {
-                    cfg.llm.completions_target = "/api/v1/generate";
-                }
-                if (cfg.llm.token_count_target.empty())
-                {
-                    cfg.llm.token_count_target = "/api/extra/tokencount";
-                }
-                if (cfg.llm.chat_completions_target.empty())
-                {
-                    cfg.llm.chat_completions_target = "/v1/chat/completions";
-                }
-            }
-        }
-
         void init_chat_mode(config& cfg)
         {
             if (cfg.phases.empty())
@@ -4956,10 +4918,49 @@ namespace llmcpp
                 "no_repeat_ngram"
             };
 
+            const auto command_mode_notifier{ [&cfg](const std::string& value)
+                {
+                    cfg.command_mode = string_to_command_mode(value);
+
+                    if (cfg.command_mode == command_mode::tg)
+                    {
+                        cfg.llm.backend = &cfg.tg;
+                        if (cfg.llm.completions_target.empty())
+                        {
+                            cfg.llm.completions_target = "/v1/completions";
+                        }
+                        if (cfg.llm.token_count_target.empty())
+                        {
+                            cfg.llm.token_count_target = "/v1/internal/token-count";
+                        }
+                        if (cfg.llm.chat_completions_target.empty())
+                        {
+                            cfg.llm.chat_completions_target = "/v1/chat/completions";
+                        }
+                    }
+                    else if (cfg.command_mode == command_mode::kc)
+                    {
+                        cfg.llm.backend = &cfg.kc;
+                        if (cfg.llm.completions_target.empty())
+                        {
+                            cfg.llm.completions_target = "/api/v1/generate";
+                        }
+                        if (cfg.llm.token_count_target.empty())
+                        {
+                            cfg.llm.token_count_target = "/api/extra/tokencount";
+                        }
+                        if (cfg.llm.chat_completions_target.empty())
+                        {
+                            cfg.llm.chat_completions_target = "/v1/chat/completions";
+                        }
+                    }
+                }
+            };
+
             po::options_description options_description("Allowed options");
             options_description.add_options()
                 ("help,h", "produce help message")
-                ("mode", po::value<std::string>()->notifier([&cfg](const std::string& value) { cfg.command_mode = string_to_command_mode(value); }), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
+                ("mode", po::value<std::string>()->notifier(command_mode_notifier), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
                 ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
                 ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
                 ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
@@ -5273,12 +5274,6 @@ namespace llmcpp
         void after_parse(config& cfg)
         {
             log::init_logging(cfg);
-
-            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
-            {
-                llm::init_llm_mode(cfg);
-                llm::read_paragraphs_file(cfg);
-            }
 
             unescape_parameters(cfg);
             parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
@@ -6438,6 +6433,12 @@ namespace llmcpp
             {
                 const std::string parameters{ tEXt::extract_parameters(filesystem::read_binary_file_to_string(cfg.png_file, cfg)) };
                 boost::nowide::cout << parameters << std::flush;
+                return 0;
+            }
+
+            if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
+            {
+                llm::read_paragraphs_file(cfg);
             }
 
             set_static_builtin_variables(cfg);
