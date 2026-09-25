@@ -85,6 +85,17 @@ private:
     std::streambuf* old_buf_;
 };
 
+TEST(parse_command_line, noexcept_set_verbose)
+{
+    commandline_args args{ "llmcpp.exe", "--verbose" };
+    llmcpp::config cfg;
+    boost::program_options::options_description od{ llmcpp::command_line::make_options_description(cfg) };
+    boost::program_options::variables_map vm;
+    EXPECT_NO_THROW(llmcpp::command_line::parse_command_line(od, args.argc(), args.argv(), vm));
+    EXPECT_NO_THROW(boost::program_options::notify(vm));
+    EXPECT_EQ(cfg.verbose, true);
+}
+
 struct help_option_test : testing::TestWithParam<const char*> {};
 
 TEST_P(help_option_test, help)

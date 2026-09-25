@@ -1209,9 +1209,9 @@ namespace llmcpp
 
         boost::program_options::options_description make_options_description(config& cfg);
 
-        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, config& cfg, boost::program_options::variables_map& vm);
+        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, boost::program_options::variables_map& vm);
 
-        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, config& cfg, boost::program_options::variables_map& vm);
+        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, boost::program_options::variables_map& vm);
 
         parse_result parse(int argc, char** argv, config& cfg);
 
@@ -5200,12 +5200,12 @@ namespace llmcpp
             return options_description;
         }
 
-        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, config& cfg, boost::program_options::variables_map& vm)
+        void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, boost::program_options::variables_map& vm)
         {
             boost::program_options::store(boost::program_options::parse_command_line(argc, argv, options_description), vm);
         }
 
-        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, config& cfg, boost::program_options::variables_map& vm)
+        void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, boost::program_options::variables_map& vm)
         {
             boost::program_options::store(boost::program_options::parse_config_file(config_stream, options_description), vm);
         }
@@ -5217,14 +5217,14 @@ namespace llmcpp
 
             try
             {
-                parse_command_line(options_description, argc, argv, cfg, vm);
+                parse_command_line(options_description, argc, argv, vm);
 
                 if (!cfg.config_file.empty())
                 {
                     std::ifstream config_stream{ cfg.config_file };
                     if (config_stream.is_open())
                     {
-                        parse_config_stream(options_description, config_stream, cfg, vm);
+                        parse_config_stream(options_description, config_stream, vm);
                     }
                 }
 
