@@ -1473,7 +1473,7 @@ namespace llmcpp
             return boost::lexical_cast<std::string>(unwrap(value));
         }
 
-        [[noreturn]] std::string operator ()(const undefined_variable_type& undefined_variable) const
+        [[noreturn]] inline std::string operator()(const undefined_variable_type& undefined_variable) const
         {
             LLMCPP_LOG(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
             llmcpp::throw_exception(macro_exception{});
@@ -1831,15 +1831,12 @@ namespace llmcpp
         struct assign
         {
             context& ctx;
-            assign(context& ctx)
+            inline assign(context& ctx)
                 :ctx{ ctx }
             {
             }
 
-            vr_primitive_type operator()(vr_primitive_type& a, const vr_primitive_type& b) const
-            {
-                return boost::apply_visitor(detail::assign{ ctx }, a, b);
-            }
+            vr_primitive_type operator()(vr_primitive_type& a, const vr_primitive_type& b) const;
         };
 
 #define LLMCPP_DEFINE_FUNCTION(opecode)                                                       \
@@ -2141,7 +2138,7 @@ namespace llmcpp
 
         struct evaluation_visitor
         {
-            evaluation_visitor(const config& cfg, context& ctx)
+            inline evaluation_visitor(const config& cfg, context& ctx)
                 : cfg{ cfg }
                 , ctx{ ctx }
             {
@@ -2158,31 +2155,14 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<std::string>
         {
-            node_visitor(const config& cfg, context& ctx)
+            inline node_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<std::string>{}
             {
             }
 
-            std::string operator()(const std::string& str) const
-            {
-                return str;
-            }
-
-            std::string operator()(const placeholder_type& value) const
-            {
-                try
-                {
-                    const std::string evaluated{ vr_primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
-                    LLMCPP_LOG(trace) << "Placeholder evaluated (" << evaluated << ")";
-                    return evaluated;
-                }
-                catch (const macro_exception&)
-                {
-                    LLMCPP_LOG(warning) << "Placeholder evaluation failed";
-                    return std::string{};
-                }
-            }
+            std::string operator()(const std::string& str) const;
+            std::string operator()(const placeholder_type& value) const;
         };
 
         struct assignment_expression_visitor
@@ -2191,141 +2171,86 @@ namespace llmcpp
             const config& cfg; context& ctx;
             assignment_expression_visitor(const config& cfg, context& ctx) : cfg{ cfg }, ctx{ ctx } {}
 
-            vr_primitive_type operator()(const assignment_expression_node_type& expr) const
-            {
-                return evaluate_assignment_expression_node(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const conditional_expression_type& expr) const
-            {
-                return evaluate_conditional_expression(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const assignment_expression_type& expr) const
-            {
-                return evaluate_assignment_expression(expr, cfg, ctx);
-            }
+            vr_primitive_type operator()(const assignment_expression_node_type& expr) const;
+            vr_primitive_type operator()(const conditional_expression_type& expr) const;
+            vr_primitive_type operator()(const assignment_expression_type& expr) const;
         };
 
         struct conditional_expression_visitor
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            conditional_expression_visitor(const config& cfg, context& ctx)
+            inline conditional_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            vr_primitive_type operator()(const conditional_expression_node_type& value) const
-            {
-                const vr_primitive_type evaluated_condition{ evaluate_logical_or_expression(value.condition, cfg, ctx) };
-                if (static_cast_<bool>{}(evaluated_condition))
-                {
-                    return evaluate_expression(value.then_expr.get(), cfg, ctx);
-                }
-                return evaluate_conditional_expression(value.else_expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const logical_or_expression_type& value) const
-            {
-                return evaluate_logical_or_expression(value, cfg, ctx);
-            }
+            vr_primitive_type operator()(const conditional_expression_node_type& value) const;
+            vr_primitive_type operator()(const logical_or_expression_type& value) const;
         };
 
         struct prefix_expression_visitor
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            prefix_expression_visitor(const config& cfg, context& ctx)
+            inline prefix_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            vr_primitive_type operator()(const prefix_expression_node_type& expr) const
-            {
-                return evaluate_prefix_expression_node(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const suffix_expression_type& expr) const
-            {
-                return evaluate_suffix_expression(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const prefix_expression_type& expr) const
-            {
-                return evaluate_prefix_expression(expr, cfg, ctx);
-            }
+            vr_primitive_type operator()(const prefix_expression_node_type& expr) const;
+            vr_primitive_type operator()(const suffix_expression_type& expr) const;
+            vr_primitive_type operator()(const prefix_expression_type& expr) const;
         };
 
         struct parentheses_expression_visitor
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            parentheses_expression_visitor(const config& cfg, context& ctx)
+            inline parentheses_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            vr_primitive_type operator()(const macro_expression_type& expr) const
-            {
-                return evaluate_macro_expression(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const expression_type& expr) const
-            {
-                return evaluate_expression(expr, cfg, ctx);
-            }
+            vr_primitive_type operator()(const macro_expression_type& expr) const;
+            vr_primitive_type operator()(const expression_type& expr) const;
         };
 
         struct primary_visitor
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            primary_visitor(const config& cfg, context& ctx)
+            inline primary_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            vr_primitive_type operator()(const variable_type& variable) const
-            {
-                return evaluate_variable(variable, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const primitive_type& primitive) const
-            {
-                return primitive;
-            }
+            vr_primitive_type operator()(const variable_type& variable) const;
+            vr_primitive_type operator()(const primitive_type& primitive) const;
         };
 
         struct macro_expression_visitor
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            macro_expression_visitor(const config& cfg, context& ctx)
+            inline macro_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
             }
 
-            vr_primitive_type operator()(const macro_expression_node_type& expr) const
-            {
-                return evaluate_macro_expression_node(expr, cfg, ctx);
-            }
-
-            vr_primitive_type operator()(const primary_type& primary) const
-            {
-                return evaluate_primary(primary, cfg, ctx);
-            }
+            vr_primitive_type operator()(const macro_expression_node_type& expr) const;
+            vr_primitive_type operator()(const primary_type& primary) const;
         };
 
         struct primitive_ref_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            primitive_ref_to_vr_primitive_visitor() {}
+            inline primitive_ref_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(T& value) const
@@ -2337,7 +2262,7 @@ namespace llmcpp
         struct primitive_val_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            primitive_val_to_vr_primitive_visitor() {}
+            inline primitive_val_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(const T& value) const
@@ -2355,7 +2280,7 @@ namespace llmcpp
                 return unwrap(value);
             }
 
-            [[noreturn]] primitive_type operator()(const undefined_variable_type& undefined_variable) const
+            [[noreturn]] inline primitive_type operator()(const undefined_variable_type& undefined_variable) const
             {
                 llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
             }
@@ -3118,7 +3043,107 @@ namespace llmcpp
         {
             return boost::apply_visitor(vr_primitive_to_primitive_visitor(), primitive);
         }
-    }
+
+        vr_primitive_type assign::operator()(vr_primitive_type& a, const vr_primitive_type& b) const
+        {
+            return boost::apply_visitor(detail::assign{ ctx }, a, b);
+        }
+
+        std::string node_visitor::operator()(const std::string& str) const
+        {
+            return str;
+        }
+
+        std::string node_visitor::operator()(const placeholder_type& value) const
+        {
+            try
+            {
+                const std::string evaluated{ vr_primitive_to_string(evaluate_expression(value.expression, cfg, ctx)) };
+                LLMCPP_LOG(trace) << "Placeholder evaluated (" << evaluated << ")";
+                return evaluated;
+            }
+            catch (const macro_exception&)
+            {
+                LLMCPP_LOG(warning) << "Placeholder evaluation failed";
+                return std::string{};
+            }
+        }
+
+        vr_primitive_type assignment_expression_visitor::operator()(const assignment_expression_node_type& expr) const
+        {
+            return evaluate_assignment_expression_node(expr, cfg, ctx);
+        }
+
+        vr_primitive_type assignment_expression_visitor::operator()(const conditional_expression_type& expr) const
+        {
+            return evaluate_conditional_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type assignment_expression_visitor::operator()(const assignment_expression_type& expr) const
+        {
+            return evaluate_assignment_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type conditional_expression_visitor::operator()(const conditional_expression_node_type& value) const
+        {
+            const vr_primitive_type evaluated_condition{ evaluate_logical_or_expression(value.condition, cfg, ctx) };
+            if (static_cast_<bool>{}(evaluated_condition))
+            {
+                return evaluate_expression(value.then_expr.get(), cfg, ctx);
+            }
+            return evaluate_conditional_expression(value.else_expr, cfg, ctx);
+        }
+
+        vr_primitive_type conditional_expression_visitor::operator()(const logical_or_expression_type& value) const
+        {
+            return evaluate_logical_or_expression(value, cfg, ctx);
+        }
+
+        vr_primitive_type prefix_expression_visitor::operator()(const prefix_expression_node_type& expr) const
+        {
+            return evaluate_prefix_expression_node(expr, cfg, ctx);
+        }
+
+        vr_primitive_type prefix_expression_visitor::operator()(const suffix_expression_type& expr) const
+        {
+            return evaluate_suffix_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type prefix_expression_visitor::operator()(const prefix_expression_type& expr) const
+        {
+            return evaluate_prefix_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type parentheses_expression_visitor::operator()(const macro_expression_type& expr) const
+        {
+            return evaluate_macro_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type parentheses_expression_visitor::operator()(const expression_type& expr) const
+        {
+            return evaluate_expression(expr, cfg, ctx);
+        }
+
+        vr_primitive_type primary_visitor::operator()(const variable_type& variable) const
+        {
+            return evaluate_variable(variable, cfg, ctx);
+        }
+
+        vr_primitive_type primary_visitor::operator()(const primitive_type& primitive) const
+        {
+            return primitive;
+        }
+
+        vr_primitive_type macro_expression_visitor::operator()(const macro_expression_node_type& expr) const
+        {
+            return evaluate_macro_expression_node(expr, cfg, ctx);
+        }
+
+        vr_primitive_type macro_expression_visitor::operator()(const primary_type& primary) const
+        {
+            return evaluate_primary(primary, cfg, ctx);
+        }
+    } // namespace parser
 
     std::optional<builtin::macro_type> builtin::get_macro(std::string_view name)
     {
