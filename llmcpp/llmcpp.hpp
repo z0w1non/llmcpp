@@ -1258,11 +1258,11 @@ namespace llmcpp
         template<typename Sink>
         void set_formatter(Sink& sink);
 
-        void init_logging_cout();
+        void init_log_cout();
 
-        void init_logging_file(const std::filesystem::path& log);
+        void init_log_file(const std::filesystem::path& log);
 
-        void init_logging(const config& cfg);
+        void init_log_level(std::string_view log_level);
     } // namespace log
 
     template<typename Integer>
@@ -5273,8 +5273,17 @@ namespace llmcpp
 
         void after_parse(config& cfg)
         {
-            log::init_logging(cfg);
-
+            boost::log::core::get()->remove_all_sinks();
+            if (cfg.verbose)
+            {
+                log::init_log_cout();
+            }
+            if (!cfg.log_file.empty())
+            {
+                const std::filesystem::path log_file_path{ filesystem::string_to_path_by_config(filesystem::complement_extension(cfg.log_file, ".txt"), cfg) };
+                log::init_log_file(log_file_path);
+            }
+            log::init_log_level(cfg.log_level);
             unescape_parameters(cfg);
             parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
         }
@@ -5916,7 +5925,7 @@ namespace llmcpp
             );
         }
 
-        void init_logging_cout()
+        void init_log_cout()
         {
             const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
             backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
@@ -5930,7 +5939,7 @@ namespace llmcpp
             boost::log::core::get()->add_sink(sink);
         }
 
-        void init_logging_file(const std::filesystem::path& log)
+        void init_log_file(const std::filesystem::path& log)
         {
             const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
             filesystem::create_parent_directories(log);
@@ -5951,49 +5960,37 @@ namespace llmcpp
             boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
         }
 
-        void init_logging(const config& cfg)
+        void init_log_level(std::string_view log_level)
         {
-            boost::log::core::get()->remove_all_sinks();
+            boost::log::trivial::severity_level level{ boost::log::trivial::info };
 
-            boost::log::trivial::severity_level level = boost::log::trivial::info;
-            if (cfg.log_level == "trace")
+            if (log_level == "trace")
             {
                 level = boost::log::trivial::trace;
             }
-            else if (cfg.log_level == "debug")
+            else if (log_level == "debug")
             {
                 level = boost::log::trivial::debug;
             }
-            else if (cfg.log_level == "info")
+            else if (log_level == "info")
             {
                 level = boost::log::trivial::info;
             }
-            else if (cfg.log_level == "warning")
+            else if (log_level == "warning")
             {
                 level = boost::log::trivial::warning;
             }
-            else if (cfg.log_level == "error")
+            else if (log_level == "error")
             {
                 level = boost::log::trivial::error;
             }
-            else if (cfg.log_level == "fatal")
+            else if (log_level == "fatal")
             {
                 level = boost::log::trivial::fatal;
             }
             else
             {
-                LLMCPP_LOG(warning) << "Unkown log level: \"" << cfg.log_level << "\"";
-            }
-
-            if (cfg.verbose)
-            {
-                init_logging_cout();
-            }
-
-            if (!cfg.log_file.empty())
-            {
-                const std::filesystem::path log_file_path{ filesystem::string_to_path_by_config(filesystem::complement_extension(cfg.log_file, ".txt"), cfg) };
-                init_logging_file(log_file_path);
+                LLMCPP_LOG(warning) << "Unkown log level: \"" << log_level << "\"";
             }
 
             boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
