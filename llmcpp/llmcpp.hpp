@@ -184,20 +184,9 @@ namespace llmcpp
     {
         using is_transparent = void;
 
-        std::size_t operator()(std::string_view sv) const noexcept
-        {
-            return std::hash<std::string_view>{}(sv);
-        }
-
-        std::size_t operator()(const std::string& s) const noexcept
-        {
-            return std::hash<std::string_view>{}(s);
-        }
-
-        std::size_t operator()(const char* s) const noexcept
-        {
-            return std::hash<std::string_view>{}(s);
-        }
+        std::size_t operator()(std::string_view sv) const noexcept;
+        std::size_t operator()(const std::string& s) const noexcept;
+        std::size_t operator()(const char* s) const noexcept;
     };
 
     template<typename T>
@@ -636,7 +625,7 @@ namespace llmcpp
     const Result& get_or_throw(const primitive_type& value);
 
     template<typename Result>
-std::optional<Result> get_optional(const primitive_type& value);
+    std::optional<Result> get_optional(const primitive_type& value);
 
     struct context
     {
@@ -5533,6 +5522,22 @@ namespace llmcpp
             remaining_tokens -= cruncated.tokens;
         }
     } // namespace string_utils
+
+    std::size_t string_hash::operator()(std::string_view sv) const noexcept
+    {
+        return std::hash<std::string_view>{}(sv);
+    }
+
+    std::size_t string_hash::operator()(const std::string& s) const noexcept
+    {
+        return std::hash<std::string_view>{}(s);
+    }
+
+    std::size_t string_hash::operator()(const char* s) const noexcept
+    {
+        return std::hash<std::string_view>{}(s);
+    }
+
 
     image_info_type image_info_type::from_file(std::string_view path, const config& cfg)
     {
