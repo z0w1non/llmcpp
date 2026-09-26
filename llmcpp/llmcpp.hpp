@@ -727,7 +727,7 @@ namespace llmcpp
 
         command_mode command_mode;
         std::string base_path;
-        std::string log_level;
+        boost::log::trivial::severity_level log_level{ boost::log::trivial::info };
         std::string log_file;
         std::string config_file;
         bool verbose{};
@@ -1272,9 +1272,9 @@ namespace llmcpp
 
         void init_log_file(const std::filesystem::path& log);
 
-        void init_log_level(std::string_view log_level);
+        boost::log::trivial::severity_level string_to_severity_level(std::string_view log_level);
 
-        void init_log(bool verbose, std::optional<std::filesystem::path> log_file, std::string_view log_level);
+        void init_log(bool verbose, std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level);
     } // namespace log
 
     template<typename Integer>
@@ -4944,6 +4944,14 @@ namespace llmcpp
                 "no_repeat_ngram"
             };
 
+            const auto log_level_notifier
+            {
+                [&cfg](const std::string& log_level)
+                {
+                    cfg.log_level = log::string_to_severity_level(log_level);
+                }
+            };
+
             const auto command_mode_notifier{ [&cfg](const std::string& value)
                 {
                     cfg.command_mode = string_to_command_mode(value);
@@ -5010,7 +5018,7 @@ namespace llmcpp
                 ("help,h", "produce help message")
                 ("mode", po::value<std::string>()->notifier(command_mode_notifier), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
                 ("base-path", po::value<std::string>(&cfg.base_path)->default_value("."), "base path")
-                ("log-level", po::value<std::string>(&cfg.log_level)->default_value("info"), "log level (trace|debug|info|warning|error|fatal)")
+                ("log-level", po::value<std::string>()->default_value("info")->notifier(log_level_notifier), "log level (trace|debug|info|warning|error|fatal)")
                 ("log-file", po::value<std::string>(&cfg.log_file)->default_value("log"), "log file path")
                 ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
@@ -5991,46 +5999,46 @@ namespace llmcpp
             boost::log::core::get()->add_sink(sink);
         }
 
-        void init_log_level(std::string_view log_level)
+        boost::log::trivial::severity_level string_to_severity_level(std::string_view log_level)
         {
-            boost::log::trivial::severity_level level{ boost::log::trivial::info };
+            boost::log::trivial::severity_level severity_level{ boost::log::trivial::info };
 
             if (log_level == "trace")
             {
-                level = boost::log::trivial::trace;
+                severity_level = boost::log::trivial::trace;
             }
             else if (log_level == "debug")
             {
-                level = boost::log::trivial::debug;
+                severity_level = boost::log::trivial::debug;
             }
             else if (log_level == "info")
             {
-                level = boost::log::trivial::info;
+                severity_level = boost::log::trivial::info;
             }
             else if (log_level == "warning")
             {
-                level = boost::log::trivial::warning;
+                severity_level = boost::log::trivial::warning;
             }
             else if (log_level == "error")
             {
-                level = boost::log::trivial::error;
+                severity_level = boost::log::trivial::error;
             }
             else if (log_level == "fatal")
             {
-                level = boost::log::trivial::fatal;
+                severity_level = boost::log::trivial::fatal;
             }
             else
             {
-                LLMCPP_LOG(warning) << "Unkown log level: \"" << log_level << "\"";
+                llmcpp::throw_exception(logic_error{} << error_info::description{ std::string{ log_level } });
             }
 
-            boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
+            return severity_level;
         }
 
-        void init_log(bool verbose, const std::optional<std::filesystem::path> log_file, std::string_view log_level)
+        void init_log(bool verbose, const std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level)
         {
             boost::log::core::get()->remove_all_sinks();
-            log::init_log_level(log_level);
+            boost::log::core::get()->set_filter(boost::log::trivial::severity >= log_level);
             if (verbose)
             {
                 log::init_log_cout();
