@@ -1720,7 +1720,7 @@ namespace llmcpp
             };
 
             template<typename A, typename B>
-            concept safe_assignable_to_impl =
+            concept safe_assignable_to =
                 std::is_arithmetic_v<A>
                 && std::is_arithmetic_v<B>
                 && std::is_convertible_v<A, B>
@@ -1728,7 +1728,7 @@ namespace llmcpp
                 && requires(A a) { B{ a }; };
 
             template<typename A, typename B>
-            concept safe_arithmetic_assignable_to_impl =
+            concept safe_arithmetic_assignable_to =
                 std::is_arithmetic_v<A>
                 && std::is_arithmetic_v<B>
                 && std::is_convertible_v<A, B>
@@ -1737,7 +1737,7 @@ namespace llmcpp
                 && requires(A a) { B{ a }; };
 
             template<typename A, typename B>
-            concept safe_bitwise_assignable_to_impl =
+            concept safe_bitwise_assignable_to =
                 std::is_integral_v<A>
                 && std::is_integral_v<B>
                 && std::is_convertible_v<A, B>
@@ -1793,13 +1793,13 @@ namespace llmcpp
         } && !std::same_as<llmcpp::decay_t<A>, bool>;
 
         template<typename A, typename B>
-        concept safe_assignable_to = detail::safe_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
+        concept safe_assignable_to = detail::safe_assignable_to<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         template<typename A, typename B>
-        concept safe_arithmetic_assignable_to = detail::safe_arithmetic_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
+        concept safe_arithmetic_assignable_to = detail::safe_arithmetic_assignable_to<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         template<typename A, typename B>
-        concept safe_bitwise_assignable_to = detail::safe_bitwise_assignable_to_impl<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
+        concept safe_bitwise_assignable_to = detail::safe_bitwise_assignable_to<llmcpp::decay_t<A>, llmcpp::decay_t<B>>;
 
         namespace detail
         {
