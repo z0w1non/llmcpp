@@ -334,16 +334,8 @@ namespace llmcpp
         int parse_response_for_token_count(const std::string& response) const override;
         nlohmann::json get_request_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
-
-        int get_max_tokens() const override
-        {
-            return max_tokens;
-        }
-
-        int get_truncation_length() const override
-        {
-            return truncation_length;
-        }
+        int get_max_tokens() const override { return max_tokens; }
+        int get_truncation_length() const override { return truncation_length; }
     };
 
     struct kc_parameters
@@ -398,16 +390,8 @@ namespace llmcpp
         int parse_response_for_token_count(const std::string& response) const override;
         nlohmann::json get_request_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
-
-        int get_max_tokens() const override
-        {
-            return max_length;;
-        }
-
-        int get_truncation_length() const override
-        {
-            return max_context_length;
-        }
+        int get_max_tokens() const override { return max_length; }
+        int get_truncation_length() const override { return max_context_length; }
     };
 
     struct adetailer_parametesrs
@@ -652,7 +636,7 @@ namespace llmcpp
     const Result& get_or_throw(const primitive_type& value);
 
     template<typename Result>
-    std::optional<Result> get_optional(const primitive_type& value);
+std::optional<Result> get_optional(const primitive_type& value);
 
     struct context
     {
@@ -679,24 +663,25 @@ namespace llmcpp
         int tokens{};
     };
 
-    struct by_key {};
-    struct by_lru {};
+    namespace detail
+    {
+        namespace lru_cache
+        {
+            struct by_key {};
+            struct by_lru {};
+            using key_index = boost::multi_index::hashed_unique<boost::multi_index::tag<by_key>, boost::multi_index::member<token_count_string, std::string, &token_count_string::str>, string_hash, std::equal_to<std::string_view>>;
+            using lru_sequenced_index = boost::multi_index::sequenced<boost::multi_index::tag<by_lru>>;
+            using indices = boost::multi_index::indexed_by<key_index, lru_sequenced_index>;
+            using base = boost::multi_index::multi_index_container<token_count_string, indices>;
+        }
+    } // namespace detail
 
     template<std::size_t Capacity>
-    struct lru_cache
-        : private boost::multi_index::multi_index_container<
-        token_count_string,
-        boost::multi_index::indexed_by<
-        boost::multi_index::hashed_unique<
-        boost::multi_index::tag<by_key>,
-        boost::multi_index::member<token_count_string, std::string, &token_count_string::str>,
-        string_hash,
-        std::equal_to<std::string_view>
-        >,
-        boost::multi_index::sequenced<boost::multi_index::tag<by_lru>>
-        >
-        >
+    struct lru_cache : private detail::lru_cache::base
     {
+        using by_key = detail::lru_cache::by_key;
+        using by_lru = detail::lru_cache::by_lru;
+
         static constexpr std::size_t capacity{ Capacity };
         using callback_type = std::function<int(std::string_view)>;
         lru_cache(const callback_type& callback);
@@ -1082,19 +1067,10 @@ namespace llmcpp
 
     struct url_params_setter
     {
-        url_params_setter(boost::urls::url& url)
-            : url{ url }
-        {
-        }
-
-        template<typename T>
-        url_params_setter& operator()(std::string_view key, T value);
-
-        template<typename T>
-        url_params_setter& set_if(bool condition, std::string_view key, const T& value);
-
-        template<typename T1, typename T2>
-        url_params_setter& set_if_else(bool condition, std::string_view key_true, const T1& value_true, std::string_view key_false, const T2& value_false);
+        url_params_setter(boost::urls::url& url) : url{ url } {}
+        template<typename T> url_params_setter& operator()(std::string_view key, T value);
+        template<typename T> url_params_setter& set_if(bool condition, std::string_view key, const T& value);
+        template<typename T1, typename T2> url_params_setter& set_if_else(bool condition, std::string_view key_true, const T1& value_true, std::string_view key_false, const T2& value_false);
 
         boost::urls::url& url;
     };
@@ -1102,79 +1078,47 @@ namespace llmcpp
     namespace filesystem
     {
         void create_parent_directories(const std::filesystem::path& path);
-
         std::string read_file_to_string(const std::filesystem::path& file, std::ios::openmode openmode = {});
-
         std::string read_binary_file_to_string(std::string_view file, const config& cfg);
-
         std::string read_text_file_to_string(std::string_view path, const config& cfg, std::string_view extension = ".txt");
-
         std::string image_path_to_base64_encoded_string(std::string_view image_path, const config& cfg);
-
         std::vector<std::string> image_paths_to_base64_encoded_strings(const std::vector<std::string>& paths, const config& cfg);
-
         std::string complement_extension(std::string_view filepath, std::string_view extension);
-
         std::string complement_codeblock_extension(std::string_view language_identifier);
-
         std::filesystem::path string_to_path_by_config(std::string_view path, const config& cfg);
-
         std::string base64_image_to_url(std::string_view base64_image, std::string_view mime_type);
-
         std::string_view extension_to_mime_type(std::string_view extension);
-
         void write_file(const config& cfg, const char* data, std::size_t size, std::string_view filepath, std::ios_base::openmode mode = 0);
-
         void write_file(const config& cfg, std::string_view data, std::string_view filepath, std::ios_base::openmode mode = 0);
-
         std::string prompt_from_string_or_file_path(std::string_view string, std::string_view file_path, const config& cfg);
     } // namespace filesystem
 
     namespace llm
     {
         void read_paragraphs_file(config& cfg);
-
         void init_chat_mode(config& cfg);
-
         std::vector<item> parse_item_list(std::string_view str);
-
         void write_item_list(const config& cfg, std::string_view task);
-
         std::string send_completions_request(const config& cfg, std::string_view prompt, const llm_backend_parameters& params, int max_tokens);
-
         std::string send_chat_completions_request(const config& cfg, const llm_backend_parameters& params, const nlohmann::json& messages);
-
         std::string completions(const config& cfg, std::string_view prompt, const context& ctx);
-
         std::string chat_completions(const config& cfg, const context& ctx, const nlohmann::json& messages);
-
         void completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
-
         std::string generate_uuid_v4();
-
         std::string generate_chat_filename();
-
         void chat_completions_and_write_file(const config& cfg, std::string_view prompt, const context& ctx);
-
         void write_code_block(const config& cfg, std::string_view markdown);
-
         using code_blocks = string_unordered_map<std::string>;
-
         code_blocks extract_code_block_from_markdown(std::string_view markdown_content);
-
         std::string remove_reasoning(std::string_view response, std::string_view prefix, std::string_view suffix);
     } // namespace llm
 
     namespace sd
     {
         std::string make_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
-
         nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
-
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
-
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
-
         std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
     } // namespace sd
 
@@ -1186,62 +1130,38 @@ namespace llmcpp
     namespace cu
     {
         std::string generate_boundary();
-
         std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite = true);
-
         void upload_images(const config& cfg, context& ctx);
-
         void send_request(const config& cfg, std::string_view workflow);
-
         struct generated_file_info;
-
         std::vector<generated_file_info> receive_generated_file_info(const config& cfg, std::string_view prompt_id);
-
         void write_generated_files(const config& cfg, const std::vector<generated_file_info>& target_files);
     } // namespace cu
 
     namespace command_line
     {
         void parse_user_defined_variables(const std::vector<std::string>& predefined_macros, context& ctx);
-
         std::vector<std::string> split_command_line_args(std::string_view args);
-
         BOOST_DEFINE_ENUM_CLASS(parse_result, success, help, program_options_error);
-
         boost::program_options::options_description make_options_description(config& cfg);
-
         void parse_command_line(const boost::program_options::options_description& options_description, int argc, char** argv, boost::program_options::variables_map& vm);
-
         void parse_config_stream(const boost::program_options::options_description& options_description, std::istream& config_stream, boost::program_options::variables_map& vm);
-
         parse_result parse(int argc, char** argv, config& cfg);
-
         void after_parse(config& cfg);
     } // command_line
 
     namespace string_utils
     {
         std::string unescape_string(std::string_view str);
-
-        template<typename T>
-        T unescape_strings(const T& strings);
-
+        template<typename T> T unescape_strings(const T& strings);
         std::string json_escape_string(std::string_view str);
-
         std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg);
-
         std::string base64_encode(std::string_view encoded_string);
-
         std::string base64_decode(std::string_view encoded_string);
-
         bool is_base64(std::string_view str, std::size_t threshold);
-
         bool has_base64(const nlohmann::json& json, std::size_t threshold);
-
         std::string console_string_to_u8string(std::string_view input);
-
         token_count_string truncate_by_tokens(std::string_view string, int max_tokens, const config& cfg, bool reverse);
-
         void truncate_prompt(std::string_view string, const config& cfg, bool reverse, std::string& result, int& remaining_tokens);
     } // namespace string_utils
 
@@ -1263,58 +1183,32 @@ namespace llmcpp
         using sinchronous_sink = boost::log::sinks::synchronous_sink<text_ostream_backend>;
 
         boost::shared_ptr<sinchronous_sink> create_stream_sink(const boost::shared_ptr<std::ostream>& ostream);
-
         boost::shared_ptr<sinchronous_sink> create_file_sink(const std::filesystem::path& log);
-
         boost::shared_ptr<sinchronous_sink> create_cout_sink();
-
-        template<typename Sink>
-        void set_formatter(Sink& sink);
-
+        template<typename Sink> void set_formatter(Sink& sink);
         void init_log_cout();
-
         void init_log_file(const std::filesystem::path& log);
-
         boost::log::trivial::severity_level string_to_severity_level(std::string_view log_level);
-
         void init_log(bool verbose, std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level);
     } // namespace log
 
-    template<typename Integer>
-    Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
-
+    template<typename Integer> Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
-
     void set_static_builtin_variables(config& cfg);
-
     void set_dynamic_builtin_variables(config& cfg);
-
     void set_paragraphs_to_phases(const std::vector<item>& paragraphs, std::vector<std::string>& phases);
-
     std::string sanitize_as_filename(std::string_view name);
-
     std::string_view language_identifier_to_extension(std::string_view language_identifier);
-
     bool wait_for_port(const std::string& host, const std::string& port, unsigned int max_retries, unsigned int wait_ms);
-
     void create_process_async(std::string_view excutable_file, const std::vector<std::string>& arguments);
-
     std::size_t terminate_process_by_path(const std::filesystem::path& executable_file_path);
-
     void generate_and_output(const config& cfg);
-
     void set_seed(config& cfg);
-
     void create_process(const config& cfg);
-
     void terminate_process(const config& cfg);
-
     void create_process_or_terminate(const config& cfg);
-
     void iterate(config& cfg);
-
     int exception_safe_main(int argc, char** argv);
-
     int nowide_main(int argc, char** argv);
 } // namespace llmcpp
 
@@ -1486,7 +1380,7 @@ namespace llmcpp
             return boost::lexical_cast<std::string>(unwrap(value));
         }
 
-        [[noreturn]] inline std::string operator()(const undefined_variable_type& undefined_variable) const
+        [[noreturn]] std::string operator()(const undefined_variable_type& undefined_variable) const
         {
             LLMCPP_LOG(warning) << "Failed to convert undefined variable to string (" << undefined_variable.name << ")";
             llmcpp::throw_exception(macro_exception{});
@@ -1847,7 +1741,7 @@ namespace llmcpp
         struct assign
         {
             context& ctx;
-            inline assign(context& ctx)
+            assign(context& ctx)
                 :ctx{ ctx }
             {
             }
@@ -2154,7 +2048,7 @@ namespace llmcpp
 
         struct evaluation_visitor
         {
-            inline evaluation_visitor(const config& cfg, context& ctx)
+            evaluation_visitor(const config& cfg, context& ctx)
                 : cfg{ cfg }
                 , ctx{ ctx }
             {
@@ -2171,7 +2065,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<std::string>
         {
-            inline node_visitor(const config& cfg, context& ctx)
+            node_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<std::string>{}
             {
@@ -2196,7 +2090,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            inline conditional_expression_visitor(const config& cfg, context& ctx)
+            conditional_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
@@ -2210,7 +2104,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            inline prefix_expression_visitor(const config& cfg, context& ctx)
+            prefix_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
@@ -2225,7 +2119,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            inline parentheses_expression_visitor(const config& cfg, context& ctx)
+            parentheses_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
@@ -2239,7 +2133,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            inline primary_visitor(const config& cfg, context& ctx)
+            primary_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
@@ -2253,7 +2147,7 @@ namespace llmcpp
             : evaluation_visitor
             , boost::static_visitor<vr_primitive_type>
         {
-            inline macro_expression_visitor(const config& cfg, context& ctx)
+            macro_expression_visitor(const config& cfg, context& ctx)
                 : evaluation_visitor{ cfg, ctx }
                 , boost::static_visitor<vr_primitive_type>{}
             {
@@ -2266,7 +2160,7 @@ namespace llmcpp
         struct primitive_ref_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            inline primitive_ref_to_vr_primitive_visitor() {}
+            primitive_ref_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(T& value) const
@@ -2278,7 +2172,7 @@ namespace llmcpp
         struct primitive_val_to_vr_primitive_visitor
             : boost::static_visitor<vr_primitive_type>
         {
-            inline primitive_val_to_vr_primitive_visitor() {}
+            primitive_val_to_vr_primitive_visitor() {}
 
             template<typename T>
             vr_primitive_type operator()(const T& value) const
@@ -2296,7 +2190,7 @@ namespace llmcpp
                 return unwrap(value);
             }
 
-            [[noreturn]] inline primitive_type operator()(const undefined_variable_type& undefined_variable) const
+            [[noreturn]] primitive_type operator()(const undefined_variable_type& undefined_variable) const
             {
                 llmcpp::throw_exception(macro_exception{} << error_info::description{ "Undefined variable" });
             }
