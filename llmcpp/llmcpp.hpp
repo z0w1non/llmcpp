@@ -6001,7 +6001,7 @@ namespace llmcpp
 
         boost::log::trivial::severity_level string_to_severity_level(std::string_view log_level)
         {
-            boost::log::trivial::severity_level severity_level{ boost::log::trivial::info };
+            boost::log::trivial::severity_level severity_level;
 
             if (log_level == "trace")
             {
