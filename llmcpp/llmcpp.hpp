@@ -1214,13 +1214,14 @@ namespace llmcpp
         parse_result parse(int argc, char** argv, config& cfg);
 
         void after_parse(config& cfg);
-
-        void unescape_parameters(config& cfg);
     } // command_line
 
     namespace string_utils
     {
         std::string unescape_string(std::string_view str);
+
+        template<typename T>
+        T unescape_strings(const T& strings);
 
         std::string json_escape_string(std::string_view str);
 
@@ -1255,6 +1256,15 @@ namespace llmcpp
         };
 #endif
 
+        using text_ostream_backend = boost::log::sinks::text_ostream_backend;
+        using sinchronous_sink = boost::log::sinks::synchronous_sink<text_ostream_backend>;
+
+        boost::shared_ptr<sinchronous_sink> create_stream_sink(const boost::shared_ptr<std::ostream>& ostream);
+
+        boost::shared_ptr<sinchronous_sink> create_file_sink(const std::filesystem::path& log);
+
+        boost::shared_ptr<sinchronous_sink> create_cout_sink();
+
         template<typename Sink>
         void set_formatter(Sink& sink);
 
@@ -1263,6 +1273,8 @@ namespace llmcpp
         void init_log_file(const std::filesystem::path& log);
 
         void init_log_level(std::string_view log_level);
+
+        void init_log(bool verbose, std::optional<std::filesystem::path> log_file, std::string_view log_level);
     } // namespace log
 
     template<typename Integer>
@@ -2362,6 +2374,20 @@ namespace llmcpp
         boost::beast::tcp_stream tcp_stream{ ioc };
         bool connected{};
     };
+
+    namespace string_utils
+    {
+        template<typename T>
+        T unescape_strings(const T& strings)
+        {
+            T temp{ strings };
+            for (auto& str : temp)
+            {
+                str = unescape_string(str);
+            }
+            return temp;
+        }
+    } // namespace string_utils
 } // namespace llmcpp
 
 #endif // LLMCPP_HPP
@@ -4957,6 +4983,28 @@ namespace llmcpp
                 }
             };
 
+            const auto make_unescape_string_notifier
+            {
+                [&cfg](auto& ref)
+                {
+                    return [&cfg, &ref](const auto& str)
+                        {
+                            ref = string_utils::unescape_string(str);
+                        };
+                }
+            };
+
+            const auto make_unescape_strings_notifier
+            {
+                [&cfg](auto& ref)
+                {
+                    return [&cfg, &ref](const auto& strings)
+                        {
+                            ref = string_utils::unescape_strings(strings);
+                        };
+                }
+            };
+
             po::options_description options_description("Allowed options");
             options_description.add_options()
                 ("help,h", "produce help message")
@@ -4967,8 +5015,8 @@ namespace llmcpp
                 ("config-file,c", po::value<std::string>(&cfg.config_file)->default_value("config.ini"), "config file path")
                 ("verbose,v", po::bool_switch(&cfg.verbose)->default_value(false), "enable verbose output")
                 ("number-iterations,N", po::value<int>(&cfg.number_iterations)->default_value(1), "number of iterations (-1 means infinity)")
-                ("define,D", po::value<std::vector<std::string>>(&cfg.user_defined_variables)->multitoken(), "define variables (key=value)")
-                ("phases", po::value<std::vector<std::string>>(&cfg.phases)->multitoken()->default_value(std::vector<std::string>{ "" }, ""), "phases name list")
+                ("define,D", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.user_defined_variables)), "define variables (key=value)")
+                ("phases", po::value<std::vector<std::string>>()->multitoken()->default_value(std::vector<std::string>{ "" }, "")->notifier(make_unescape_strings_notifier(cfg.phases)), "phases name list")
                 ("seed", po::value<int>(&cfg.seed)->default_value(-1), "seed value")
 
                 ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
@@ -4983,12 +5031,12 @@ namespace llmcpp
                 ("timeout-connect", po::value<unsigned int>(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
                 ("timeout-request", po::value<unsigned int>(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
 
-                ("llm-prompt", po::value<std::string>(&cfg.llm.prompt)->default_value(""), "LLM prompt")
+                ("llm-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.llm.prompt)), "LLM prompt")
                 ("llm-prompt-file", po::value<std::string>(&cfg.llm.prompt_file)->default_value("prompt"), "LLM prompt file path")
                 ("llm-output-file", po::value<std::string>(&cfg.llm.output_file)->default_value("output"), "LLM output file path")
                 ("llm-chat-file", po::value<std::string>(&cfg.llm.chat_file)->default_value(""), "LLM (input / output) chat file path")
-                ("llm-generation-prefix", po::value<std::string>(&cfg.llm.generation_prefix)->default_value(""), "LLM generation prefix")
-                ("llm-generation-suffix", po::value<std::string>(&cfg.llm.generation_suffix)->default_value(""), "LLM generation suffix")
+                ("llm-generation-prefix", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.llm.generation_prefix)), "LLM generation prefix")
+                ("llm-generation-suffix", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.llm.generation_suffix)), "LLM generation suffix")
                 ("llm-paragraphs-file", po::value<std::string>(&cfg.llm.paragraphs_file)->default_value(""), "LLM paragraphs file")
                 ("llm-image-file", po::value<std::string>(&cfg.llm.image_file)->default_value(""), "LLM image file")
                 ("llm-host", po::value<std::string>(&cfg.llm.host)->default_value("localhost"), "LLM host")
@@ -4999,8 +5047,8 @@ namespace llmcpp
                 ("llm-chat-completions-target", po::value<std::string>(&cfg.llm.chat_completions_target)->default_value(""), "LLM chat completions target")
                 ("llm-min-completion-tokens", po::value<int>(&cfg.llm.min_completion_tokens)->default_value(256), "LLM min completion tokens")
                 ("llm-max-completion-iterations", po::value<int>(&cfg.llm.max_completion_iterations)->default_value(5), "LLM max completion iterations")
-                ("llm-reasoning-prefix", po::value<std::string>(&cfg.llm.reasoning_prefix)->default_value(""), "LLM reasoning prefix")
-                ("llm-reasoning-suffix", po::value<std::string>(&cfg.llm.reasoning_suffix)->default_value(""), "LLM reasoning suffix")
+                ("llm-reasoning-prefix", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.llm.reasoning_prefix)), "LLM reasoning prefix")
+                ("llm-reasoning-suffix", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.llm.reasoning_suffix)), "LLM reasoning suffix")
                 ("llm-code-block-extract", po::bool_switch(&cfg.llm.code_block_extract)->default_value(false), "LLM code block extract switch")
 
                 ("llm-mode", po::value<std::string>()->default_value("completions")->notifier([&cfg](const std::string& value) { cfg.llm.mode = string_to_llm_mode(value); }), "LLM mode (completions | chat-completions)")
@@ -5014,7 +5062,7 @@ namespace llmcpp
                 ("tg-max-tokens", po::value<int>(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
                 ("tg-n", po::value<int>(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
                 ("tg-presence-penalty", po::value<double>(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                ("tg-stop", po::value<std::vector<std::string>>(&cfg.tg.stop)->multitoken()->default_value(default_stop, boost::algorithm::join(default_stop, " ")), "TG stop sequences")
+                ("tg-stop", po::value<std::vector<std::string>>()->multitoken()->default_value(default_stop, boost::algorithm::join(default_stop, " "))->notifier(make_unescape_strings_notifier(cfg.tg.stop)), "TG stop sequences")
                 ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
                 ("tg-suffix", po::value<std::string>(&cfg.tg.suffix)->default_value(""), "TG suffix")
                 ("tg-temperature", po::value<double>(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
@@ -5060,7 +5108,7 @@ namespace llmcpp
                 ("tg-sampler-priority", po::value<std::vector<std::string>>(&cfg.tg.sampler_priority)->multitoken()->default_value(default_sampler_priority, boost::algorithm::join(default_sampler_priority, " ")), "TG sampler priority")
                 ("tg-custom-token-bans", po::value<std::string>(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
                 ("tg-negative-prompt", po::value<std::string>(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                ("tg-dry-sequence-breakers", po::value<std::string>(&cfg.tg.dry_sequence_breakers)->default_value("(\"\\n\", \":\", \"\\\"\", \"*\")"), "TG dry sequence breakers")
+                ("tg-dry-sequence-breakers", po::value<std::string>()->default_value("(\"\\n\", \":\", \"\\\"\", \"*\")")->notifier(make_unescape_string_notifier(cfg.tg.dry_sequence_breakers)), "TG dry sequence breakers")
                 ("tg-grammar-string", po::value<std::string>(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
 
                 ("kc-max-context-length", po::value<int>(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
@@ -5069,7 +5117,7 @@ namespace llmcpp
                 ("kc-rep-pen-range", po::value<int>(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
                 ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
                 ("kc-sampler-seed", po::value<int>(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-                ("kc-stop-sequence", po::value<std::vector<std::string>>(&cfg.kc.stop_sequence)->multitoken(), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+                ("kc-stop-sequence", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.stop_sequence)), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
                 ("kc-temperature", po::value<double>(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
                 ("kc-tfs", po::value<double>(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
                 ("kc-top-a", po::value<double>(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
@@ -5092,12 +5140,12 @@ namespace llmcpp
                 ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
                 ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
                 ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-                ("kc-banned-tokens", po::value<std::vector<std::string>>(&cfg.kc.banned_tokens)->multitoken(), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+                ("kc-banned-tokens", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.banned_tokens)), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
                 ("kc-dry-multiplier", po::value<double>(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
                 ("kc-dry-base", po::value<double>(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
                 ("kc-dry-allowed-length", po::value<int>(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
                 ("kc-dry-penalty-last-n", po::value<int>(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>(&cfg.kc.dry_sequence_breakers)->multitoken(), "An array of string sequence breakers for DRY.")
+                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.dry_sequence_breakers)), "An array of string sequence breakers for DRY.")
                 ("kc-xtc-threshold", po::value<double>(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
                 ("kc-xtc-probability", po::value<double>(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
                 ("kc-nsigma", po::value<double>(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
@@ -5109,8 +5157,8 @@ namespace llmcpp
                 ("sd-prompt-file", po::value<std::string>(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
                 ("sd-negative-prompt-file", po::value<std::string>(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
                 ("sd-output-file", po::value<std::string>(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-                ("sd-prompt", po::value<std::string>(&cfg.sd.prompt)->default_value(""), "SD prompt")
-                ("sd-negative-prompt", po::value<std::string>(&cfg.sd.negative_prompt)->default_value(""), "SD negative prompt")
+                ("sd-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.prompt)), "SD prompt")
+                ("sd-negative-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.negative_prompt)), "SD negative prompt")
                 ("sd-styles", po::value<std::vector<std::string>>(&cfg.sd.styles), "SD styles")
                 ("sd-seed", po::value<int>(&cfg.sd.seed)->default_value(-1), "SD seed")
                 ("sd-subseed", po::value<int>(&cfg.sd.subseed)->default_value(-1), "SD subseed")
@@ -5194,7 +5242,7 @@ namespace llmcpp
                 ("sb-target", po::value<std::string>(&cfg.sb.target)->default_value("/voice"), "SB voide target")
                 ("sb-text-file", po::value<std::string>(&cfg.sb.text_file)->default_value("text"), "SB text file")
                 ("sb-output-file", po::value<std::string>(&cfg.sb.output_file)->default_value("{{datetime}}.wav"), "SB output WAV")
-                ("sb-text", po::value<std::string>(&cfg.sb.text)->default_value(""), "SB text")
+                ("sb-text", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sb.text)), "SB text")
                 ("sb-model-name", po::value<std::string>(&cfg.sb.model_name)->default_value(""), "SB model name")
                 ("sb-model-id", po::value<int>(&cfg.sb.model_id)->default_value(0), "SB model id")
                 ("sb-speaker-name", po::value<std::string>(&cfg.sb.speaker_name)->default_value(""), "SB speaker name")
@@ -5216,7 +5264,7 @@ namespace llmcpp
                 ("cu-port", po::value<std::string>(&cfg.cu.port)->default_value("8188"), "Comfy UI port")
                 ("cu-prompt-target", po::value<std::string>(&cfg.cu.prompt_target)->default_value("/prompt"), "Comfy UI prompt target")
                 ("cu-upload-image-target", po::value<std::string>(&cfg.cu.upload_image_target)->default_value("/upload/image"), "Comfy UI upload image target")
-                ("cu-prompt", po::value<std::string>(&cfg.cu.prompt)->default_value(""), "Comfy UI prompt")
+                ("cu-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.cu.prompt)), "Comfy UI prompt")
                 ("cu-prompt-file", po::value<std::string>(&cfg.cu.prompt_file)->default_value("prompt.json"), "Comfy UI prompt file")
                 ("cu-output-directory", po::value<std::string>(&cfg.cu.output_directory)->default_value("output"), "Comfy UI output directory")
                 ("cu-upload-images", po::value<std::vector<std::string>>(&cfg.cu.upload_images)->multitoken(), "Comfy UI upload images (macro_name=local_path)")
@@ -5273,39 +5321,14 @@ namespace llmcpp
 
         void after_parse(config& cfg)
         {
-            boost::log::core::get()->remove_all_sinks();
-            if (cfg.verbose)
-            {
-                log::init_log_cout();
-            }
+            std::optional<std::filesystem::path> log_file_path;
             if (!cfg.log_file.empty())
             {
-                const std::filesystem::path log_file_path{ filesystem::string_to_path_by_config(filesystem::complement_extension(cfg.log_file, ".txt"), cfg) };
-                log::init_log_file(log_file_path);
+                log_file_path = filesystem::string_to_path_by_config(filesystem::complement_extension(cfg.log_file, ".txt"), cfg);
             }
-            log::init_log_level(cfg.log_level);
-            unescape_parameters(cfg);
-            parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
-        }
+            log::init_log(cfg.verbose, log_file_path, cfg.log_level);
 
-        void unescape_parameters(config& cfg)
-        {
-            boost::transform(cfg.user_defined_variables, cfg.user_defined_variables.begin(), string_utils::unescape_string);
-            boost::transform(cfg.phases, cfg.phases.begin(), string_utils::unescape_string);
-            cfg.llm.prompt = string_utils::unescape_string(cfg.llm.prompt);
-            cfg.llm.generation_prefix = string_utils::unescape_string(cfg.llm.generation_prefix);
-            cfg.llm.generation_suffix = string_utils::unescape_string(cfg.llm.generation_suffix);
-            cfg.llm.reasoning_prefix = string_utils::unescape_string(cfg.llm.reasoning_prefix);
-            cfg.llm.reasoning_suffix = string_utils::unescape_string(cfg.llm.reasoning_suffix);
-            boost::transform(cfg.tg.stop, cfg.tg.stop.begin(), string_utils::unescape_string);
-            cfg.tg.dry_sequence_breakers = string_utils::unescape_string(cfg.tg.dry_sequence_breakers);
-            boost::transform(cfg.kc.stop_sequence, cfg.kc.stop_sequence.begin(), string_utils::unescape_string);
-            boost::transform(cfg.kc.banned_tokens, cfg.kc.banned_tokens.begin(), string_utils::unescape_string);
-            boost::transform(cfg.kc.dry_sequence_breakers, cfg.kc.dry_sequence_breakers.begin(), string_utils::unescape_string);
-            cfg.sd.prompt = string_utils::unescape_string(cfg.sd.prompt);
-            cfg.sd.negative_prompt = string_utils::unescape_string(cfg.sd.negative_prompt);
-            cfg.sb.text = string_utils::unescape_string(cfg.sb.text);
-            cfg.cu.prompt = string_utils::unescape_string(cfg.cu.prompt);
+            parse_user_defined_variables(cfg.user_defined_variables, cfg.ctx);
         }
     } // namespace command_line
 
@@ -5923,41 +5946,49 @@ namespace llmcpp
 #endif
                 << boost::log::expressions::smessage
             );
+            boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
         }
 
-        void init_log_cout()
+        boost::shared_ptr<sinchronous_sink> create_stream_sink(const boost::shared_ptr<std::ostream>& ostream)
         {
-            const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
-            backend->add_stream(boost::shared_ptr<std::ostream>{ &boost::nowide::cout, boost::null_deleter{} });
+            const boost::shared_ptr<text_ostream_backend> backend{ boost::make_shared<text_ostream_backend>() };
+            backend->add_stream(ostream);
             backend->auto_flush(true);
 
-            const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
-            {
-                boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
-            };
+            const boost::shared_ptr<sinchronous_sink> sink{ boost::make_shared<sinchronous_sink>(backend) };
             set_formatter(sink);
-            boost::log::core::get()->add_sink(sink);
+            return sink;
         }
 
-        void init_log_file(const std::filesystem::path& log)
+        boost::shared_ptr<sinchronous_sink> create_file_sink(const std::filesystem::path& log)
         {
-            const boost::shared_ptr<boost::log::sinks::text_ostream_backend> backend{ boost::make_shared<boost::log::sinks::text_ostream_backend>() };
             filesystem::create_parent_directories(log);
             boost::shared_ptr<boost::nowide::ofstream> ofs{ boost::make_shared<boost::nowide::ofstream>(log, std::ios::app) };
             if (!ofs->is_open())
             {
                 llmcpp::throw_exception(file_open_exception{} << error_info::path{ log });
             }
-            backend->add_stream(ofs);
-            backend->auto_flush(true);
+            return create_stream_sink(ofs);
+        }
 
-            const boost::shared_ptr<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>> sink
-            {
-                boost::make_shared<boost::log::sinks::synchronous_sink<boost::log::sinks::text_ostream_backend>>(backend)
-            };
+        boost::shared_ptr<sinchronous_sink> create_cout_sink()
+        {
+            const boost::shared_ptr<std::ostream> cout_stream{ &std::cout, boost::null_deleter{} };
+            return create_stream_sink(cout_stream);
+        }
+
+        void init_log_cout()
+        {
+            const boost::shared_ptr<sinchronous_sink> sink{ create_cout_sink() };
             set_formatter(sink);
             boost::log::core::get()->add_sink(sink);
-            boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
+        }
+
+        void init_log_file(const std::filesystem::path& log)
+        {
+            const boost::shared_ptr<sinchronous_sink> sink{ create_file_sink(log) };
+            set_formatter(sink);
+            boost::log::core::get()->add_sink(sink);
         }
 
         void init_log_level(std::string_view log_level)
@@ -5994,6 +6025,20 @@ namespace llmcpp
             }
 
             boost::log::core::get()->set_filter(boost::log::trivial::severity >= level);
+        }
+
+        void init_log(bool verbose, const std::optional<std::filesystem::path> log_file, std::string_view log_level)
+        {
+            boost::log::core::get()->remove_all_sinks();
+            log::init_log_level(log_level);
+            if (verbose)
+            {
+                log::init_log_cout();
+            }
+            if (log_file)
+            {
+                log::init_log_file(*log_file);
+            }
         }
     } // namespace log
 
