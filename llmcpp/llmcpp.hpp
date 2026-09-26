@@ -635,11 +635,14 @@ namespace llmcpp
     template<typename T>
     decltype(auto) unwrap(T&& arg);
 
-    template<typename T>
-    struct unwrap_type_impl;
+    namespace detail
+    {
+        template<typename T>
+        struct unwrap_type;
+    }
 
     template <typename T>
-    using unwrap_type_t = typename unwrap_type_impl<std::decay_t<T>>::type;
+    using unwrap_type_t = typename detail::unwrap_type<std::decay_t<T>>::type;
 
     std::string primitive_to_string(const primitive_type& primitive);
 
@@ -1490,44 +1493,47 @@ namespace llmcpp
         }
     };
 
-    struct unwrap_impl
+    namespace detail
     {
-        template<typename T>
-        decltype(auto) operator()(T&& value)
+        struct unwrap
         {
-            return std::forward<T>(value);
-        }
+            template<typename T>
+            decltype(auto) operator()(T&& value)
+            {
+                return std::forward<T>(value);
+            }
+
+            template<typename T>
+            T& operator()(std::reference_wrapper<T> ref)
+            {
+                return ref.get();
+            }
+
+            template<typename T>
+            const T& operator()(std::reference_wrapper<const T> ref)
+            {
+                return ref.get();
+            }
+        };
 
         template<typename T>
-        T& operator()(std::reference_wrapper<T> ref)
+        struct unwrap_type
         {
-            return ref.get();
-        }
+            using type = T;
+        };
 
         template<typename T>
-        const T& operator()(std::reference_wrapper<const T> ref)
+        struct unwrap_type<std::reference_wrapper<T>>
         {
-            return ref.get();
-        }
-    };
+            using type = T;
+        };
+    }
 
     template<typename T>
     decltype(auto) unwrap(T&& arg)
     {
-        return unwrap_impl{}(std::forward<T>(arg));
+        return detail::unwrap{}(std::forward<T>(arg));
     }
-
-    template<typename T>
-    struct unwrap_type_impl
-    {
-        using type = T;
-    };
-
-    template<typename T>
-    struct unwrap_type_impl<std::reference_wrapper<T>>
-    {
-        using type = T;
-    };
 
     template<typename T>
     using decay_t = std::decay_t<unwrap_type_t<T>>;
