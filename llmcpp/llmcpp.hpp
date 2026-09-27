@@ -6549,3 +6549,5 @@ namespace llmcpp
 } // namespace llmcpp
 
 #endif // LLMCPP_IMPLEMENTATION
+
+#undef LLMCPP_LOG
