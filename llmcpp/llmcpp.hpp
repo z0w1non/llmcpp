@@ -1804,14 +1804,6 @@ namespace llmcpp
                 LLMCPP_RETURNS(boost::apply_visitor(Visitor{}, std::forward<Args>(args) ...))
         };
 
-        //#define LLMCPP_DEFINE_OPERATOR_VISITOR(opecode)                                                      \
-        //        struct opecode                                                                               \
-        //        {                                                                                            \
-        //            template<typename ... Args>                                                              \
-        //            auto operator()(Args&& ... args) const                                                   \
-        //            LLMCPP_RETURNS(boost::apply_visitor(operators::opecode{}, std::forward<Args>(args) ...)) \
-        //        };
-
         namespace visitor
         {
             template<typename Operator, typename Trait, bool ZeroCheck>
@@ -1848,21 +1840,21 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, trait, zero_check)                       \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, trait, zero_check)                               \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                                 \
         using opecode = basic_visit<visitor::basic_assign<operators::opecode, trait, zero_check>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(+=, plus_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(-=, minus_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(*=, multiplies_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(<<=, shift_left_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(>>=, shift_right_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(&=, and_assign, lazy_is_safe_bitwise_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(^=, xor_assign, lazy_is_safe_bitwise_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(|=, or_assign, lazy_is_safe_bitwise_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(/=, divides_assign, lazy_is_safe_arithmetic_assignable_to, true);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(%=, modulus_assign, lazy_is_safe_arithmetic_assignable_to, true);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(+=, plus_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(-=, minus_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(*=, multiplies_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(<<=, shift_left_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(>>=, shift_right_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(&=, and_assign, lazy_is_safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(^=, xor_assign, lazy_is_safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(|=, or_assign, lazy_is_safe_bitwise_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(/=, divides_assign, lazy_is_safe_arithmetic_assignable_to, true);
+        LLMCPP_DEFINE_FUNCTOR(%=, modulus_assign, lazy_is_safe_arithmetic_assignable_to, true);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -1875,6 +1867,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a), unwrap(b));
                 }
+
                 template<typename A, typename B>
                     requires (!(bitwise_operable<unwrap_type_t<A>>&& bitwise_operable<unwrap_type_t<B>>))
                 [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
@@ -1884,18 +1877,18 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                        \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);               \
         using opecode = basic_visit<visitor::basic_bitwise<operators::opecode>>;
 
-        //LLMCPP_DEFINE_FUNCTION_OBJECT(|| , logical_or);
-        //LLMCPP_DEFINE_FUNCTION_OBJECT(&&, logical_and);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(| , or_);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(^, xor_);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(&, and_);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(<< , shift_left);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(>> , shift_right);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        //LLMCPP_DEFINE_FUNCTOR(|| , logical_or);
+        //LLMCPP_DEFINE_FUNCTOR(&&, logical_and);
+        LLMCPP_DEFINE_FUNCTOR(| , or_);
+        LLMCPP_DEFINE_FUNCTOR(^, xor_);
+        LLMCPP_DEFINE_FUNCTOR(&, and_);
+        LLMCPP_DEFINE_FUNCTOR(<< , shift_left);
+        LLMCPP_DEFINE_FUNCTOR(>> , shift_right);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -1908,6 +1901,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a), unwrap(b));
                 }
+
                 template<typename A, typename B>
                     requires (!(safe_equality_comparable_with<A, B>))
                 [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
@@ -1916,13 +1910,13 @@ namespace llmcpp
                 }
             };
         }
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                         \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                 \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                \
         using opecode = basic_visit<visitor::basic_equality<operators::opecode>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(== , equal);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(!= , not_equal);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(== , equal);
+        LLMCPP_DEFINE_FUNCTOR(!= , not_equal);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -1944,15 +1938,15 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                           \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                   \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                  \
         using opecode = basic_visit<visitor::basic_relational<operators::opecode>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(< , less);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(> , greater);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(<= , less_equal);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(>= , greater_equal);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(< , less);
+        LLMCPP_DEFINE_FUNCTOR(> , greater);
+        LLMCPP_DEFINE_FUNCTOR(<= , less_equal);
+        LLMCPP_DEFINE_FUNCTOR(>= , greater_equal);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -1964,6 +1958,7 @@ namespace llmcpp
                     requires(const A & a, const B & b) { Operator{}(unwrap(a), unwrap(b)); }
                 && !std::same_as<llmcpp::decay_t<A>, bool>
                     && !std::same_as<llmcpp::decay_t<B>, bool>;
+
                 template<typename A, typename B>
                     requires (operable<A, B>)
                 vr_primitive_type operator ()(const A& a, const B& b) const
@@ -1981,6 +1976,7 @@ namespace llmcpp
                     }
                     return Operator{}(unwrap(a), unwrap(b));
                 }
+
                 template<typename A, typename B>
                     requires (!operable<A, B>)
                 [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
@@ -1990,16 +1986,16 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, zero_check)                           \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, zero_check)                                   \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                              \
         using opecode = basic_visit<visitor::basic_arithmetic<operators::opecode, zero_check>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(+, plus, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(-, minus, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(*, multiplies, false);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(/ , divides, true);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(%, modulus, true);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(+, plus, false);
+        LLMCPP_DEFINE_FUNCTOR(-, minus, false);
+        LLMCPP_DEFINE_FUNCTOR(*, multiplies, false);
+        LLMCPP_DEFINE_FUNCTOR(/ , divides, true);
+        LLMCPP_DEFINE_FUNCTOR(%, modulus, true);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -2012,6 +2008,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a));
                 }
+
                 template<typename A>
                     requires (!requires(A& a) { Operator{}(unwrap(a)); })
                 [[noreturn]] vr_primitive_type operator ()(A& a) const
@@ -2021,13 +2018,13 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                               \
         LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode);              \
         using opecode = basic_visit<visitor::basic_prefix<operators::opecode>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(++, prefix_increment);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(--, prefix_decrement);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(++, prefix_increment);
+        LLMCPP_DEFINE_FUNCTOR(--, prefix_decrement);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -2040,6 +2037,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a));
                 }
+
                 template<typename A>
                     requires (!(Trait::template value<A>))
                 [[noreturn]] vr_primitive_type operator ()(const A& a) const
@@ -2049,15 +2047,15 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode, trait)                        \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, trait)                                \
         LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode);                      \
         using opecode = basic_visit<visitor::basic_prefix_<operators::opecode, trait>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(+, prefix_plus, lazy_is_safe_unary_arithmetic);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(-, prefix_minus, lazy_is_safe_unary_arithmetic);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(!, logical_not, lazy_is_safe_logical_notable);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(~, bitwise_not, lazy_is_safe_bitwise_notable);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(+, prefix_plus, lazy_is_safe_unary_arithmetic);
+        LLMCPP_DEFINE_FUNCTOR(-, prefix_minus, lazy_is_safe_unary_arithmetic);
+        LLMCPP_DEFINE_FUNCTOR(!, logical_not, lazy_is_safe_logical_notable);
+        LLMCPP_DEFINE_FUNCTOR(~, bitwise_not, lazy_is_safe_bitwise_notable);
+#undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
         {
@@ -2070,6 +2068,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a));
                 }
+
                 template<typename A>
                     requires (!requires(A& a) { Operator{}(unwrap(a)); })
                 [[noreturn]] vr_primitive_type operator ()(A& a) const
@@ -2079,13 +2078,13 @@ namespace llmcpp
             };
         }
 
-#define LLMCPP_DEFINE_FUNCTION_OBJECT(operator_, opecode)                       \
-        LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode);              \
+#define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                               \
+        LLMCPP_DEFINE_SUFFIX_OPERATOR_FUNCTOR(operator_, opecode);              \
         using opecode = basic_visit<visitor::basic_suffix<operators::opecode>>;
 
-        LLMCPP_DEFINE_FUNCTION_OBJECT(++, suffix_increment);
-        LLMCPP_DEFINE_FUNCTION_OBJECT(--, suffix_decrement);
-#undef LLMCPP_DEFINE_FUNCTION_OBJECT
+        LLMCPP_DEFINE_FUNCTOR(++, suffix_increment);
+        LLMCPP_DEFINE_FUNCTOR(--, suffix_decrement);
+#undef LLMCPP_DEFINE_FUNCTOR
 #undef LLMCPP_DEFINE_OPERATOR_VISITOR
 
         template<typename Result>
