@@ -1949,10 +1949,12 @@ namespace llmcpp
             struct basic_arithmetic
             {
                 template<typename LHS, typename RHS>
-                static constexpr bool operable =
+                static constexpr bool operable
+                {
                     requires(const LHS & lhs, const RHS & rhs) { Operator{}(unwrap(lhs), unwrap(rhs)); }
-                && !std::same_as<llmcpp::decay_t<LHS>, bool>
-                    && !std::same_as<llmcpp::decay_t<RHS>, bool>;
+                        && !std::same_as<llmcpp::decay_t<LHS>, bool>
+                        && !std::same_as<llmcpp::decay_t<RHS>, bool>
+                };
 
                 template<typename LHS, typename RHS>
                     requires (operable<LHS, RHS>)
@@ -5956,7 +5958,7 @@ namespace llmcpp
             core->remove_thread_attribute(file_iterator);
             core->remove_thread_attribute(line_iterator);
             core->remove_thread_attribute(function_iterator);
-    }
+        }
 #endif
 
         template<typename Sink>
@@ -6068,7 +6070,7 @@ namespace llmcpp
                 log::init_log_file(*log_file);
             }
         }
-} // namespace log
+    } // namespace log
 
     template<typename Integer>
     Integer random(Integer min, Integer max)
