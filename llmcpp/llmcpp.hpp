@@ -1881,8 +1881,6 @@ namespace llmcpp
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);               \
         using opecode = basic_visit<visitor::basic_bitwise<operators::opecode>>;
 
-        //LLMCPP_DEFINE_FUNCTOR(|| , logical_or);
-        //LLMCPP_DEFINE_FUNCTOR(&&, logical_and);
         LLMCPP_DEFINE_FUNCTOR(| , or_);
         LLMCPP_DEFINE_FUNCTOR(^, xor_);
         LLMCPP_DEFINE_FUNCTOR(&, and_);
