@@ -5647,7 +5647,6 @@ namespace llmcpp
         return std::hash<std::string_view>{}(s);
     }
 
-
     image_info_type image_info_type::from_file(std::string_view path, const config& cfg)
     {
         const std::string base64_image{ filesystem::image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
