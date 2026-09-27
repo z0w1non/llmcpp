@@ -1619,10 +1619,6 @@ namespace llmcpp
         LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT_(is_##concept_name, concept_name) \
         LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_##concept_name)
 
-#define LLMCPP_DEFINE_TRAIT_HELPER(trait_name) \
-        LLMCPP_DEFINE_TRAIT_V(trait_name)      \
-        LLMCPP_DEFINE_TRAIT_T(trait_name)
-
         template<typename A, typename B>
         concept safe_assignable_to =
             std::is_arithmetic_v<A>
@@ -2084,7 +2080,17 @@ namespace llmcpp
         LLMCPP_DEFINE_FUNCTOR(++, suffix_increment);
         LLMCPP_DEFINE_FUNCTOR(--, suffix_decrement);
 #undef LLMCPP_DEFINE_FUNCTOR
-#undef LLMCPP_DEFINE_OPERATOR_VISITOR
+
+#undef LLMCPP_DEFINE_TRAIT_V
+#undef LLMCPP_DEFINE_TRAIT_T
+#undef LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT_
+#undef LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT
+#undef LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT
+#undef LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT
+#undef LLMCPP_SFINAE_FORWARD_RETURN
+#undef LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR
+#undef LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR
+#undef LLMCPP_DEFINE_SUFFIX_OPERATOR_FUNCTOR
 
         template<typename Result>
         struct static_cast_
