@@ -1201,7 +1201,7 @@ namespace llmcpp
     void terminate_process(const config& cfg);
     void create_process_or_terminate(const config& cfg);
     void iterate(config& cfg);
-    int exception_safe_main(int argc, char** argv);
+    int exception_safe_main(int argc, char** argv) noexcept;
     int nowide_main(int argc, char** argv);
 } // namespace llmcpp
 
@@ -6478,7 +6478,7 @@ namespace llmcpp
         }
     }
 
-    int exception_safe_main(int argc, char** argv)
+    int exception_safe_main(int argc, char** argv) noexcept
     {
         try
         {
@@ -6543,8 +6543,17 @@ namespace llmcpp
 
     int nowide_main(int argc, char** argv)
     {
-        boost::nowide::args _(argc, argv);
-        return exception_safe_main(argc, argv);
+        try
+        {
+            boost::nowide::args _(argc, argv);
+            return exception_safe_main(argc, argv);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Initialization error: " << e.what() << std::endl;
+        }
+
+        return -1;
     }
 } // namespace llmcpp
 
