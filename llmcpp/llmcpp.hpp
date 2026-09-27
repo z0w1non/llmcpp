@@ -1712,32 +1712,32 @@ namespace llmcpp
                 {
                 }
 
-                template<typename A, typename B>
-                vr_primitive_type operator ()(A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                vr_primitive_type operator ()(LHS& lhs, const RHS& rhs) const
                 {
-                    using A_ = llmcpp::decay_t<A>;
-                    using B_ = llmcpp::decay_t<B>;
-                    if constexpr (std::is_same_v<A_, undefined_variable_type> && !std::is_same_v<B_, undefined_variable_type>)
+                    using LHS_ = llmcpp::decay_t<LHS>;
+                    using RHS_ = llmcpp::decay_t<RHS>;
+                    if constexpr (std::is_same_v<LHS_, undefined_variable_type> && !std::is_same_v<RHS_, undefined_variable_type>)
                     {
-                        const primitive_type value{ unwrap(b) };
-                        ctx.set(a.name, value);
-                        if (primitive_type* ptr{ ctx.get(a.name) }; ptr)
+                        const primitive_type value{ unwrap(rhs) };
+                        ctx.set(lhs.name, value);
+                        if (primitive_type* ptr{ ctx.get(lhs.name) }; ptr)
                         {
                             return primitive_ref_to_vr_primitive(*ptr);
                         }
                     }
-                    else if constexpr (std::is_same_v<A_, B_> && !std::is_same_v<A_, bool>)
+                    else if constexpr (std::is_same_v<LHS_, RHS_> && !std::is_same_v<LHS_, bool>)
                     {
-                        if constexpr (requires { unwrap(a) = unwrap(b); })
+                        if constexpr (requires { unwrap(lhs) = unwrap(rhs); })
                         {
-                            return unwrap(a) = unwrap(b);
+                            return unwrap(lhs) = unwrap(rhs);
                         }
                     }
-                    else if constexpr (safe_assignable_to<B_, A_>)
+                    else if constexpr (safe_assignable_to<RHS_, LHS_>)
                     {
-                        if constexpr (requires { unwrap(a) = static_cast<A_>(unwrap(b)); })
+                        if constexpr (requires { unwrap(lhs) = static_cast<LHS_>(unwrap(rhs)); })
                         {
-                            return unwrap(a) = static_cast<A_>(unwrap(b));
+                            return unwrap(lhs) = static_cast<LHS_>(unwrap(rhs));
                         }
                     }
                     llmcpp::throw_exception(macro_exception{});
@@ -1753,7 +1753,7 @@ namespace llmcpp
             {
             }
 
-            vr_primitive_type operator()(vr_primitive_type& a, const vr_primitive_type& b) const;
+            vr_primitive_type operator()(vr_primitive_type& lhs, const vr_primitive_type& rhs) const;
         };
 
 #define LLMCPP_SFINAE_FORWARD_RETURN(...)                                                \
@@ -3044,9 +3044,9 @@ namespace llmcpp
             return boost::apply_visitor(vr_primitive_to_primitive_visitor(), primitive);
         }
 
-        vr_primitive_type assign::operator()(vr_primitive_type& a, const vr_primitive_type& b) const
+        vr_primitive_type assign::operator()(vr_primitive_type& lhs, const vr_primitive_type& rhs) const
         {
-            return boost::apply_visitor(visitor::assign{ ctx }, a, b);
+            return boost::apply_visitor(visitor::assign{ ctx }, lhs, rhs);
         }
 
         std::string node_visitor::operator()(const std::string& str) const
