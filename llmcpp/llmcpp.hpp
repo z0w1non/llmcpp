@@ -1929,6 +1929,7 @@ namespace llmcpp
                 {
                     return Operator{}(unwrap(a), unwrap(b));
                 }
+
                 template<typename A, typename B>
                     requires (!(safe_totally_ordered_with<A, B>))
                 vr_primitive_type operator ()(const A& a, const B& b) const
