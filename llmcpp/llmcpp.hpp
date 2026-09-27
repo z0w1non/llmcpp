@@ -1557,11 +1557,11 @@ namespace llmcpp
             template<typename Result>
             struct static_cast_impl
             {
-                template<typename A>
-                    requires requires(const A& a) { static_cast<Result>(a); }
-                Result operator ()(const A& a) const
+                template<typename T>
+                    requires requires(const T& value) { static_cast<Result>(value); }
+                Result operator ()(const T& value) const
                 {
-                    return static_cast<Result>(a);
+                    return static_cast<Result>(value);
                 }
             };
 
@@ -1760,40 +1760,40 @@ namespace llmcpp
             vr_primitive_type operator()(vr_primitive_type& a, const vr_primitive_type& b) const;
         };
 
-#define LLMCPP_RETURNS(...)                                                              \
+#define LLMCPP_SFINAE_FORWARD_RETURN(...)                                                \
         noexcept(noexcept(__VA_ARGS__)) -> decltype(__VA_ARGS__) { return __VA_ARGS__; }
 
-#define LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode)                       \
-        namespace operators                                                             \
-        {                                                                               \
-            struct opecode                                                              \
-            {                                                                           \
-                template<typename LHS, typename RHS>                                    \
-                auto operator()(LHS&& lhs, RHS&& rhs) const                             \
-                LLMCPP_RETURNS(std::forward<LHS>(lhs) operator_ std::forward<RHS>(rhs)) \
-            };                                                                          \
+#define LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode)                                     \
+        namespace operators                                                                           \
+        {                                                                                             \
+            struct opecode                                                                            \
+            {                                                                                         \
+                template<typename LHS, typename RHS>                                                  \
+                auto operator()(LHS&& lhs, RHS&& rhs) const                                           \
+                LLMCPP_SFINAE_FORWARD_RETURN(std::forward<LHS>(lhs) operator_ std::forward<RHS>(rhs)) \
+            };                                                                                        \
         }
 
-#define LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode) \
-        namespace operators                                       \
-        {                                                         \
-            struct opecode                                        \
-            {                                                     \
-                template<typename Arg>                            \
-                auto operator()(Arg&& arg) const                  \
-                LLMCPP_RETURNS(operator_ std::forward<Arg>(arg))  \
-            };                                                    \
+#define LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode)                      \
+        namespace operators                                                            \
+        {                                                                              \
+            struct opecode                                                             \
+            {                                                                          \
+                template<typename Operand>                                             \
+                auto operator()(Operand&& opearnd) const                               \
+                LLMCPP_SFINAE_FORWARD_RETURN(operator_ std::forward<Operand>(opearnd)) \
+            };                                                                         \
         }
 
-#define LLMCPP_DEFINE_SUFFIX_OPERATOR_FUNCTOR(operator_, opecode) \
-        namespace operators                                       \
-        {                                                         \
-            struct opecode                                        \
-            {                                                     \
-                template<typename Arg>                            \
-                auto operator()(Arg&& arg) const                  \
-                LLMCPP_RETURNS(std::forward<Arg>(arg) operator_)  \
-            };                                                    \
+#define LLMCPP_DEFINE_SUFFIX_OPERATOR_FUNCTOR(operator_, opecode)                      \
+        namespace operators                                                            \
+        {                                                                              \
+            struct opecode                                                             \
+            {                                                                          \
+                template<typename Operand>                                             \
+                auto operator()(Operand&& opearnd) const                               \
+                LLMCPP_SFINAE_FORWARD_RETURN(std::forward<Operand>(opearnd) operator_) \
+            };                                                                         \
         }
 
         template<typename Visitor>
@@ -1801,7 +1801,7 @@ namespace llmcpp
         {
             template<typename ... Args>
             auto operator()(Args && ... args) const
-                LLMCPP_RETURNS(boost::apply_visitor(Visitor{}, std::forward<Args>(args) ...))
+                LLMCPP_SFINAE_FORWARD_RETURN(boost::apply_visitor(Visitor{}, std::forward<Args>(args) ...))
         };
 
         namespace visitor
@@ -1861,16 +1861,16 @@ namespace llmcpp
             template<typename Operator>
             struct basic_bitwise
             {
-                template<typename A, typename B>
-                    requires (bitwise_operable<unwrap_type_t<A>>&& bitwise_operable<unwrap_type_t<B>>)
-                vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (bitwise_operable<unwrap_type_t<LHS>>&& bitwise_operable<unwrap_type_t<RHS>>)
+                vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
-                    return Operator{}(unwrap(a), unwrap(b));
+                    return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
-                template<typename A, typename B>
-                    requires (!(bitwise_operable<unwrap_type_t<A>>&& bitwise_operable<unwrap_type_t<B>>))
-                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (!(bitwise_operable<unwrap_type_t<LHS>>&& bitwise_operable<unwrap_type_t<RHS>>))
+                [[noreturn]] vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -1893,16 +1893,16 @@ namespace llmcpp
             template<typename Operator>
             struct basic_equality
             {
-                template<typename A, typename B>
-                    requires (safe_equality_comparable_with<A, B>)
-                vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (safe_equality_comparable_with<LHS, RHS>)
+                vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
-                    return Operator{}(unwrap(a), unwrap(b));
+                    return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
-                template<typename A, typename B>
-                    requires (!(safe_equality_comparable_with<A, B>))
-                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (!(safe_equality_comparable_with<LHS, RHS>))
+                [[noreturn]] vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -1921,16 +1921,16 @@ namespace llmcpp
             template<typename Operator>
             struct basic_relational
             {
-                template<typename A, typename B>
-                    requires (safe_totally_ordered_with<A, B>)
-                vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (safe_totally_ordered_with<LHS, RHS>)
+                vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
-                    return Operator{}(unwrap(a), unwrap(b));
+                    return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
-                template<typename A, typename B>
-                    requires (!(safe_totally_ordered_with<A, B>))
-                vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (!(safe_totally_ordered_with<LHS, RHS>))
+                vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -1952,33 +1952,33 @@ namespace llmcpp
             template<typename Operator, bool ZeroCheck>
             struct basic_arithmetic
             {
-                template<typename A, typename B>
+                template<typename LHS, typename RHS>
                 static constexpr bool operable =
-                    requires(const A & a, const B & b) { Operator{}(unwrap(a), unwrap(b)); }
-                && !std::same_as<llmcpp::decay_t<A>, bool>
-                    && !std::same_as<llmcpp::decay_t<B>, bool>;
+                    requires(const LHS & lhs, const RHS & rhs) { Operator{}(unwrap(lhs), unwrap(rhs)); }
+                && !std::same_as<llmcpp::decay_t<LHS>, bool>
+                    && !std::same_as<llmcpp::decay_t<RHS>, bool>;
 
-                template<typename A, typename B>
-                    requires (operable<A, B>)
-                vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (operable<LHS, RHS>)
+                vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     if constexpr (ZeroCheck)
                     {
-                        using B_ = llmcpp::decay_t<B>;
-                        if constexpr (safe_equality_comparable<B_>)
+                        using RHS_ = llmcpp::decay_t<RHS>;
+                        if constexpr (safe_equality_comparable<RHS_>)
                         {
-                            if (unwrap(b) == B_{})
+                            if (unwrap(rhs) == RHS_{})
                             {
                                 llmcpp::throw_exception(macro_exception{});
                             }
                         }
                     }
-                    return Operator{}(unwrap(a), unwrap(b));
+                    return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
-                template<typename A, typename B>
-                    requires (!operable<A, B>)
-                [[noreturn]] vr_primitive_type operator ()(const A& a, const B& b) const
+                template<typename LHS, typename RHS>
+                    requires (!operable<LHS, RHS>)
+                [[noreturn]] vr_primitive_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -2001,16 +2001,16 @@ namespace llmcpp
             template<typename Operator>
             struct basic_prefix
             {
-                template<typename A>
-                    requires requires(A& a) { Operator{}(unwrap(a)); }
-                vr_primitive_type operator ()(A& a) const
+                template<typename Operand>
+                    requires requires(Operand& operand) { Operator{}(unwrap(operand)); }
+                vr_primitive_type operator ()(Operand& operand) const
                 {
-                    return Operator{}(unwrap(a));
+                    return Operator{}(unwrap(operand));
                 }
 
-                template<typename A>
-                    requires (!requires(A& a) { Operator{}(unwrap(a)); })
-                [[noreturn]] vr_primitive_type operator ()(A& a) const
+                template<typename Operand>
+                    requires (!requires(Operand& operand) { Operator{}(unwrap(operand)); })
+                [[noreturn]] vr_primitive_type operator ()(Operand& operand) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -2030,16 +2030,16 @@ namespace llmcpp
             template<typename Operator, typename Trait>
             struct basic_prefix_
             {
-                template<typename A>
-                    requires (Trait::template value<A>)
-                vr_primitive_type operator ()(const A& a) const
+                template<typename Operand>
+                    requires (Trait::template value<Operand>)
+                vr_primitive_type operator ()(const Operand& operand) const
                 {
-                    return Operator{}(unwrap(a));
+                    return Operator{}(unwrap(operand));
                 }
 
-                template<typename A>
-                    requires (!(Trait::template value<A>))
-                [[noreturn]] vr_primitive_type operator ()(const A& a) const
+                template<typename Operand>
+                    requires (!(Trait::template value<Operand>))
+                [[noreturn]] vr_primitive_type operator ()(const Operand& operand) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -2061,16 +2061,16 @@ namespace llmcpp
             template<typename Operator>
             struct basic_suffix
             {
-                template<typename A>
-                    requires requires(A& a) { Operator{}(unwrap(a)); }
-                vr_primitive_type operator ()(A& a) const
+                template<typename Operand>
+                    requires requires(Operand& operand) { Operator{}(unwrap(operand)); }
+                vr_primitive_type operator ()(Operand& operand) const
                 {
-                    return Operator{}(unwrap(a));
+                    return Operator{}(unwrap(operand));
                 }
 
-                template<typename A>
-                    requires (!requires(A& a) { Operator{}(unwrap(a)); })
-                [[noreturn]] vr_primitive_type operator ()(A& a) const
+                template<typename Operand>
+                    requires (!requires(Operand& operand) { Operator{}(unwrap(operand)); })
+                [[noreturn]] vr_primitive_type operator ()(Operand& operand) const
                 {
                     llmcpp::throw_exception(macro_exception{});
                 }
@@ -5950,7 +5950,7 @@ namespace llmcpp
             core->remove_thread_attribute(file_iterator);
             core->remove_thread_attribute(line_iterator);
             core->remove_thread_attribute(function_iterator);
-        }
+    }
 #endif
 
         template<typename Sink>
@@ -6062,7 +6062,7 @@ namespace llmcpp
                 log::init_log_file(*log_file);
             }
         }
-    } // namespace log
+} // namespace log
 
     template<typename Integer>
     Integer random(Integer min, Integer max)
