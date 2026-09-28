@@ -552,15 +552,30 @@ namespace llmcpp
         //std::string hr_negative_prompt;
     };
 
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
+    (
+        sd_txt2img_parameters,
+        enable_hr,
+        firstphase_width,
+        firstphase_height,
+        hr_scale,
+        hr_upscaler,
+        hr_second_pass_steps,
+        hr_resize_x,
+        hr_resize_y,
+        hr_checkpoint_name
+        /*hr_sampler_name,*/
+        /*hr_scheduler,*/
+        /*hr_prompt,*/
+        /*hr_negative_prompt*/
+    );
+
     struct sd_img2img_parameters
     {
         std::string target;
-
         std::vector<std::string> init_images;
-
         int seed_resize_from_h{};
         int seed_resize_from_w{};
-
         int resize_mode{};
         double image_cfg_scale{};
         std::string mask;
@@ -572,10 +587,31 @@ namespace llmcpp
         bool inpaint_full_res{};
         int inpaint_full_res_padding{};
         int inpainting_mask_invert{};
-
         double initial_noise_multiplier{};
         std::string latent_mask;
     };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
+    (
+        sd_img2img_parameters,
+        target,
+        init_images,
+        seed_resize_from_h,
+        seed_resize_from_w,
+        resize_mode,
+        image_cfg_scale,
+        mask,
+        mask_blur_x,
+        mask_blur_y,
+        mask_blur,
+        mask_round,
+        inpainting_fill,
+        inpaint_full_res,
+        inpaint_full_res_padding,
+        inpainting_mask_invert,
+        initial_noise_multiplier,
+        latent_mask
+    );
 
     struct sd_parameters
     {
@@ -4448,47 +4484,15 @@ namespace llmcpp
 
         nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
-            nlohmann::json json;
-
-            json["enable_hr"] = cfg.sd.txt2img.enable_hr;
-            json["firstphase_width"] = cfg.sd.txt2img.firstphase_width;
-            json["firstphase_height"] = cfg.sd.txt2img.firstphase_height;
-            json["hr_scale"] = cfg.sd.txt2img.hr_scale;
-            json["hr_upscaler"] = cfg.sd.txt2img.hr_upscaler;
-            json["hr_second_pass_steps"] = cfg.sd.txt2img.hr_second_pass_steps;
-            json["hr_resize_x"] = cfg.sd.txt2img.hr_resize_x;
-            json["hr_resize_y"] = cfg.sd.txt2img.hr_resize_y;
-            if (!cfg.sd.txt2img.hr_checkpoint_name.empty())
-            {
-                json["hr_checkpoint_name"] = cfg.sd.txt2img.hr_checkpoint_name;
-            }
-            //json["hr_prompt"] = prompt;
-            //json["hr_negative_prompt"] = negative_prompt;
-
-            return json;
+            return nlohmann::json(cfg.sd.txt2img);
         }
 
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
-            nlohmann::json json;
-
+            nlohmann::json json(cfg.sd.img2img);
             json["sd_init_images"] = filesystem::image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
-            json["sd_seed_resize_from_h"] = cfg.sd.img2img.seed_resize_from_h;
-            json["sd_seed_resize_from_w"] = cfg.sd.img2img.seed_resize_from_w;
-            json["sd_resize_mode"] = cfg.sd.img2img.resize_mode;
-            json["sd_image_cfg_scale"] = cfg.sd.img2img.image_cfg_scale;
             json["sd_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
-            json["sd_mask_blur_x"] = cfg.sd.img2img.mask_blur_x;
-            json["sd_mask_blur_y"] = cfg.sd.img2img.mask_blur_y;
-            json["sd_mask_blur"] = cfg.sd.img2img.mask_blur;
-            json["sd_mask_round"] = cfg.sd.img2img.mask_round;
-            json["sd_inpainting_fill"] = cfg.sd.img2img.inpainting_fill;
-            json["sd_inpaint_full_res"] = cfg.sd.img2img.inpaint_full_res;
-            json["sd_inpaint_full_res_padding"] = cfg.sd.img2img.inpaint_full_res_padding;
-            json["sd_inpainting_mask_invert"] = cfg.sd.img2img.inpainting_mask_invert;
-            json["sd_initial_noise_multiplier"] = cfg.sd.img2img.initial_noise_multiplier;
             json["sd_latent_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
-
             return json;
         }
 
@@ -5843,7 +5847,7 @@ namespace llmcpp
     nlohmann::json kc_parameters::get_request_for_chat_completions(const nlohmann::json& messages) const
     {
         nlohmann::json json{ nlohmann::json::object() };
-        json.update(nlohmann::json{ common });
+        json.update(nlohmann::json(common));
 
         //json["max_length"] = max_tokens;
         json["max_tokens"] = get_max_tokens();
