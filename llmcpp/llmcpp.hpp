@@ -533,11 +533,103 @@ namespace llmcpp
 
     std::string sd_mode_to_target(sd_mode mode, const config& cfg);
 
+    struct sd_common_parameters
+    {
+        std::string prompt;
+        std::string negative_prompt;
+        std::vector<std::string> styles;
+        int seed{};
+        int subseed{};
+        double subseed_strength{};
+        int seed_resize_from_h{};
+        int seed_resize_from_w{};
+        std::string sampler_name;
+        std::string scheduler;
+        int batch_size{};
+        int n_iter{};
+        int steps{};
+        double cfg_scale{};
+        int width{};
+        int height{};
+        bool restore_faces{};
+        bool tiling{};
+        bool do_not_save_samples{};
+        bool do_not_save_grid{};
+        int eta{};
+        double denoising_strength{};
+        int s_min_uncond{};
+        int s_churn{};
+        int s_tmax{};
+        int s_tmin{};
+        int s_noise{};
+        nlohmann::json override_settings;
+        bool override_settings_restore_afterwards{};
+        std::string refiner_checkpoint;
+        double refiner_switch_at{};
+        bool disable_extra_networks{};
+        std::string comments;
+        std::string force_task_id;
+        std::string sampler_index;
+        std::string script_name;
+        std::vector<std::string> script_args;
+        bool send_images{};
+        bool save_images{};
+        std::string infotext;
+        alwayson_scripts alwayson_scripts;
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
+    (
+        sd_common_parameters,
+        /*prompt,*/
+        /*negative_prompt,*/
+        styles,
+        seed,
+        subseed,
+        subseed_strength,
+        seed_resize_from_h,
+        seed_resize_from_w,
+        sampler_name,
+        scheduler,
+        batch_size,
+        n_iter,
+        steps,
+        cfg_scale,
+        width,
+        height,
+        restore_faces,
+        tiling,
+        do_not_save_samples,
+        do_not_save_grid,
+        eta,
+        denoising_strength,
+        s_min_uncond,
+        s_churn,
+        s_tmax,
+        s_tmin,
+        s_noise,
+        override_settings,
+        override_settings_restore_afterwards,
+        refiner_checkpoint,
+        refiner_switch_at,
+        disable_extra_networks,
+        comments,
+        force_task_id,
+        /*sampler_index,*/
+        script_name,
+        script_args,
+        send_images,
+        save_images,
+        infotext
+        /*alwayson_scripts*/
+    );
+
     struct sd_txt2img_parameters
     {
         std::string target;
 
         bool enable_hr{};
+        std::string firstpass_image;
         int firstphase_width{};
         int firstphase_height{};
         double hr_scale{};
@@ -556,6 +648,7 @@ namespace llmcpp
     (
         sd_txt2img_parameters,
         enable_hr,
+        /*firstpass_image,*/
         firstphase_width,
         firstphase_height,
         hr_scale,
@@ -622,54 +715,11 @@ namespace llmcpp
         std::string negative_prompt_file;
         std::string output_file;
 
-        std::string prompt;
-        std::string negative_prompt;
-        std::vector<std::string> styles;
-        int seed{};
-        int subseed{};
-        double subseed_strength{};
-        int seed_resize_from_h{};
-        int seed_resize_from_w{};
-        std::string sampler_name;
-        std::string scheduler;
-        int batch_size{};
-        int n_iter{};
-        int steps{};
-        double cfg_scale{};
-        int width{};
-        int height{};
-        bool restore_faces{};
-        bool tiling{};
-        bool do_not_save_samples{};
-        bool do_not_save_grid{};
-        int eta{};
-        double denoising_strength{};
-        int s_min_uncond{};
-        int s_churn{};
-        int s_tmax{};
-        int s_tmin{};
-        int s_noise{};
-        std::string override_settings;
-        bool override_settings_restore_afterwards{};
-        std::string refiner_checkpoint;
-        double refiner_switch_at{};
-        bool disable_extra_networks{};
-        std::string firstpass_image;
-        std::string comments;
-        std::string force_task_id;
-        std::string sampler_index;
-        std::string script_name;
-        std::vector<std::string> script_args;
-        bool send_images{};
-        bool save_images{};
-        alwayson_scripts alwayson_scripts;
-        std::string infotext;
-
-        bool abg_remover_enable{};
-
         sd_mode mode;
+        sd_common_parameters common;
         sd_txt2img_parameters txt2img;
         sd_img2img_parameters img2img;
+        bool abg_remover_enable{};
     };
 
     struct sb_parameters
@@ -4468,13 +4518,13 @@ namespace llmcpp
             oss
                 << prompt << std::endl
                 << "Negative prompt: " << negative_prompt << std::endl
-                << "Steps: " << parameters.steps << ", "
-                << "Sampler: " << parameters.sampler_name << ", "
-                << "CFG scale: " << parameters.cfg_scale << ", "
-                << "Seed: " << parameters.seed << ", "
-                << "Size: " << parameters.width << "x" << parameters.height << ", "
+                << "Steps: " << parameters.common.steps << ", "
+                << "Sampler: " << parameters.common.sampler_name << ", "
+                << "CFG scale: " << parameters.common.cfg_scale << ", "
+                << "Seed: " << parameters.common.seed << ", "
+                << "Size: " << parameters.common.width << "x" << parameters.common.height << ", "
                 //<< "Model hash: "
-                << "Denoising strength: " << parameters.denoising_strength << ", "
+                << "Denoising strength: " << parameters.common.denoising_strength << ", "
                 << "Hires upscale: " << parameters.txt2img.hr_scale << ", "
                 << "Hires steps: " << parameters.txt2img.hr_second_pass_steps << ", "
                 << "Hires upscaler: " << parameters.txt2img.hr_upscaler
@@ -4484,7 +4534,12 @@ namespace llmcpp
 
         nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
-            return nlohmann::json(cfg.sd.txt2img);
+            nlohmann::json json(cfg.sd.txt2img);
+            if (!cfg.sd.txt2img.firstpass_image.empty())
+            {
+                json["firstpass_image"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.txt2img.firstpass_image, cfg);;
+            }
+            return json;
         }
 
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
@@ -4498,91 +4553,24 @@ namespace llmcpp
 
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
-            nlohmann::json json;
+            nlohmann::json json(cfg.sd.common);
 
             json["prompt"] = prompt;
-            if (!negative_prompt.empty())
-            {
-                json["negative_prompt"] = negative_prompt;
-            }
-            //json["styles"] = cfg.sd_txt2img_params.styles;
-            json["seed"] = cfg.sd.seed;
-            json["subseed"] = cfg.sd.subseed;
-            json["subseed_strength"] = cfg.sd.subseed_strength;
-            json["seed_resize_from_h"] = cfg.sd.seed_resize_from_h;
-            json["seed_resize_from_w"] = cfg.sd.seed_resize_from_w;
-            json["sampler_name"] = cfg.sd.sampler_name;
-            json["scheduler"] = cfg.sd.scheduler;
-            json["batch_size"] = cfg.sd.batch_size;
-            json["n_iter"] = cfg.sd.n_iter;
-            json["steps"] = cfg.sd.steps;
-            json["cfg_scale"] = cfg.sd.cfg_scale;
-            json["width"] = cfg.sd.width;
-            json["height"] = cfg.sd.height;
-            json["restore_faces"] = cfg.sd.restore_faces;
-            json["tiling"] = cfg.sd.tiling;
-            json["do_not_save_samples"] = cfg.sd.do_not_save_samples;
-            json["do_not_save_grid"] = cfg.sd.do_not_save_grid;
-            json["eta"] = cfg.sd.eta;
-            json["denoising_strength"] = cfg.sd.denoising_strength;
-            json["s_min_uncond"] = cfg.sd.s_min_uncond;
-            json["s_churn"] = cfg.sd.s_churn;
-            json["s_tmax"] = cfg.sd.s_tmax;
-            json["s_tmin"] = cfg.sd.s_tmin;
-            json["s_noise"] = cfg.sd.s_noise;
-            if (!cfg.sd.override_settings.empty())
-            {
-                json["override_settings"] = nlohmann::json::parse(cfg.sd.override_settings);
-            }
-            json["override_settings_restore_afterwards"] = cfg.sd.override_settings_restore_afterwards;
-            json["refiner_checkpoint"] = cfg.sd.refiner_checkpoint;
-            json["refiner_switch_at"] = cfg.sd.refiner_switch_at;
-            json["disable_extra_networks"] = cfg.sd.disable_extra_networks;
-            if (!cfg.sd.firstpass_image.empty())
-            {
-                json["firstpass_image"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.firstpass_image, cfg);;
-            }
-            if (!cfg.sd.comments.empty())
-            {
-                json["comments"] = cfg.sd.comments;
-            }
-
-            json["force_task_id"] = cfg.sd.force_task_id;
-
-            if (!cfg.sd.sampler_index.empty() && cfg.sd.sampler_name.empty())
-            {
-                json["sampler_index"] = cfg.sd.sampler_index;
-            }
-
-            if (cfg.sd.abg_remover_enable)
-            {
-                json["script_name"] = "abg remover";
-                json["script_args"] =
-                {
-                    false,
-                    false,
-                    false,
-                    "#000000",
-                    false
-                };
-            }
-
-            json["send_images"] = cfg.sd.send_images;
-            json["save_images"] = cfg.sd.save_images;
+            json["negative_prompt"] = negative_prompt;
 
             nlohmann::json alwayson_scripts{ nlohmann::json::object() };
-            if (cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)
+            if (cfg.sd.common.alwayson_scripts.adetailer_parametesrs.ad_enable)
             {
                 nlohmann::json adetailer{ nlohmann::json::object() };
                 nlohmann::json object{ nlohmann::json::object() };
-                object["ad_model"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
-                if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+                object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
+                if (!cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
                 {
-                    object["ad_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
+                    object["ad_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
                 }
-                if (!cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+                if (!cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
                 {
-                    object["ad_negative_prompt"] = cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
+                    object["ad_negative_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
                 }
                 adetailer["args"] = { true, false, object };
                 alwayson_scripts["ADetailer"] = adetailer;
@@ -4612,11 +4600,6 @@ namespace llmcpp
             //}
             json["alwayson_scripts"] = alwayson_scripts;
 
-            if (!cfg.sd.infotext.empty())
-            {
-                json["infotext"] = cfg.sd.infotext;
-            }
-
             if (cfg.sd.mode == sd_mode::txt2img)
             {
                 json.update(make_txt2img_request(cfg, prompt, negative_prompt));
@@ -4624,6 +4607,19 @@ namespace llmcpp
             else if (cfg.sd.mode == sd_mode::img2img)
             {
                 json.update(make_img2img_request(cfg, prompt, negative_prompt));
+            }
+
+            if (cfg.sd.abg_remover_enable)
+            {
+                json["script_name"] = "abg remover";
+                json["script_args"] =
+                {
+                    false,
+                    false,
+                    false,
+                    "#000000",
+                    false
+                };
             }
 
             return json;
@@ -5077,6 +5073,14 @@ namespace llmcpp
                 }
             };
 
+            const auto to_json_notifier
+            {
+                [&cfg](const std::string& str)
+                {
+                    return nlohmann::json::parse(str);
+                }
+            };
+
             const auto make_unescape_string_notifier
             {
                 [&cfg](auto& ref)
@@ -5151,7 +5155,6 @@ namespace llmcpp
                 ("tg-num-best-of", po::value(&cfg.tg.completions.best_of)->default_value(1), "TG best of")
                 ("tg-echo", po::bool_switch(&cfg.tg.completions.echo)->default_value(false), "TG echo")
                 ("tg-frequency-penalty", po::value(&cfg.tg.common.frequency_penalty)->default_value(0.0), "TG frequency penalty")
-                //std::map<int, double> logit_bias;
                 ("tg-logprobs", po::value(&cfg.tg.completions.logprobs)->default_value(0.0), "TG presence penalty")
                 ("tg-max-tokens", po::value(&cfg.tg.common.max_tokens)->default_value(512), "TG max tokens")
                 ("tg-n", po::value(&cfg.tg.completions.n)->default_value(1), "TG number of responses generated for the same prompt")
@@ -5251,57 +5254,56 @@ namespace llmcpp
                 ("sd-prompt-file", po::value(&cfg.sd.prompt_file)->default_value("prompt"), "SD prompt file")
                 ("sd-negative-prompt-file", po::value(&cfg.sd.negative_prompt_file)->default_value("negative_prompt"), "SD negative prompt file")
                 ("sd-output-file", po::value(&cfg.sd.output_file)->default_value("{{datetime}}.png"), "SD output PNG file")
-                ("sd-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.prompt)), "SD prompt")
-                ("sd-negative-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.negative_prompt)), "SD negative prompt")
-                ("sd-styles", po::value(&cfg.sd.styles), "SD styles")
-                ("sd-seed", po::value(&cfg.sd.seed)->default_value(-1), "SD seed")
-                ("sd-subseed", po::value(&cfg.sd.subseed)->default_value(-1), "SD subseed")
-                ("sd-subseed-strength", po::value(&cfg.sd.subseed_strength)->default_value(0), "SD subseed strength")
-                ("sd-seed-resize-from-h", po::value(&cfg.sd.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
-                ("sd-seed-resize-from-w", po::value(&cfg.sd.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
-                ("sd-sampler-name", po::value(&cfg.sd.sampler_name)->default_value("Euler a"), "SD sampler name")
-                ("sd-scheduler", po::value(&cfg.sd.scheduler)->default_value("Automatic"), "SD scheduler")
-                ("sd-batch_size", po::value(&cfg.sd.batch_size)->default_value(1), "SD batch size")
-                ("sd-n-iter", po::value(&cfg.sd.n_iter)->default_value(1), "SD n iter")
-                ("sd-steps", po::value(&cfg.sd.steps)->default_value(30), "SD steps")
-                ("sd-cfg-scale", po::value(&cfg.sd.cfg_scale)->default_value(7), "SD cfg scale")
-                ("sd-width", po::value(&cfg.sd.width)->default_value(1024), "SD image width")
-                ("sd-height", po::value(&cfg.sd.height)->default_value(1024), "SD image height")
-                ("sd-restore-faces", po::bool_switch(&cfg.sd.restore_faces)->default_value(false), "SD restore faces")
-                ("sd-tiling", po::bool_switch(&cfg.sd.tiling)->default_value(false), "SD tiling")
-                ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.do_not_save_samples)->default_value(false), "SD do not save samples")
-                ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.do_not_save_grid)->default_value(false), "SD do not save grid")
-                ("sd-eta", po::value(&cfg.sd.eta)->default_value(0), "SD eta")
-                ("sd-denoising-strength", po::value(&cfg.sd.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
-                ("sd-s-min-uncond", po::value(&cfg.sd.s_min_uncond)->default_value(0), "SD s min uncond")
-                ("sd-s-churn", po::value(&cfg.sd.s_churn)->default_value(0), "SD s churn")
-                ("sd-s-tmax", po::value(&cfg.sd.s_tmax)->default_value(0), "SD s tmax")
-                ("sd-s-tmin", po::value(&cfg.sd.s_tmin)->default_value(0), "SD s tmin")
-                ("sd-s-noise", po::value(&cfg.sd.s_noise)->default_value(1), "SD s noise")
-                ("sd-override-settings", po::value(&cfg.sd.override_settings)->default_value(""), "SD override settings")
-                ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
-                ("sd-refiner-checkpoint", po::value(&cfg.sd.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
-                ("sd-refiner-switch-at", po::value(&cfg.sd.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
-                ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.disable_extra_networks)->default_value(false), "SD disable extra networks")
-                ("sd-firstpass-image", po::value(&cfg.sd.firstpass_image)->default_value(""), "SD firstpass image")
-                ("sd-comments", po::value(&cfg.sd.comments)->default_value(""), "SD comments")
-                ("sd-force-task-id", po::value(&cfg.sd.force_task_id)->default_value(""), "SD force task id")
-                ("sd-sampler-index", po::value(&cfg.sd.sampler_index)->default_value(""), "SD sampler index")
-                ("sd-script-name", po::value(&cfg.sd.script_name)->default_value(""), "SD script name")
-                ("sd-script-args", po::value(&cfg.sd.script_args), "SD script_args")
-                ("sd-send-images", po::bool_switch(&cfg.sd.send_images)->default_value(true), "SD send images")
-                ("sd-save-images", po::bool_switch(&cfg.sd.save_images)->default_value(false), "SD save images")
-                ("sd-ad-enable", po::bool_switch(&cfg.sd.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-                ("sd-ad-model", po::value(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-                ("sd-ad-prompt", po::value(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-                ("sd-ad-negative-prompt", po::value(&cfg.sd.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
-                ("sd-infotext", po::value(&cfg.sd.infotext)->default_value(""), "SD infotext")
-                ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
+                ("sd-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.common.prompt)), "SD prompt")
+                ("sd-negative-prompt", po::value<std::string>()->default_value("")->notifier(make_unescape_string_notifier(cfg.sd.common.negative_prompt)), "SD negative prompt")
+                ("sd-styles", po::value(&cfg.sd.common.styles), "SD styles")
+                ("sd-seed", po::value(&cfg.sd.common.seed)->default_value(-1), "SD seed")
+                ("sd-subseed", po::value(&cfg.sd.common.subseed)->default_value(-1), "SD subseed")
+                ("sd-subseed-strength", po::value(&cfg.sd.common.subseed_strength)->default_value(0), "SD subseed strength")
+                ("sd-seed-resize-from-h", po::value(&cfg.sd.common.seed_resize_from_h)->default_value(-1), "SD seed resize from height")
+                ("sd-seed-resize-from-w", po::value(&cfg.sd.common.seed_resize_from_w)->default_value(-1), "SD seed resize from width")
+                ("sd-sampler-name", po::value(&cfg.sd.common.sampler_name)->default_value("Euler a"), "SD sampler name")
+                ("sd-scheduler", po::value(&cfg.sd.common.scheduler)->default_value("Automatic"), "SD scheduler")
+                ("sd-batch_size", po::value(&cfg.sd.common.batch_size)->default_value(1), "SD batch size")
+                ("sd-n-iter", po::value(&cfg.sd.common.n_iter)->default_value(1), "SD n iter")
+                ("sd-steps", po::value(&cfg.sd.common.steps)->default_value(30), "SD steps")
+                ("sd-cfg-scale", po::value(&cfg.sd.common.cfg_scale)->default_value(7), "SD cfg scale")
+                ("sd-width", po::value(&cfg.sd.common.width)->default_value(1024), "SD image width")
+                ("sd-height", po::value(&cfg.sd.common.height)->default_value(1024), "SD image height")
+                ("sd-restore-faces", po::bool_switch(&cfg.sd.common.restore_faces)->default_value(false), "SD restore faces")
+                ("sd-tiling", po::bool_switch(&cfg.sd.common.tiling)->default_value(false), "SD tiling")
+                ("sd-do-not-save-samples", po::bool_switch(&cfg.sd.common.do_not_save_samples)->default_value(false), "SD do not save samples")
+                ("sd-do-not-save-grid", po::bool_switch(&cfg.sd.common.do_not_save_grid)->default_value(false), "SD do not save grid")
+                ("sd-eta", po::value(&cfg.sd.common.eta)->default_value(0), "SD eta")
+                ("sd-denoising-strength", po::value(&cfg.sd.common.denoising_strength)->default_value(0.75, "0.75"), "SD denoising strength")
+                ("sd-s-min-uncond", po::value(&cfg.sd.common.s_min_uncond)->default_value(0), "SD s min uncond")
+                ("sd-s-churn", po::value(&cfg.sd.common.s_churn)->default_value(0), "SD s churn")
+                ("sd-s-tmax", po::value(&cfg.sd.common.s_tmax)->default_value(0), "SD s tmax")
+                ("sd-s-tmin", po::value(&cfg.sd.common.s_tmin)->default_value(0), "SD s tmin")
+                ("sd-s-noise", po::value(&cfg.sd.common.s_noise)->default_value(1), "SD s noise")
+                ("sd-override-settings", po::value(&cfg.sd.common.override_settings)->notifier(to_json_notifier), "SD override settings")
+                ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.common.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
+                ("sd-refiner-checkpoint", po::value(&cfg.sd.common.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
+                ("sd-refiner-switch-at", po::value(&cfg.sd.common.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
+                ("sd-disable-extra-networks", po::bool_switch(&cfg.sd.common.disable_extra_networks)->default_value(false), "SD disable extra networks")
+                ("sd-comments", po::value(&cfg.sd.common.comments)->default_value(""), "SD comments")
+                ("sd-force-task-id", po::value(&cfg.sd.common.force_task_id)->default_value(""), "SD force task id")
+                ("sd-sampler-index", po::value(&cfg.sd.common.sampler_index)->default_value(""), "SD sampler index")
+                ("sd-script-name", po::value(&cfg.sd.common.script_name)->default_value(""), "SD script name")
+                ("sd-script-args", po::value(&cfg.sd.common.script_args), "SD script_args")
+                ("sd-send-images", po::bool_switch(&cfg.sd.common.send_images)->default_value(true), "SD send images")
+                ("sd-save-images", po::bool_switch(&cfg.sd.common.save_images)->default_value(false), "SD save images")
+                ("sd-ad-enable", po::bool_switch(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
+                ("sd-ad-model", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+                ("sd-ad-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+                ("sd-ad-negative-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+                ("sd-infotext", po::value(&cfg.sd.common.infotext)->default_value(""), "SD infotext")
 
                 ("sd-mode", po::value<std::string>()->default_value("txt2img")->notifier([&cfg](const std::string& value) { cfg.sd.mode = string_to_sd_mode(value); }), "SD mode (txt2img | img2img)")
 
                 ("sd-txt2img-target", po::value(&cfg.sd.txt2img.target)->default_value("/sdapi/v1/txt2img"), "SD txt2img target")
                 ("sd-enable-hr", po::bool_switch(&cfg.sd.txt2img.enable_hr)->default_value(false), "SD enable hr")
+                ("sd-firstpass-image", po::value(&cfg.sd.txt2img.firstpass_image)->default_value(""), "SD firstpass image")
                 ("sd-firstphase-width", po::value(&cfg.sd.txt2img.firstphase_width)->default_value(0), "SD firstphase width")
                 ("sd-firstphase-height", po::value(&cfg.sd.txt2img.firstphase_height)->default_value(0), "SD firstphase height")
                 ("sd-hr-scale", po::value(&cfg.sd.txt2img.hr_scale)->default_value(0), "SD hr scale")
@@ -5330,6 +5332,8 @@ namespace llmcpp
                 ("sd-inpainting-mask-invert", po::value(&cfg.sd.img2img.inpainting_mask_invert)->default_value(0), "SD img2img inpainting_mask_invert")
                 ("sd-initial-noise-multiplier", po::value(&cfg.sd.img2img.initial_noise_multiplier)->default_value(1.0), "SD img2img initial_noise_multiplier")
                 ("sd-latent-mask", po::value(&cfg.sd.img2img.latent_mask)->default_value(""), "SD img2img latent_mask (Base64 encoded image)")
+
+                ("sd-abg-remover-enable", po::bool_switch(&cfg.sd.abg_remover_enable)->default_value(false), "SD ABG Remover enable")
 
                 ("sb-host", po::value(&cfg.sb.host)->default_value("localhost"), "SB host")
                 ("sb-port", po::value(&cfg.sb.port)->default_value("5001"), "SB port")
@@ -6333,8 +6337,8 @@ namespace llmcpp
         }
         else if (cfg.command_mode == command_mode::sd)
         {
-            const std::string prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
-            const std::string negative_prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.common.prompt, cfg.sd.prompt_file, cfg), cfg, cfg.ctx) };
+            const std::string negative_prompt_string{ expand_macro(filesystem::prompt_from_string_or_file_path(cfg.sd.common.negative_prompt, cfg.sd.negative_prompt_file, cfg), cfg, cfg.ctx) };
             const std::string image{ sd::send_request(cfg, prompt_string, negative_prompt_string) };
             filesystem::write_file(cfg, image, cfg.sd.output_file, std::ios::binary);
         }
@@ -6357,13 +6361,13 @@ namespace llmcpp
         {
             cfg.tg.common.seed = random<std::uint32_t>(0);
             cfg.kc.common.sampler_seed = random<std::uint32_t>(0, 999999);
-            cfg.sd.seed = random<std::uint32_t>(0);
+            cfg.sd.common.seed = random<std::uint32_t>(0);
         }
         else
         {
             cfg.tg.common.seed = cfg.seed;
             cfg.kc.common.sampler_seed = cfg.seed;
-            cfg.sd.seed = cfg.seed;
+            cfg.sd.common.seed = cfg.seed;
         }
     }
 
