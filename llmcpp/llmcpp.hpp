@@ -255,33 +255,34 @@ namespace llmcpp
         llm_mode mode;
     };
 
-    struct tg_parameters
-        : llm_backend_parameters
+    struct tg_common_parameters
     {
         std::string model;
-        int best_of{};
-        bool echo{};
-        double frequency_penalty{};
-        //std::map<int, double> logit_bias{};
-        double logprobs{};
         int max_tokens{};
-        int n{};
-        double presence_penalty{};
-        std::vector<std::string> stop;
-        bool stream{};
-        std::string suffix;
         double temperature{};
         double top_p{};
+        int top_k{};
         int seed{};
+        bool stream{};
+        std::vector<std::string> stop;
         std::string user;
         std::string preset;
+
+        double frequency_penalty{};
+        double presence_penalty{};
+        double repetition_penalty{};
+        double encoder_repetition_penalty{};
+        int no_repeat_ngram_size{};
+        int repetition_penalty_range{};
+        double penalty_alpha{};
+
+        bool dynamic_temperature{};
         double dynatemp_low{};
         double dynatemp_high{};
         double dynatemp_exponent{};
         double smoothing_factor{};
         double smoothing_curve{};
         double min_p{};
-        int top_k{};
         double typical_p{};
         double xtc_threshold{};
         double xtc_probability{};
@@ -290,22 +291,17 @@ namespace llmcpp
         double tfs{};
         double top_a{};
         double top_n_sigma{};
+
         double dry_multiplier{};
         int dry_allowed_length{};
         double dry_base{};
-        double repetition_penalty{};
-        double encoder_repetition_penalty{};
-        int no_repeat_ngram_size{};
-        int repetition_penalty_range{};
-        double penalty_alpha{};
-        double guidance_scale{};
+        std::string dry_sequence_breakers;
+
         int mirostat_mode{};
         double mirostat_tau{};
         double mirostat_eta{};
-        int prompt_lookup_num_tokens{};
-        int max_tokens_second{};
+
         bool do_sample{};
-        bool dynamic_temperature{};
         bool temperature_last{};
         bool auto_max_new_tokens{};
         bool ban_eos_token{};
@@ -313,11 +309,56 @@ namespace llmcpp
         bool skip_special_tokens{};
         bool static_cache{};
         int truncation_length{};
+        int prompt_lookup_num_tokens{};
+        int max_tokens_second{};
+        double guidance_scale{};
+
         std::vector<std::string> sampler_priority;
         std::string custom_token_bans;
-        std::string negative_prompt;
-        std::string dry_sequence_breakers;
         std::string grammar_string;
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
+        tg_common_parameters,
+        model, max_tokens, temperature, top_p, top_k, seed, stream, stop, user, preset,
+        frequency_penalty, presence_penalty, repetition_penalty, encoder_repetition_penalty, no_repeat_ngram_size, repetition_penalty_range, penalty_alpha,
+        dynamic_temperature, dynatemp_low, dynatemp_high, dynatemp_exponent, smoothing_factor, smoothing_curve, min_p, typical_p, xtc_threshold, xtc_probability, epsilon_cutoff, eta_cutoff, tfs, top_a, top_n_sigma,
+        dry_multiplier, dry_allowed_length, dry_base, dry_sequence_breakers,
+        mirostat_mode, mirostat_tau, mirostat_eta,
+        do_sample, temperature_last, auto_max_new_tokens, ban_eos_token, add_bos_token, skip_special_tokens, static_cache, truncation_length, prompt_lookup_num_tokens, max_tokens_second, guidance_scale,
+        sampler_priority, custom_token_bans, grammar_string
+    );
+
+    struct tg_completions_parameters
+    {
+        std::string suffix;
+        bool echo{};
+        int best_of{};
+        int n{};
+        double logprobs{};
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
+        tg_completions_parameters,
+        suffix, echo, best_of, n, logprobs
+    );
+
+    struct tg_chat_completions_parameters
+    {
+        std::string negative_prompt;
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(
+        tg_chat_completions_parameters,
+        negative_prompt
+    );
+
+    struct tg_parameters
+        : llm_backend_parameters
+    {
+        tg_common_parameters common{};
+        tg_completions_parameters completions{};
+        tg_chat_completions_parameters chat_completions{};
 
         nlohmann::json get_request_for_completions(std::string_view prompt, int max_tokens) const override;
         std::string parse_response_for_completions(const std::string& response) const override;
@@ -325,21 +366,15 @@ namespace llmcpp
         int parse_response_for_token_count(const std::string& response) const override;
         nlohmann::json get_request_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
-        int get_max_tokens() const override { return max_tokens; }
-        int get_truncation_length() const override { return truncation_length; }
+        int get_max_tokens() const override { return common.max_tokens; }
+        int get_truncation_length() const override { return common.truncation_length; }
     };
 
-    struct kc_parameters
-        : llm_backend_parameters
+    struct kc_common_parameters
     {
         int max_context_length{};
         int max_length{};
-        std::string prompt;
-        double rep_pen{};
-        int rep_pen_range{};
-        std::vector<int> sampler_order;
-        int sampler_seed{};
-        std::vector<std::string> stop_sequence;
+
         double temperature{};
         double tfs{};
         double top_a{};
@@ -347,33 +382,81 @@ namespace llmcpp
         double top_p{};
         double min_p{};
         double typical{};
-        bool use_default_badwordsids{};
+
         double dynatemp_range{};
         double smoothing_factor{};
         double dynatemp_exponent{};
+
         int mirostat{};
         double mirostat_tau{};
         double mirostat_eta{};
-        std::string genkey;
-        std::string grammar;
-        bool grammar_retain_state{};
-        std::string memory;
-        std::vector<std::string> images;
-        bool trim_stop{};
-        bool render_special{};
-        bool bypass_eos{};
-        std::vector<std::string> banned_tokens;
-        //std::vector<std::pair<std::string, double>> logit_bias;
+
         double dry_multiplier{};
         double dry_base{};
         int dry_allowed_length{};
         int dry_penalty_last_n{};
         std::vector<std::string> dry_sequence_breakers;
+
         double xtc_threshold{};
         double xtc_probability{};
         double nsigma{};
+
+        double rep_pen{};
+        int rep_pen_range{};
+        bool use_default_badwordsids{};
+        std::vector<std::string> banned_tokens;
+
+        std::vector<int> sampler_order;
+        int sampler_seed{};
+        std::vector<std::string> stop_sequence;
+
+        std::string genkey;
+        std::string grammar;
+        bool grammar_retain_state{};
+        bool trim_stop{};
+        bool render_special{};
+        bool bypass_eos{};
         bool logprobs{};
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
+    (
+        kc_common_parameters,
+        max_context_length, max_length,
+        temperature, tfs, top_a, top_k, top_p, min_p, typical,
+        dynatemp_range, smoothing_factor, dynatemp_exponent,
+        mirostat, mirostat_tau, mirostat_eta,
+        dry_multiplier, dry_base, dry_allowed_length, dry_penalty_last_n, dry_sequence_breakers,
+        xtc_threshold, xtc_probability, nsigma,
+        rep_pen, rep_pen_range, use_default_badwordsids, banned_tokens,
+        sampler_order, sampler_seed, stop_sequence,
+        genkey, grammar, grammar_retain_state, trim_stop, render_special, bypass_eos, logprobs
+    );
+
+    struct kc_completions_parameters
+    {
+        std::string prompt;
+        std::string memory;
         bool replace_instruct_placeholders{};
+    };
+
+    NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
+    (
+        kc_completions_parameters,
+        prompt, memory, replace_instruct_placeholders
+    );
+
+    struct kc_chat_completions_parameters
+    {
+        std::vector<std::string> images;
+    };
+
+    struct kc_parameters
+        : llm_backend_parameters
+    {
+        kc_common_parameters common{};
+        kc_completions_parameters completions{};
+        kc_chat_completions_parameters chat_completions{};
 
         nlohmann::json get_request_for_completions(std::string_view prompt, int max_tokens) const override;
         std::string parse_response_for_completions(const std::string& response) const override;
@@ -381,8 +464,8 @@ namespace llmcpp
         int parse_response_for_token_count(const std::string& response) const override;
         nlohmann::json get_request_for_chat_completions(const nlohmann::json& messages) const override;
         std::string parse_response_for_chat_completions(const std::string& response) const override;
-        int get_max_tokens() const override { return max_length; }
-        int get_truncation_length() const override { return max_context_length; }
+        int get_max_tokens() const override { return common.max_length; }
+        int get_truncation_length() const override { return common.max_context_length; }
     };
 
     struct adetailer_parametesrs
@@ -5060,104 +5143,104 @@ namespace llmcpp
 
                 ("llm-mode", po::value<std::string>()->default_value("completions")->notifier([&cfg](const std::string& value) { cfg.llm.mode = string_to_llm_mode(value); }), "LLM mode (completions | chat-completions)")
 
-                ("tg-model", po::value(&cfg.tg.model)->default_value("", "TG model"))
-                ("tg-num-best-of", po::value(&cfg.tg.best_of)->default_value(1), "TG best of")
-                ("tg-echo", po::bool_switch(&cfg.tg.echo)->default_value(false), "TG echo")
-                ("tg-frequency-penalty", po::value(&cfg.tg.frequency_penalty)->default_value(0.0), "TG frequency penalty")
+                ("tg-model", po::value(&cfg.tg.common.model)->default_value("", "TG model"))
+                ("tg-num-best-of", po::value(&cfg.tg.completions.best_of)->default_value(1), "TG best of")
+                ("tg-echo", po::bool_switch(&cfg.tg.completions.echo)->default_value(false), "TG echo")
+                ("tg-frequency-penalty", po::value(&cfg.tg.common.frequency_penalty)->default_value(0.0), "TG frequency penalty")
                 //std::map<int, double> logit_bias;
-                ("tg-logprobs", po::value(&cfg.tg.logprobs)->default_value(0.0), "TG presence penalty")
-                ("tg-max-tokens", po::value(&cfg.tg.max_tokens)->default_value(512), "TG max tokens")
-                ("tg-n", po::value(&cfg.tg.n)->default_value(1), "TG number of responses generated for the same prompt")
-                ("tg-presence-penalty", po::value(&cfg.tg.presence_penalty)->default_value(0.0), "TG presence penalty")
-                ("tg-stop", po::value<std::vector<std::string>>()->multitoken()->default_value(default_stop, boost::algorithm::join(default_stop, " "))->notifier(make_unescape_strings_notifier(cfg.tg.stop)), "TG stop sequences")
-                ("tg-stream", po::bool_switch(&cfg.tg.stream)->default_value(false), "TG stream")
-                ("tg-suffix", po::value(&cfg.tg.suffix)->default_value(""), "TG suffix")
-                ("tg-temperature", po::value(&cfg.tg.temperature)->default_value(1.0), "TG temperature")
-                ("tg-top-p", po::value(&cfg.tg.top_p)->default_value(1.0), "TG top p")
-                ("tg-dynatemp-low", po::value(&cfg.tg.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
-                ("tg-dynatemp-high", po::value(&cfg.tg.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
-                ("tg-dynatemp-exponent", po::value(&cfg.tg.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
-                ("tg-smoothing-factor", po::value(&cfg.tg.smoothing_factor)->default_value(0.0), "TG smoothing factor")
-                ("tg-smoothing-curve", po::value(&cfg.tg.smoothing_curve)->default_value(1.0), "TG smoothing curve")
-                ("tg-min-p", po::value(&cfg.tg.min_p)->default_value(0.1, "0.1"), "TG min p")
-                ("tg-top-k", po::value(&cfg.tg.top_k)->default_value(0), "TG top k")
-                ("tg-typical-p", po::value(&cfg.tg.typical_p)->default_value(1.0), "TG typical p")
-                ("tg-xtc-threshold", po::value(&cfg.tg.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
-                ("tg-xtc-probability", po::value(&cfg.tg.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
-                ("tg-epsilon-cutoff", po::value(&cfg.tg.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
-                ("tg-eta-cutoff", po::value(&cfg.tg.eta_cutoff)->default_value(0), "TG eta cutoff")
-                ("tg-tfs", po::value(&cfg.tg.tfs)->default_value(1.0), "TG tfs")
-                ("tg-top-a", po::value(&cfg.tg.top_a)->default_value(0.0), "TG top a")
-                ("tg-top-n-sigma", po::value(&cfg.tg.top_n_sigma)->default_value(1.0), "TG top n sigma")
-                ("tg-dry-multiplier", po::value(&cfg.tg.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
-                ("tg-dry-allowed-length", po::value(&cfg.tg.dry_allowed_length)->default_value(2), "TG DRY allowed length")
-                ("tg-dry-base", po::value(&cfg.tg.dry_base)->default_value(1.75), "TG DRY base")
-                ("tg-repetition-penalty", po::value(&cfg.tg.repetition_penalty)->default_value(1.2), "TG repetition penalty")
-                ("tg-encoder-repetition-penalty", po::value(&cfg.tg.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
-                ("tg-no-repeat-ngram-size", po::value(&cfg.tg.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
-                ("tg-repetition-penalty-range", po::value(&cfg.tg.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
-                ("tg-penalty-alpha", po::value(&cfg.tg.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
-                ("tg-guidance-scale", po::value(&cfg.tg.guidance_scale)->default_value(1.0), "TG guidance scale")
-                ("tg-mirostat-mode", po::value(&cfg.tg.mirostat_mode)->default_value(0), "TG mirostat mode")
-                ("tg-mirostat-tau", po::value(&cfg.tg.mirostat_tau)->default_value(5), "TG mirostat tau")
-                ("tg-mirostat-eta", po::value(&cfg.tg.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
-                ("tg-prompt-lookup-num-tokens", po::value(&cfg.tg.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
-                ("tg-max-tokens-second", po::value(&cfg.tg.max_tokens_second)->default_value(0), "TG max tokens second")
-                ("tg-do-sample", po::bool_switch(&cfg.tg.do_sample)->default_value(true), "TG do sample")
-                ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.dynamic_temperature)->default_value(false), "TG dynamic temperature")
-                ("tg-temperature-last", po::bool_switch(&cfg.tg.temperature_last)->default_value(false), "TG temperature last")
-                ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
-                ("tg-ban-eos-token", po::bool_switch(&cfg.tg.ban_eos_token)->default_value(false), "TG ban eos token")
-                ("tg-add-bos-token", po::bool_switch(&cfg.tg.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
-                ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
-                ("tg-static-cache", po::bool_switch(&cfg.tg.static_cache)->default_value(false), "TG static cache")
-                ("tg-truncation-length", po::value(&cfg.tg.truncation_length)->default_value(4096), "TG truncation length")
-                ("tg-sampler-priority", po::value(&cfg.tg.sampler_priority)->multitoken()->default_value(default_sampler_priority, boost::algorithm::join(default_sampler_priority, " ")), "TG sampler priority")
-                ("tg-custom-token-bans", po::value(&cfg.tg.custom_token_bans)->default_value(""), "TG custom token bans")
-                ("tg-negative-prompt", po::value(&cfg.tg.negative_prompt)->default_value(""), "TG negative prompt")
-                ("tg-dry-sequence-breakers", po::value<std::string>()->default_value("(\"\\n\", \":\", \"\\\"\", \"*\")")->notifier(make_unescape_string_notifier(cfg.tg.dry_sequence_breakers)), "TG dry sequence breakers")
-                ("tg-grammar-string", po::value(&cfg.tg.grammar_string)->default_value(""), "TG grammar-string")
+                ("tg-logprobs", po::value(&cfg.tg.completions.logprobs)->default_value(0.0), "TG presence penalty")
+                ("tg-max-tokens", po::value(&cfg.tg.common.max_tokens)->default_value(512), "TG max tokens")
+                ("tg-n", po::value(&cfg.tg.completions.n)->default_value(1), "TG number of responses generated for the same prompt")
+                ("tg-presence-penalty", po::value(&cfg.tg.common.presence_penalty)->default_value(0.0), "TG presence penalty")
+                ("tg-stop", po::value<std::vector<std::string>>()->multitoken()->default_value(default_stop, boost::algorithm::join(default_stop, " "))->notifier(make_unescape_strings_notifier(cfg.tg.common.stop)), "TG stop sequences")
+                ("tg-stream", po::bool_switch(&cfg.tg.common.stream)->default_value(false), "TG stream")
+                ("tg-suffix", po::value(&cfg.tg.completions.suffix)->default_value(""), "TG suffix")
+                ("tg-temperature", po::value(&cfg.tg.common.temperature)->default_value(1.0), "TG temperature")
+                ("tg-top-p", po::value(&cfg.tg.common.top_p)->default_value(1.0), "TG top p")
+                ("tg-dynatemp-low", po::value(&cfg.tg.common.dynatemp_low)->default_value(0.75, "0.75"), "TG dynatemp low")
+                ("tg-dynatemp-high", po::value(&cfg.tg.common.dynatemp_high)->default_value(1.25, "1.25"), "TG dynatemp high")
+                ("tg-dynatemp-exponent", po::value(&cfg.tg.common.dynatemp_exponent)->default_value(1.0), "TG dynatemp exponent")
+                ("tg-smoothing-factor", po::value(&cfg.tg.common.smoothing_factor)->default_value(0.0), "TG smoothing factor")
+                ("tg-smoothing-curve", po::value(&cfg.tg.common.smoothing_curve)->default_value(1.0), "TG smoothing curve")
+                ("tg-min-p", po::value(&cfg.tg.common.min_p)->default_value(0.1, "0.1"), "TG min p")
+                ("tg-top-k", po::value(&cfg.tg.common.top_k)->default_value(0), "TG top k")
+                ("tg-typical-p", po::value(&cfg.tg.common.typical_p)->default_value(1.0), "TG typical p")
+                ("tg-xtc-threshold", po::value(&cfg.tg.common.xtc_threshold)->default_value(0.1, "0.1"), "TG Exclude Top Choices (XTC) threshold")
+                ("tg-xtc-probability", po::value(&cfg.tg.common.xtc_probability)->default_value(0.0), "TG Exclude Top Choices (XTC) probability")
+                ("tg-epsilon-cutoff", po::value(&cfg.tg.common.epsilon_cutoff)->default_value(0), "TG epsilon cutoff")
+                ("tg-eta-cutoff", po::value(&cfg.tg.common.eta_cutoff)->default_value(0), "TG eta cutoff")
+                ("tg-tfs", po::value(&cfg.tg.common.tfs)->default_value(1.0), "TG tfs")
+                ("tg-top-a", po::value(&cfg.tg.common.top_a)->default_value(0.0), "TG top a")
+                ("tg-top-n-sigma", po::value(&cfg.tg.common.top_n_sigma)->default_value(1.0), "TG top n sigma")
+                ("tg-dry-multiplier", po::value(&cfg.tg.common.dry_multiplier)->default_value(0.0), "TG DRY multiplier")
+                ("tg-dry-allowed-length", po::value(&cfg.tg.common.dry_allowed_length)->default_value(2), "TG DRY allowed length")
+                ("tg-dry-base", po::value(&cfg.tg.common.dry_base)->default_value(1.75), "TG DRY base")
+                ("tg-repetition-penalty", po::value(&cfg.tg.common.repetition_penalty)->default_value(1.2), "TG repetition penalty")
+                ("tg-encoder-repetition-penalty", po::value(&cfg.tg.common.encoder_repetition_penalty)->default_value(1.0), "TG encoder repetition penalty")
+                ("tg-no-repeat-ngram-size", po::value(&cfg.tg.common.no_repeat_ngram_size)->default_value(0), "TG no repeat ngram size")
+                ("tg-repetition-penalty-range", po::value(&cfg.tg.common.repetition_penalty_range)->default_value(0), "TG repetition penalty range")
+                ("tg-penalty-alpha", po::value(&cfg.tg.common.penalty_alpha)->default_value(0.9, "0.9"), "TG penalty alpha")
+                ("tg-guidance-scale", po::value(&cfg.tg.common.guidance_scale)->default_value(1.0), "TG guidance scale")
+                ("tg-mirostat-mode", po::value(&cfg.tg.common.mirostat_mode)->default_value(0), "TG mirostat mode")
+                ("tg-mirostat-tau", po::value(&cfg.tg.common.mirostat_tau)->default_value(5), "TG mirostat tau")
+                ("tg-mirostat-eta", po::value(&cfg.tg.common.mirostat_eta)->default_value(0.1, "0.1"), "TG mirostat eta")
+                ("tg-prompt-lookup-num-tokens", po::value(&cfg.tg.common.prompt_lookup_num_tokens)->default_value(0), "TG prompt lookup num tokens")
+                ("tg-max-tokens-second", po::value(&cfg.tg.common.max_tokens_second)->default_value(0), "TG max tokens second")
+                ("tg-do-sample", po::bool_switch(&cfg.tg.common.do_sample)->default_value(true), "TG do sample")
+                ("tg-dynamic-temperature", po::bool_switch(&cfg.tg.common.dynamic_temperature)->default_value(false), "TG dynamic temperature")
+                ("tg-temperature-last", po::bool_switch(&cfg.tg.common.temperature_last)->default_value(false), "TG temperature last")
+                ("tg-auto-max-new-tokens", po::bool_switch(&cfg.tg.common.auto_max_new_tokens)->default_value(false), "TG auto max_new tokens")
+                ("tg-ban-eos-token", po::bool_switch(&cfg.tg.common.ban_eos_token)->default_value(false), "TG ban eos token")
+                ("tg-add-bos-token", po::bool_switch(&cfg.tg.common.add_bos_token)->default_value(true), "TG add Beginning of Sequence Token (BOS) token")
+                ("tg-skip-special-tokens", po::bool_switch(&cfg.tg.common.skip_special_tokens)->default_value(true), "TG skip special tokens (bos_token, eos_token, unk_token, pad_token, etc.)")
+                ("tg-static-cache", po::bool_switch(&cfg.tg.common.static_cache)->default_value(false), "TG static cache")
+                ("tg-truncation-length", po::value(&cfg.tg.common.truncation_length)->default_value(4096), "TG truncation length")
+                ("tg-sampler-priority", po::value(&cfg.tg.common.sampler_priority)->multitoken()->default_value(default_sampler_priority, boost::algorithm::join(default_sampler_priority, " ")), "TG sampler priority")
+                ("tg-custom-token-bans", po::value(&cfg.tg.common.custom_token_bans)->default_value(""), "TG custom token bans")
+                ("tg-negative-prompt", po::value(&cfg.tg.chat_completions.negative_prompt)->default_value(""), "TG negative prompt")
+                ("tg-dry-sequence-breakers", po::value<std::string>()->default_value("(\"\\n\", \":\", \"\\\"\", \"*\")")->notifier(make_unescape_string_notifier(cfg.tg.common.dry_sequence_breakers)), "TG dry sequence breakers")
+                ("tg-grammar-string", po::value(&cfg.tg.common.grammar_string)->default_value(""), "TG grammar-string")
 
-                ("kc-max-context-length", po::value(&cfg.kc.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
-                ("kc-max-length", po::value(&cfg.kc.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
-                ("kc-rep-pen", po::value(&cfg.kc.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
-                ("kc-rep-pen-range", po::value(&cfg.kc.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
-                ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
-                ("kc-sampler-seed", po::value(&cfg.kc.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
-                ("kc-stop-sequence", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.stop_sequence)), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
-                ("kc-temperature", po::value(&cfg.kc.temperature)->default_value(1.0), "Temperature value.")
-                ("kc-tfs", po::value(&cfg.kc.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-top-a", po::value(&cfg.kc.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
-                ("kc-top-k", po::value(&cfg.kc.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
-                ("kc-top-p", po::value(&cfg.kc.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-min-p", po::value(&cfg.kc.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-typical", po::value(&cfg.kc.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
-                ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
-                ("kc-dynatemp_range", po::value(&cfg.kc.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
-                ("kc-smoothing-factor", po::value(&cfg.kc.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
-                ("kc-dynatemp-exponent", po::value(&cfg.kc.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
-                ("kc-mirostat", po::value(&cfg.kc.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
-                ("kc-mirostat-tau", po::value(&cfg.kc.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
-                ("kc-mirostat-eta", po::value(&cfg.kc.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
-                ("kc-genkey", po::value(&cfg.kc.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
-                ("kc-grammar", po::value(&cfg.kc.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
-                ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
-                ("kc-memory", po::value(&cfg.kc.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
-                ("kc-images", po::value(&cfg.kc.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
-                ("kc-trim-stop", po::bool_switch(&cfg.kc.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
-                ("kc-render-special", po::bool_switch(&cfg.kc.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
-                ("kc-bypass-eos", po::bool_switch(&cfg.kc.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
-                ("kc-banned-tokens", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.banned_tokens)), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
-                ("kc-dry-multiplier", po::value(&cfg.kc.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
-                ("kc-dry-base", po::value(&cfg.kc.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
-                ("kc-dry-allowed-length", po::value(&cfg.kc.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
-                ("kc-dry-penalty-last-n", po::value(&cfg.kc.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
-                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.dry_sequence_breakers)), "An array of string sequence breakers for DRY.")
-                ("kc-xtc-threshold", po::value(&cfg.kc.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
-                ("kc-xtc-probability", po::value(&cfg.kc.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
-                ("kc-nsigma", po::value(&cfg.kc.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
-                ("kc-logprobs", po::bool_switch(&cfg.kc.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
-                ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
+                ("kc-max-context-length", po::value(&cfg.kc.common.max_context_length)->default_value(4096), "Maximum number of tokens to send to the model. (minimum: 1)")
+                ("kc-max-length", po::value(&cfg.kc.common.max_length)->default_value(512), "Number of tokens to generate. (minimum: 1)")
+                ("kc-rep-pen", po::value(&cfg.kc.common.rep_pen)->default_value(1.0), "Base repetition penalty value. (minimum: 1.0)")
+                ("kc-rep-pen-range", po::value(&cfg.kc.common.rep_pen_range)->default_value(0), "Repetition penalty range. (minimum: 0)")
+                ("kc-sampler-order", po::value<std::vector<int>>(&cfg.kc.common.sampler_order)->multitoken(), "Sampler order to be used. If N is the length of this array, then N must be greater than or equal to 6 and the array must be a permutation of the first N non-negative integers.")
+                ("kc-sampler-seed", po::value(&cfg.kc.common.sampler_seed)->default_value(1), "RNG seed to use for sampling. If not specified, the global RNG will be used. (minimum: 1, maximum: 999999)")
+                ("kc-stop-sequence", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.common.stop_sequence)), "An array of string sequences where the API will stop generating further tokens. The returned text WILL contain the stop sequence if trim_stop is false.")
+                ("kc-temperature", po::value(&cfg.kc.common.temperature)->default_value(1.0), "Temperature value.")
+                ("kc-tfs", po::value(&cfg.kc.common.tfs)->default_value(1.0), "Tail free sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-top-a", po::value(&cfg.kc.common.top_a)->default_value(1.0), "Top-a sampling value. (minimum: 0.0)")
+                ("kc-top-k", po::value(&cfg.kc.common.top_k)->default_value(0.0), "Top-k sampling value. (minimum: 0.0)")
+                ("kc-top-p", po::value(&cfg.kc.common.top_p)->default_value(1.0), "Top-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-min-p", po::value(&cfg.kc.common.min_p)->default_value(0.1), "Min-p sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-typical", po::value(&cfg.kc.common.typical)->default_value(1.0), "Typical sampling value. (minimum: 0.0, maximum: 1.0)")
+                ("kc-use-default-badwordsids", po::bool_switch(&cfg.kc.common.use_default_badwordsids)->default_value(false), "If true, prevents the EOS token from being generated (Ban EOS).")
+                ("kc-dynatemp_range", po::value(&cfg.kc.common.dynatemp_range)->default_value(0.0), "If not equal to 0, uses dynamic temperature. Dynamic temperature range will be between Temp+Range and Temp-Range. If equal to 0 , uses static temperature. (default: 0, minimum: -5.0, maximum: 5.0)")
+                ("kc-smoothing-factor", po::value(&cfg.kc.common.smoothing_factor)->default_value(0.0), "Modifies temperature behavior. If greater than 0 uses smoothing factor. (default: 0.0, minimum: 0.0)")
+                ("kc-dynatemp-exponent", po::value(&cfg.kc.common.dynatemp_exponent)->default_value(1.0), "Exponent used in dynatemp. (default: 0.0)")
+                ("kc-mirostat", po::value(&cfg.kc.common.mirostat)->default_value(0), "KoboldCpp ONLY. Sets the mirostat mode, 0=disabled, 1=mirostat_v1, 2=mirostat_v2. (minimum: 0, maximum: 2)")
+                ("kc-mirostat-tau", po::value(&cfg.kc.common.mirostat_tau)->default_value(0.0), "KoboldCpp ONLY. Mirostat tau value. (minimum: 0.0)")
+                ("kc-mirostat-eta", po::value(&cfg.kc.common.mirostat_eta)->default_value(0.0), "KoboldCpp ONLY. Mirostat eta value. (minimum: 0.0)")
+                ("kc-genkey", po::value(&cfg.kc.common.genkey)->default_value(""), "KoboldCpp ONLY. A unique genkey set by the user. When checking a polled-streaming request, use this key to be able to fetch pending text even if multiuser is enabled.")
+                ("kc-grammar", po::value(&cfg.kc.common.grammar)->default_value(""), "KoboldCpp ONLY. A string containing the GBNF grammar to use.")
+                ("kc-grammar-retain-state", po::bool_switch(&cfg.kc.common.grammar_retain_state)->default_value(false), "KoboldCpp ONLY. If true, retains the previous generation's grammar state, otherwise it is reset on new generation.")
+                ("kc-memory", po::value(&cfg.kc.completions.memory)->default_value(""), "KoboldCpp ONLY. If set, forcefully appends this string to the beginning of any submitted prompt text. If resulting context exceeds the limit, forcefully overwrites text from the beginning of the main prompt until it can fit. Useful to guarantee full memory insertion even when you cannot determine exact token count.")
+                ("kc-images", po::value(&cfg.kc.chat_completions.images)->multitoken(), "KoboldCpp ONLY. If set, takes an array of base64 encoded strings, each one representing an image to be processed.")
+                ("kc-trim-stop", po::bool_switch(&cfg.kc.common.trim_stop)->default_value(true), "KoboldCpp ONLY. If true, also removes detected stop_sequences from the output and truncates all text after them. If false, output will also include stop sequence and potentially a few additional characters.")
+                ("kc-render-special", po::bool_switch(&cfg.kc.common.render_special)->default_value(false), "KoboldCpp ONLY. If true, prints special tokens as text for GGUF models")
+                ("kc-bypass-eos", po::bool_switch(&cfg.kc.common.trim_stop)->default_value(false), "KoboldCpp ONLY. If true, allows EOS token to be generated, but does not stop generation. Not recommended unless you know what you are doing.")
+                ("kc-banned-tokens", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.common.banned_tokens)), "An array of string sequences, each entry represents a word or phrase prevented from being generated, either modifying model vocab or by backtracking and regenerating when they appear.")
+                ("kc-dry-multiplier", po::value(&cfg.kc.common.dry_multiplier)->default_value(0.0), "KoboldCpp ONLY. DRY multiplier value, 0 to disable. (minimum: 0)")
+                ("kc-dry-base", po::value(&cfg.kc.common.dry_base)->default_value(1.75), "KoboldCpp ONLY. DRY base value. (minimum: 0)")
+                ("kc-dry-allowed-length", po::value(&cfg.kc.common.dry_allowed_length)->default_value(2), "KoboldCpp ONLY. DRY allowed length value. (minimum: 0)")
+                ("kc-dry-penalty-last-n", po::value(&cfg.kc.common.dry_penalty_last_n)->default_value(0), "KoboldCpp ONLY. DRY last n tokens penalized value. (minimum: 0)")
+                ("kc-dry-sequence-breakers", po::value<std::vector<std::string>>()->multitoken()->notifier(make_unescape_strings_notifier(cfg.kc.common.dry_sequence_breakers)), "An array of string sequence breakers for DRY.")
+                ("kc-xtc-threshold", po::value(&cfg.kc.common.xtc_threshold)->default_value(0.1), "KoboldCpp ONLY. XTC threshold. (minimum: 0)")
+                ("kc-xtc-probability", po::value(&cfg.kc.common.xtc_probability)->default_value(0.0), "KoboldCpp ONLY. XTC probability. Set to above 0 to enable XTC. (minimum: 0)")
+                ("kc-nsigma", po::value(&cfg.kc.common.nsigma)->default_value(0.0), "KoboldCpp ONLY. Top N-Sigma value. Set to above 0 to enable nsigma. (minimum: 0)")
+                ("kc-logprobs", po::bool_switch(&cfg.kc.common.logprobs)->default_value(false), "If true, return up to 5 top logprobs for generated tokens. Incurs performance overhead.")
+                ("kc-replace-instruct-placeholders", po::bool_switch(&cfg.kc.common.use_default_badwordsids)->default_value(false), "If true, replaces instruct placeholders {{[INPUT]}} and {{[OUTPUT]}} with backend selected instruct tags.")
 
                 ("sd-host", po::value(&cfg.sd.host)->default_value("localhost"), "SD host")
                 ("sd-port", po::value(&cfg.sd.port)->default_value("7860"), "SD port")
@@ -5436,7 +5519,7 @@ namespace llmcpp
         std::string truncate_prompt_by_config(std::string_view prompt, const config& cfg)
         {
             std::string result;
-            int remaining_tokens{ cfg.tg.truncation_length - cfg.tg.max_tokens };
+            int remaining_tokens{ cfg.llm.backend->get_truncation_length() - cfg.llm.backend->get_max_tokens() };
             truncate_prompt(prompt, cfg, false, result, remaining_tokens);
             return result;
         }
@@ -5657,73 +5740,16 @@ namespace llmcpp
     nlohmann::json tg_parameters::get_request_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
+        json.update(nlohmann::json(common));
+        json.update(nlohmann::json(completions));
 
         json["prompt"] = prompt;
-        json["model"] = model;
-        json["best_of"] = best_of;
-        json["echo"] = echo;
-        json["frequency_penalty"] = frequency_penalty;
-        //json["logit_bias"] = logit_bias;
-        json["logprobs"] = logprobs;
         json["max_tokens"] = max_tokens;
-        json["n"] = n;
-        json["presence_penalty"] = presence_penalty;
-        json["stop"] = stop;
-        json["stream"] = stream;
-        json["suffix"] = suffix;
-        json["temperature"] = temperature;
-        json["top_p"] = top_p;
 
-        if (seed != -1)
+        if (common.seed != -1)
         {
-            json["seed"] = seed;
+            json["seed"] = common.seed;
         }
-
-        json["user"] = user;
-        json["preset"] = preset;
-        json["dynatemp_low"] = dynatemp_low;
-        json["dynatemp_high"] = dynatemp_high;
-        json["dynatemp_exponent"] = dynatemp_exponent;
-        json["smoothing_factor"] = smoothing_factor;
-        json["smoothing_curve"] = smoothing_curve;
-        json["min_p"] = min_p;
-        json["top_k"] = top_k;
-        json["typical_p"] = typical_p;
-        json["xtc_threshold"] = xtc_threshold;
-        json["xtc_probability"] = xtc_probability;
-        json["epsilon_cutoff"] = epsilon_cutoff;
-        json["eta_cutoff"] = eta_cutoff;
-        json["tfs"] = tfs;
-        json["top_a"] = top_a;
-        json["top_n_sigma"] = top_n_sigma;
-        json["dry_multiplier"] = dry_multiplier;
-        json["dry_allowed_length"] = dry_allowed_length;
-        json["dry_base"] = dry_base;
-        json["repetition_penalty"] = repetition_penalty;
-        json["encoder_repetition_penalty"] = encoder_repetition_penalty;
-        json["no_repeat_ngram_size"] = no_repeat_ngram_size;
-        json["repetition_penalty_range"] = repetition_penalty_range;
-        json["penalty_alpha"] = penalty_alpha;
-        json["guidance_scale"] = guidance_scale;
-        json["mirostat_mode"] = mirostat_mode;
-        json["mirostat_tau"] = mirostat_tau;
-        json["mirostat_eta"] = mirostat_eta;
-        json["prompt_lookup_num_tokens"] = prompt_lookup_num_tokens;
-        json["max_tokens_second"] = max_tokens_second;
-        json["do_sample"] = do_sample;
-        json["dynamic_temperature"] = max_tokens_second;
-        json["temperature_last"] = temperature_last;
-        json["auto_max_new_tokens"] = auto_max_new_tokens;
-        json["ban_eos_token"] = ban_eos_token;
-        json["add_bos_token"] = add_bos_token;
-        json["skip_special_tokens"] = skip_special_tokens;
-        json["static_cache"] = static_cache;
-        json["truncation_length"] = truncation_length;
-        json["sampler_priority"] = sampler_priority;
-        json["custom_token_bans"] = custom_token_bans;
-        json["negative_prompt"] = negative_prompt;
-        json["dry_sequence_breakers"] = dry_sequence_breakers;
-        json["grammar_string"] = grammar_string;
 
         return json;
     }
@@ -5750,16 +5776,14 @@ namespace llmcpp
     nlohmann::json tg_parameters::get_request_for_chat_completions(const nlohmann::json& messages) const
     {
         nlohmann::json json{ nlohmann::json::object() };
+        json.update(nlohmann::json(common));
+        json.update(nlohmann::json(chat_completions));
 
-        //json["max_length"] = max_tokens;
         json["max_tokens"] = get_max_tokens();
-        json["repetition_penalty"] = repetition_penalty;
-        json["repetition_penalty_range"] = repetition_penalty_range;
-        json["sampler_priority"] = sampler_priority;
 
-        if (seed != -1)
+        if (common.seed != -1)
         {
-            json["seed"] = seed;
+            json["seed"] = common.seed;
         }
 
         const std::vector<std::string> stop_sequence
@@ -5769,25 +5793,6 @@ namespace llmcpp
         };
 
         json["stop_sequence"] = stop_sequence;
-        json["temperature"] = temperature;
-        json["tfs"] = tfs;
-        json["top_a"] = top_a;
-        json["top_k"] = top_k;
-        json["top_p"] = top_p;
-        json["min_p"] = min_p;
-        json["typical_p"] = typical_p;
-        json["ban_eos_token"] = ban_eos_token;
-        json["dynamic_temperature"] = dynamic_temperature;
-        json["dynatemp_low"] = dynatemp_low;
-        json["dynatemp_high"] = dynatemp_high;
-        json["smoothing_factor"] = smoothing_factor;
-        json["dynatemp_exponent"] = dynatemp_exponent;
-        json["mirostat_mode"] = mirostat_mode;
-        json["custom_token_bans"] = custom_token_bans;
-        json["skip_special_tokens"] = skip_special_tokens;
-        json["ban_eos_token"] = ban_eos_token;
-        json["custom_token_bans"] = custom_token_bans;
-        json["logprobs"] = logprobs;
         json["messages"] = messages;
 
         return json;
@@ -5802,52 +5807,16 @@ namespace llmcpp
     nlohmann::json kc_parameters::get_request_for_completions(std::string_view prompt, int max_tokens) const
     {
         nlohmann::json json{ nlohmann::json::object() };
+        json.update(nlohmann::json(common));
+        json.update(nlohmann::json(completions));
 
-        json["max_context_length"] = max_context_length;
         json["max_length"] = max_tokens;
         json["prompt"] = prompt;
-        json["rep_pen"] = rep_pen;
-        json["rep_pen_range"] = rep_pen_range;
-        json["sampler_order"] = sampler_order;
 
-        if (sampler_seed != -1)
+        if (common.sampler_seed != -1)
         {
-            json["sampler_seed"] = sampler_seed;
+            json["sampler_seed"] = common.sampler_seed;
         }
-
-        json["stop_sequence"] = stop_sequence;
-        json["temperature"] = temperature;
-        json["tfs"] = tfs;
-        json["top_a"] = top_a;
-        json["top_k"] = top_k;
-        json["top_p"] = top_p;
-        json["min_p"] = min_p;
-        json["typical"] = typical;
-        json["use_default_badwordsids"] = use_default_badwordsids;
-        json["dynatemp_range"] = dynatemp_range;
-        json["smoothing_factor"] = smoothing_factor;
-        json["dynatemp_exponent"] = dynatemp_exponent;
-        json["mirostat"] = mirostat;
-        json["mirostat_tau"] = mirostat_tau;
-        json["mirostat_eta"] = mirostat_eta;
-        json["genkey"] = genkey;
-        json["grammar"] = grammar;
-        json["grammar_retain_state"] = grammar_retain_state;
-        json["memory"] = memory;
-        json["images"] = images;
-        json["trim_stop"] = trim_stop;
-        json["render_special"] = render_special;
-        json["bypass_eos"] = bypass_eos;
-        json["banned_tokens"] = banned_tokens;
-        json["dry_multiplier"] = dry_multiplier;
-        json["dry_base"] = dry_base;
-        json["dry_allowed_length"] = dry_allowed_length;
-        json["dry_penalty_last_n"] = dry_penalty_last_n;
-        json["dry_sequence_breakers"] = dry_sequence_breakers;
-        json["xtc_probability"] = xtc_probability;
-        json["nsigma"] = nsigma;
-        json["logprobs"] = logprobs;
-        json["replace_instruct_placeholders"] = replace_instruct_placeholders;
 
         return json;
     }
@@ -5874,16 +5843,14 @@ namespace llmcpp
     nlohmann::json kc_parameters::get_request_for_chat_completions(const nlohmann::json& messages) const
     {
         nlohmann::json json{ nlohmann::json::object() };
+        json.update(nlohmann::json{ common });
 
         //json["max_length"] = max_tokens;
         json["max_tokens"] = get_max_tokens();
-        json["rep_pen"] = rep_pen;
-        json["rep_pen_range"] = rep_pen_range;
-        json["sampler_order"] = sampler_order;
 
-        if (sampler_seed != -1)
+        if (common.sampler_seed != -1)
         {
-            json["sampler_seed"] = sampler_seed;
+            json["sampler_seed"] = common.sampler_seed;
         }
 
         const std::vector<std::string> stop_sequence
@@ -5893,24 +5860,6 @@ namespace llmcpp
         };
 
         json["stop_sequence"] = stop_sequence;
-        json["temperature"] = temperature;
-        json["tfs"] = tfs;
-        json["top_a"] = top_a;
-        json["top_k"] = top_k;
-        json["top_p"] = top_p;
-        json["min_p"] = min_p;
-        json["typical"] = typical;
-        json["use_default_badwordsids"] = use_default_badwordsids;
-        json["dynatemp_range"] = dynatemp_range;
-        json["smoothing_factor"] = smoothing_factor;
-        json["dynatemp_exponent"] = dynatemp_exponent;
-        json["mirostat"] = mirostat;
-        json["genkey"] = genkey;
-        json["trim_stop"] = trim_stop;
-        json["render_special"] = render_special;
-        json["bypass_eos"] = bypass_eos;
-        json["banned_tokens"] = banned_tokens;
-        json["logprobs"] = logprobs;
         json["messages"] = messages;
 
         return json;
@@ -6402,14 +6351,14 @@ namespace llmcpp
     {
         if (cfg.seed == -1)
         {
-            cfg.tg.seed = random<std::uint32_t>(0);
-            cfg.kc.sampler_seed = random<std::uint32_t>(0, 999999);
+            cfg.tg.common.seed = random<std::uint32_t>(0);
+            cfg.kc.common.sampler_seed = random<std::uint32_t>(0, 999999);
             cfg.sd.seed = random<std::uint32_t>(0);
         }
         else
         {
-            cfg.tg.seed = cfg.seed;
-            cfg.kc.sampler_seed = cfg.seed;
+            cfg.tg.common.seed = cfg.seed;
+            cfg.kc.common.sampler_seed = cfg.seed;
             cfg.sd.seed = cfg.seed;
         }
     }
