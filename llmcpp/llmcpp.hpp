@@ -468,7 +468,7 @@ namespace llmcpp
         int get_truncation_length() const override { return common.max_context_length; }
     };
 
-    struct adetailer_parametesrs
+    struct adetailer_parameters
     {
         bool ad_enable{};
         bool skip_img2img{};
@@ -524,7 +524,7 @@ namespace llmcpp
 
     struct alwayson_scripts
     {
-        adetailer_parametesrs adetailer_parametesrs;
+        adetailer_parameters adetailer_parameters;
     };
 
     BOOST_DEFINE_ENUM_CLASS(sd_mode, txt2img, img2img);
@@ -4427,7 +4427,6 @@ namespace llmcpp
                 }
             );
 
-
             filesystem::write_file(cfg, messages.dump(), chat_filename);
 
             filesystem::write_file(cfg, response, cfg.llm.output_file, std::ios_base::app);
@@ -4558,47 +4557,29 @@ namespace llmcpp
             json["prompt"] = prompt;
             json["negative_prompt"] = negative_prompt;
 
+            if (!cfg.sd.common.sampler_index.empty())
+            {
+                json["sampler_index"] = cfg.sd.common.sampler_index;
+            }
+
             nlohmann::json alwayson_scripts{ nlohmann::json::object() };
-            if (cfg.sd.common.alwayson_scripts.adetailer_parametesrs.ad_enable)
+            if (cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)
             {
                 nlohmann::json adetailer{ nlohmann::json::object() };
                 nlohmann::json object{ nlohmann::json::object() };
-                object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_model;
-                if (!cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt.empty())
+                object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_model;
+                if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt.empty())
                 {
-                    object["ad_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt;
+                    object["ad_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt;
                 }
-                if (!cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt.empty())
+                if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt.empty())
                 {
-                    object["ad_negative_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt;
+                    object["ad_negative_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt;
                 }
                 adetailer["args"] = { true, false, object };
                 alwayson_scripts["ADetailer"] = adetailer;
+                json["alwayson_scripts"] = alwayson_scripts;
             }
-            //{
-            //    nlohmann::json sampler{ nlohmann::json::object() };
-            //    sampler["args"] =
-            //    {
-            //        cfg.sd.steps,
-            //        cfg.sd.sampler_name,
-            //        cfg.sd.scheduler
-            //    };
-            //    alwayson_scripts["Sampler"] = sampler;
-            //}
-            //{
-            //    nlohmann::json seed{ nlohmann::json::object() };
-            //    seed["args"] = 
-            //    {
-            //        cfg.sd.seed,
-            //        false,
-            //        cfg.sd.subseed,
-            //        0,
-            //        0,
-            //        0
-            //    };
-            //    alwayson_scripts["Seed"] = seed;
-            //}
-            json["alwayson_scripts"] = alwayson_scripts;
 
             if (cfg.sd.mode == sd_mode::txt2img)
             {
@@ -5293,10 +5274,10 @@ namespace llmcpp
                 ("sd-script-args", po::value(&cfg.sd.common.script_args), "SD script_args")
                 ("sd-send-images", po::bool_switch(&cfg.sd.common.send_images)->default_value(true), "SD send images")
                 ("sd-save-images", po::bool_switch(&cfg.sd.common.save_images)->default_value(false), "SD save images")
-                ("sd-ad-enable", po::bool_switch(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.ad_enable)->default_value(false), "SD ADetailer enable")
-                ("sd-ad-model", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
-                ("sd-ad-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
-                ("sd-ad-negative-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parametesrs.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
+                ("sd-ad-enable", po::bool_switch(&cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)->default_value(false), "SD ADetailer enable")
+                ("sd-ad-model", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_model)->default_value("face_yolov8n.pt"), "SD ADetailer model")
+                ("sd-ad-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt)->default_value(""), "SD ADetailer prompt")
+                ("sd-ad-negative-prompt", po::value(&cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt)->default_value(""), "SD ADetailer negative prompt")
                 ("sd-infotext", po::value(&cfg.sd.common.infotext)->default_value(""), "SD infotext")
 
                 ("sd-mode", po::value<std::string>()->default_value("txt2img")->notifier([&cfg](const std::string& value) { cfg.sd.mode = string_to_sd_mode(value); }), "SD mode (txt2img | img2img)")
