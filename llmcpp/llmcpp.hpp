@@ -589,7 +589,7 @@ namespace llmcpp
         subseed_strength,
         seed_resize_from_h,
         seed_resize_from_w,
-        sampler_name,
+        /*sampler_name,*/
         scheduler,
         batch_size,
         n_iter,
@@ -638,10 +638,10 @@ namespace llmcpp
         int hr_resize_x{};
         int hr_resize_y{};
         std::string hr_checkpoint_name;
-        //std::string hr_sampler_name;
-        //std::string hr_scheduler;
-        //std::string hr_prompt;
-        //std::string hr_negative_prompt;
+        std::string hr_sampler_name;
+        std::string hr_scheduler;
+        std::string hr_prompt;
+        std::string hr_negative_prompt;
     };
 
     NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE
@@ -656,11 +656,11 @@ namespace llmcpp
         hr_second_pass_steps,
         hr_resize_x,
         hr_resize_y,
-        hr_checkpoint_name
-        /*hr_sampler_name,*/
-        /*hr_scheduler,*/
-        /*hr_prompt,*/
-        /*hr_negative_prompt*/
+        hr_checkpoint_name,
+        hr_sampler_name,
+        hr_scheduler,
+        hr_prompt,
+        hr_negative_prompt
     );
 
     struct sd_img2img_parameters
@@ -4556,6 +4556,11 @@ namespace llmcpp
 
             json["prompt"] = prompt;
             json["negative_prompt"] = negative_prompt;
+
+            if (!cfg.sd.common.sampler_name.empty())
+            {
+                json["sampler_name"] = cfg.sd.common.sampler_name;
+            }
 
             if (!cfg.sd.common.sampler_index.empty())
             {
