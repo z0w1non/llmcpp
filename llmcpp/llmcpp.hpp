@@ -4562,9 +4562,9 @@ namespace llmcpp
                 json["sampler_index"] = cfg.sd.common.sampler_index;
             }
 
-            nlohmann::json alwayson_scripts{ nlohmann::json::object() };
             if (cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)
             {
+                nlohmann::json alwayson_scripts{ nlohmann::json::object() };
                 nlohmann::json adetailer{ nlohmann::json::object() };
                 nlohmann::json object{ nlohmann::json::object() };
                 object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_model;
