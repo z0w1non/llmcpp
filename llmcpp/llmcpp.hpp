@@ -1724,7 +1724,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Result>
-            struct static_cast_impl
+            struct basic_static_cast_
             {
                 template<typename T>
                     requires requires(const T& value) { static_cast<Result>(value); }
@@ -1736,15 +1736,15 @@ namespace llmcpp
 
             template<typename Result>
             struct static_cast_
-                : static_cast_impl<Result>
+                : basic_static_cast_<Result>
             {
             };
 
             template<>
             struct static_cast_<bool>
-                : static_cast_impl<bool>
+                : basic_static_cast_<bool>
             {
-                using static_cast_impl<bool>::operator();
+                using basic_static_cast_<bool>::operator();
 
                 bool operator()(const std::string& s) const
                 {
