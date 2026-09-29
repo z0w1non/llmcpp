@@ -6072,7 +6072,7 @@ namespace llmcpp
 
     std::string sanitize_as_filename(std::string_view name)
     {
-        const std::regex illegal_chars(R"([:*?"<>|#])");
+        const std::regex illegal_chars{ R"([:*?"<>|#])" };
         std::string sanitized{ name.begin(), name.end() };
         std::replace(sanitized.begin(), sanitized.end(), ' ', '_');
         sanitized = std::regex_replace(sanitized, illegal_chars, "");
