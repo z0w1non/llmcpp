@@ -843,9 +843,9 @@ namespace llmcpp
     {
         using by_key = detail::lru_cache::by_key;
         using by_lru = detail::lru_cache::by_lru;
-
-        static constexpr std::size_t capacity{ Capacity };
         using callback_type = std::function<int(std::string_view)>;
+        static constexpr std::size_t capacity{ Capacity };
+
         lru_cache(const callback_type& callback);
         lru_cache(const lru_cache&) = default;
         lru_cache(lru_cache&&) = default;
