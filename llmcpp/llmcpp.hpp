@@ -71,6 +71,7 @@
 #include <boost/process/v2/stdio.hpp>
 #include <boost/program_options.hpp>
 #include <boost/range/algorithm.hpp>
+#include <boost/scope/defer.hpp>
 #include <boost/scope/scope_exit.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/spirit/include/qi.hpp>
@@ -1724,7 +1725,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Result>
-            struct basic_static_cast_
+            struct basic_static_cast
             {
                 template<typename T>
                     requires requires(const T& value) { static_cast<Result>(value); }
@@ -1736,15 +1737,15 @@ namespace llmcpp
 
             template<typename Result>
             struct static_cast_
-                : basic_static_cast_<Result>
+                : basic_static_cast<Result>
             {
             };
 
             template<>
             struct static_cast_<bool>
-                : basic_static_cast_<bool>
+                : basic_static_cast<bool>
             {
-                using basic_static_cast_<bool>::operator();
+                using basic_static_cast<bool>::operator();
 
                 bool operator()(const std::string& s) const
                 {
@@ -6207,6 +6208,7 @@ namespace llmcpp
         {
             return 0;
         }
+        BOOST_SCOPE_DEFER[snapshot]{ CloseHandle(snapshot); };
 
         const DWORD current_pid{ GetCurrentProcessId() };
 
@@ -6225,6 +6227,7 @@ namespace llmcpp
                 const HANDLE process{ OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, entry.th32ProcessID) };
                 if (process != nullptr)
                 {
+                    BOOST_SCOPE_DEFER[process]{ CloseHandle(process); };
                     wchar_t current_path_buffer[MAX_PATH]{};
                     DWORD size{ MAX_PATH };
 
@@ -6246,14 +6249,10 @@ namespace llmcpp
                             }
                         }
                     }
-
-                    CloseHandle(process);
                 }
 
             } while (Process32NextW(snapshot, &entry));
         }
-
-        CloseHandle(snapshot);
 #endif
 
         return terminated_count;
