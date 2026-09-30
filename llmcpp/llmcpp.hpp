@@ -1358,7 +1358,7 @@ namespace llmcpp
         void init_log(bool verbose, std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level);
     } // namespace log
 
-    template<typename Integer> requires std::integral<Integer> Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
+    template<std::integral Integer> Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
     void set_static_builtin_variables(config& cfg);
     void set_dynamic_builtin_variables(config& cfg);
@@ -6022,11 +6022,10 @@ namespace llmcpp
         }
     } // namespace log
 
-    template<typename Integer>
-        requires std::integral<Integer>
+    template<std::integral Integer>
     Integer random(Integer min, Integer max)
     {
-        thread_local std::mt19937 random_engine{ std::random_device{}()};
+        thread_local std::mt19937 random_engine{ std::random_device{}() };
         if constexpr (sizeof(Integer) == 1)
         {
             using common_type = std::conditional_t<std::is_signed_v<Integer>, int, unsigned int>;
