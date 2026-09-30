@@ -1124,6 +1124,7 @@ namespace llmcpp
         };
 
         using node_type = boost::variant<std::string, placeholder_type>;
+        using abstract_syntax_tree_type = std::vector<node_type>;
 
         struct assignment_symbols;
         struct equality_symbols;
@@ -1137,7 +1138,7 @@ namespace llmcpp
 
         template<typename Iterator>
         struct document_grammar
-            : boost::spirit::qi::grammar<Iterator, std::vector<node_type>()>
+            : boost::spirit::qi::grammar<Iterator, abstract_syntax_tree_type()>
         {
             document_grammar();
 
@@ -1158,7 +1159,7 @@ namespace llmcpp
             suffix_symbols suffix_operator_;
             escaped_chars escaped_char;
 
-            rule<std::vector<node_type>()> document;
+            rule<abstract_syntax_tree_type()> abstract_syntax_tree;
             rule<node_type()> node;
             rule<std::string()> plain_text;
             rule<placeholder_type()> placeholder;
@@ -1194,13 +1195,12 @@ namespace llmcpp
         };
 
         using grammar = document_grammar<std::string_view::const_iterator>;
-        using abstract_syntax_tree = std::vector<node_type>;
 
-        abstract_syntax_tree parse_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
+        abstract_syntax_tree_type parse(std::string_view input, const config& cfg, const grammar& grammar, context& ctx);
 
-        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
-        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
-        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree& ast, const config& cfg, const grammar& grammar, context& ctx);
+        std::string evaluate_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
+        std::string evaluate(std::string_view input, const config& cfg, const grammar& grammar, context& ctx);
+        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree_type& ast, const config& cfg, const grammar& grammar, context& ctx);
 
         value_reference_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx);
         value_reference_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx);
@@ -1676,7 +1676,7 @@ namespace llmcpp
 
         template<typename Iterator>
         document_grammar<Iterator>::document_grammar()
-            : document_grammar::base_type(document)
+            : document_grammar::base_type(abstract_syntax_tree)
         {
             namespace qi = boost::spirit::qi;
 
@@ -1690,7 +1690,7 @@ namespace llmcpp
             using qi::skip;
             using qi::matches;
 
-            document = *node;
+            abstract_syntax_tree = *node;
             node = placeholder | plain_text;
             plain_text = +(!lit("{{") >> char_);
             placeholder = lit("{{") >> skip(space)[expression] >> lit("}}");
@@ -2788,24 +2788,24 @@ namespace llmcpp
                 ;
         }
 
-        abstract_syntax_tree parse_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
+        abstract_syntax_tree_type parse(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
         {
-            std::vector<node_type> ast;
+            abstract_syntax_tree_type abstract_syntax_tree;
 
             grammar::iterator_type iter{ document.begin() };
             const grammar::iterator_type end{ document.end() };
 
-            if (boost::spirit::qi::parse(iter, end, grammar, ast) && iter != end)
+            if (boost::spirit::qi::parse(iter, end, grammar, abstract_syntax_tree) && iter != end)
             {
                 std::ostringstream description;
                 description << "Parse failed at: " << std::string{ iter, end };
                 llmcpp::throw_exception(macro_exception{} << error_info::description{ description.str() });
             }
 
-            return ast;
+            return abstract_syntax_tree;
         }
 
-        std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx)
+        std::string evaluate_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx)
         {
             grammar grammar;
 
@@ -2817,7 +2817,7 @@ namespace llmcpp
                     return input;
                 }
 
-                std::string evaluated{ evaluate_document(input, cfg, grammar, ctx) };
+                std::string evaluated{ evaluate(input, cfg, grammar, ctx) };
 
                 if (evaluated == input)
                 {
@@ -2835,16 +2835,16 @@ namespace llmcpp
             return input;
         }
 
-        std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
+        std::string evaluate(std::string_view input, const config& cfg, const grammar& grammar, context& ctx)
         {
-            abstract_syntax_tree ast{ parse_document(document, cfg, grammar, ctx) };
-            return evaluate_abstract_syntax_tree(ast, cfg, grammar, ctx);
+            abstract_syntax_tree_type abstract_syntax_tree{ parse(input, cfg, grammar, ctx) };
+            return evaluate_abstract_syntax_tree(abstract_syntax_tree, cfg, grammar, ctx);
         }
 
-        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree& ast, const config& cfg, const grammar& grammar, context& ctx)
+        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree_type& abstract_syntax_tree, const config& cfg, const grammar& grammar, context& ctx)
         {
             std::string result;
-            for (const node_type& node : ast)
+            for (const node_type& node : abstract_syntax_tree)
             {
                 result += boost::apply_visitor(node_visitor{ cfg, ctx }, node);
             }
@@ -3692,7 +3692,7 @@ namespace llmcpp
     {
         constexpr unsigned int max_depth{ 32 };
         context pushed{ ctx.make_pushed() };
-        return parser::evaluate_document_recursive(std::string{ input }, cfg, max_depth, pushed);
+        return parser::evaluate_recursive(std::string{ input }, cfg, max_depth, pushed);
     }
 
     // unused
