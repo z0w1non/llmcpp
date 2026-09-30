@@ -2793,7 +2793,7 @@ namespace llmcpp
             std::vector<node_type> ast;
 
             grammar::iterator_type iter{ document.begin() };
-            grammar::iterator_type end{ document.end() };
+            const grammar::iterator_type end{ document.end() };
 
             if (boost::spirit::qi::parse(iter, end, grammar, ast) && iter != end)
             {
@@ -2858,7 +2858,7 @@ namespace llmcpp
                 llmcpp::throw_exception(macro_exception{});
             }
             value_reference_type last{};
-            for (const auto& assignment_expression : expr.expressions)
+            for (const assignment_expression_type& assignment_expression : expr.expressions)
             {
                 last = evaluate_assignment_expression(assignment_expression, cfg, ctx);
             }
@@ -3139,7 +3139,7 @@ namespace llmcpp
         value_reference_type evaluate_suffix_expression(const suffix_expression_type& expr, const config& cfg, context& ctx)
         {
             value_reference_type operand{ evaluate_parentheses_expression(expr.operand, cfg, ctx) };
-            for (const auto& operator_ : expr.operators)
+            for (const suffix_operator& operator_ : expr.operators)
             {
                 switch (operator_)
                 {
