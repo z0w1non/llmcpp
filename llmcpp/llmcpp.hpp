@@ -1194,10 +1194,13 @@ namespace llmcpp
         };
 
         using grammar = document_grammar<std::string_view::const_iterator>;
+        using abstract_syntax_tree = std::vector<node_type>;
+
+        abstract_syntax_tree parse_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
 
         std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx);
         std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx);
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx);
+        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree& ast, const config& cfg, const grammar& grammar, context& ctx);
 
         value_reference_type evaluate_expression(const expression_type& expr, const config& cfg, context& ctx);
         value_reference_type evaluate_assignment_expression(const assignment_expression_type& expr, const config& cfg, context& ctx);
@@ -1223,6 +1226,7 @@ namespace llmcpp
         value_reference_type evaluate_variable(const variable_type& symbol, const config& cfg, context& ctx);
         value_reference_type value_as_reference_to_value_reference(value_type& value);
         value_reference_type value_as_value_to_value_reference(const value_type& value);
+
         value_type value_reference_to_value(const value_reference_type& value_reference);
     } // namespace parser
 
@@ -2784,6 +2788,23 @@ namespace llmcpp
                 ;
         }
 
+        abstract_syntax_tree parse_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
+        {
+            std::vector<node_type> ast;
+
+            grammar::iterator_type iter{ document.begin() };
+            grammar::iterator_type end{ document.end() };
+
+            if (boost::spirit::qi::parse(iter, end, grammar, ast) && iter != end)
+            {
+                std::ostringstream description;
+                description << "Parse failed at: " << std::string{ iter, end };
+                llmcpp::throw_exception(macro_exception{} << error_info::description{ description.str() });
+            }
+
+            return ast;
+        }
+
         std::string evaluate_document_recursive(std::string input, const config& cfg, unsigned int max_depth, context& ctx)
         {
             grammar grammar;
@@ -2816,24 +2837,11 @@ namespace llmcpp
 
         std::string evaluate_document(std::string_view document, const config& cfg, const grammar& grammar, context& ctx)
         {
-            std::vector<node_type> ast;
-
-            grammar::iterator_type iter{ document.begin() };
-            grammar::iterator_type end{ document.end() };
-
-            if (boost::spirit::qi::parse(iter, end, grammar, ast) && iter == end)
-            {
-                return evaluate_node(ast, cfg, grammar, ctx);
-            }
-            else
-            {
-                std::ostringstream description;
-                description << "Parse failed at: " << std::string{ iter, end };
-                llmcpp::throw_exception(macro_exception{} << error_info::description{ description.str() });
-            }
+            abstract_syntax_tree ast{ parse_document(document, cfg, grammar, ctx) };
+            return evaluate_abstract_syntax_tree(ast, cfg, grammar, ctx);
         }
 
-        std::string evaluate_node(const std::vector<node_type>& ast, const config& cfg, const grammar& grammar, context& ctx)
+        std::string evaluate_abstract_syntax_tree(const abstract_syntax_tree& ast, const config& cfg, const grammar& grammar, context& ctx)
         {
             std::string result;
             for (const node_type& node : ast)
