@@ -1358,7 +1358,7 @@ namespace llmcpp
         void init_log(bool verbose, std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level);
     } // namespace log
 
-    template<typename Integer> Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
+    template<typename Integer> requires std::integral<Integer> Integer random(Integer min = std::numeric_limits<Integer>::min(), Integer max = std::numeric_limits<Integer>::max());
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, const context& ctx);
     void set_static_builtin_variables(config& cfg);
     void set_dynamic_builtin_variables(config& cfg);
@@ -4296,7 +4296,7 @@ namespace llmcpp
                     break;
                 }
 
-                const int tokens_to_generate = std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens);
+                const int tokens_to_generate{ std::min(cfg.llm.backend->get_max_tokens(), remaining_tokens) };
                 if (tokens_to_generate <= 0)
                 {
                     LLMCPP_LOG(warning) << "No tokens left to generate. Aborting";
@@ -4523,8 +4523,8 @@ namespace llmcpp
         {
             std::ostringstream oss;
             oss
-                << prompt << std::endl
-                << "Negative prompt: " << negative_prompt << std::endl
+                << prompt << '\n'
+                << "Negative prompt: " << negative_prompt << '\n'
                 << "Steps: " << parameters.common.steps << ", "
                 << "Sampler: " << parameters.common.sampler_name << ", "
                 << "CFG scale: " << parameters.common.cfg_scale << ", "
@@ -5405,13 +5405,13 @@ namespace llmcpp
             }
             catch (boost::program_options::error& error)
             {
-                boost::nowide::cerr << error.what() << std::endl;
+                boost::nowide::cerr << error.what() << '\n';
                 return parse_result::program_options_error;
             }
 
             if (vm.find("help") != vm.end())
             {
-                boost::nowide::cout << options_description << std::endl;
+                boost::nowide::cout << options_description << '\n';
                 return parse_result::help;
             }
 
@@ -6023,12 +6023,16 @@ namespace llmcpp
     } // namespace log
 
     template<typename Integer>
+        requires std::integral<Integer>
     Integer random(Integer min, Integer max)
     {
-        static std::random_device seed_gen;
-        static std::default_random_engine random_engine{ seed_gen() };
-        static std::uniform_int_distribution<Integer> distribution{ min, max };
-        return distribution(random_engine);
+        thread_local std::mt19937 random_engine{ std::random_device{}()};
+        if constexpr (sizeof(Integer) == 1)
+        {
+            using common_type = std::conditional_t<std::is_signed_v<Integer>, int, unsigned int>;
+            return static_cast<Integer>(std::uniform_int_distribution<common_type>{ min, max }(random_engine));
+        }
+        return std::uniform_int_distribution<Integer>{ min, max }(random_engine);
     }
 
     void set_phase_variables(const std::vector<std::string>& phases, std::size_t phase_index, context& ctx)
@@ -6498,7 +6502,7 @@ namespace llmcpp
         }
         catch (const std::exception& e)
         {
-            std::cerr << "Initialization error: " << e.what() << std::endl;
+            std::cerr << "Initialization error: " << e.what() << '\n';
         }
 
         return -1;
