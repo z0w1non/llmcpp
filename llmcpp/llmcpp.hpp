@@ -689,15 +689,15 @@ namespace llmcpp
     (
         sd_img2img_parameters,
         target,
-        init_images,
+        /*init_images,*/
         seed_resize_from_h,
         seed_resize_from_w,
         resize_mode,
         image_cfg_scale,
-        mask,
+        /*mask,*/
         mask_blur_x,
         mask_blur_y,
-        mask_blur,
+        /*mask_blur,*/
         mask_round,
         inpainting_fill,
         inpaint_full_res,
@@ -4552,9 +4552,9 @@ namespace llmcpp
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json(cfg.sd.img2img);
-            json["sd_init_images"] = filesystem::image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
-            json["sd_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
-            json["sd_latent_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
+            json["init_images"] = filesystem::image_paths_to_base64_encoded_strings(cfg.sd.img2img.init_images, cfg);
+            json["mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.mask, cfg);
+            json["latent_mask"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.img2img.latent_mask, cfg);
             return json;
         }
 
