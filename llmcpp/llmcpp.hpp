@@ -3849,15 +3849,6 @@ namespace llmcpp
         }
     }
 
-    template<typename BoostException>
-    void if_error_throw(const boost::beast::error_code& error_code)
-    {
-        if (error_code)
-        {
-            llmcpp::throw_exception(BoostException{} << error_info::beast::error_code{ error_code });
-        }
-    }
-
     tcp::tcp()
     {
     }
@@ -3882,7 +3873,6 @@ namespace llmcpp
                 << error_info::port{ std::string{ port } }
             );
         }
-        if_error_throw<connect_exception>(error_code);
         connected = true;
         LLMCPP_LOG(info) << "Connect " << host << ":" << port;;
     }
@@ -3901,13 +3891,25 @@ namespace llmcpp
     {
         request.prepare_payload();
         boost::beast::http::write(tcp_stream, request, error_code);
-        if_error_throw<http_send_exception>(error_code);
+        if (error_code)
+        {
+            llmcpp::throw_exception
+            (
+                http_send_exception{} << error_info::beast::error_code{ error_code }
+            );
+        }
 
         boost::beast::flat_buffer buffer;
         boost::beast::http::response_parser<body_type> parser;
         parser.body_limit(boost::none);
         boost::beast::http::read(tcp_stream, buffer, parser, error_code);
-        if_error_throw<http_receive_exception>(error_code);
+        if (error_code)
+        {
+            llmcpp::throw_exception
+            (
+                http_receive_exception{} << error_info::beast::error_code{ error_code }
+            );
+        }
         const response_type response{ parser.release() };
 
         if (response.result() != boost::beast::http::status::ok)
