@@ -1596,7 +1596,7 @@ namespace llmcpp
     }
 
     template<typename T>
-    using decay_t = std::decay_t<unwrap_type_t<T>>;
+    using decay_t = unwrap_type_t<std::decay_t<T>>;
 
     template<typename Result, typename Exception>
     const Result& get_or_throw(const value_type& value)
