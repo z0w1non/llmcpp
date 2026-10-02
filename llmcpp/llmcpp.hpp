@@ -1762,11 +1762,8 @@ namespace llmcpp
             };
         } // namespace visitor
 
-        template<template<typename ...> typename Target, typename ... Args>
-        using apply_decay_t = Target<llmcpp::decay_t<Args> ...>;
-
-#define LLMCPP_DEFINE_TRAIT_V(trait_name)                                   \
-        template<typename ... Args>                                         \
+#define LLMCPP_DEFINE_TRAIT_V(trait_name)                                    \
+        template<typename ... Args>                                          \
         inline constexpr auto trait_name##_v{ trait_name<Args ...>::value };
 
 #define LLMCPP_DEFINE_TRAIT_T(trait_name)                           \
@@ -1781,6 +1778,14 @@ namespace llmcpp
 #define LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT(concept_name)                     \
         LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT_(is_##concept_name, concept_name)
 
+#define LLMCPP_DEFINE_DECAYED_CONCEPT_FROM_CONCEPT(concept_name)                  \
+        template<typename ... Args>                                               \
+        concept decayed_##concept_name = concept_name<llmcpp::decay_t<Args> ...>;
+
+#define LLMCPP_DEFINE_UNWRAPPED_CONCEPT_FROM_CONCEPT(concept_name)                        \
+        template<typename ... Args>                                                       \
+        concept unwrapped_##concept_name = concept_name<llmcpp::unwrap_type_t<Args> ...>;
+
 #define LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_trait_name)           \
         struct lazy_##is_trait_name                                        \
         {                                                                  \
@@ -1788,13 +1793,15 @@ namespace llmcpp
             static constexpr bool value{ is_trait_name<Args ...>::value }; \
         };
 
-#define LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(concept_name)        \
+#define LLMCPP_DEFINE_FROM_CONCEPT(concept_name)                     \
         LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT(concept_name)            \
+        LLMCPP_DEFINE_DECAYED_CONCEPT_FROM_CONCEPT(concept_name)     \
+        LLMCPP_DEFINE_UNWRAPPED_CONCEPT_FROM_CONCEPT(concept_name)   \
         LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_##concept_name)
 
         template<typename A, typename B>
         concept same_boolness = !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>);
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(same_boolness);
+        LLMCPP_DEFINE_FROM_CONCEPT(same_boolness);
 
         template<typename A, typename B>
         concept safe_assignable_to =
@@ -1803,7 +1810,7 @@ namespace llmcpp
             && std::is_convertible_v<A, B>
             && same_boolness<A, B>
             && requires(A a) { B{ a }; };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_assignable_to);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_assignable_to);
 
         template<typename A, typename B>
         concept safe_arithmetic_assignable_to =
@@ -1813,7 +1820,7 @@ namespace llmcpp
             && !std::is_same_v<A, bool>
             && !std::is_same_v<B, bool>
             && requires(A a) { B{ a }; };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_arithmetic_assignable_to);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_arithmetic_assignable_to);
 
         template<typename A, typename B>
         concept safe_bitwise_assignable_to =
@@ -1822,7 +1829,7 @@ namespace llmcpp
             && std::is_convertible_v<A, B>
             && same_boolness<A, B>
             && requires(A a) { B{ a }; };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_bitwise_assignable_to);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_bitwise_assignable_to);
 
         template<typename T>
         concept bitwise_operable = !std::same_as<T, bool>&& requires(T a, T b, int shift)
@@ -1834,27 +1841,27 @@ namespace llmcpp
             { a << shift } -> std::same_as<T>;
             { a >> shift } -> std::same_as<T>;
         };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(bitwise_operable);
+        LLMCPP_DEFINE_FROM_CONCEPT(bitwise_operable);
 
         template<typename A, typename B>
         concept safe_equality_comparable_with = requires(const A & a, const B & b)
         {
             { a == b } -> std::convertible_to<bool>;
         }&& same_boolness<A, B>;
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_equality_comparable_with);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_equality_comparable_with);
 
         template<typename T>
         concept safe_equality_comparable = requires(const T & a, const T & b)
         {
             { a == b } -> std::convertible_to<bool>;
         };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_equality_comparable);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_equality_comparable);
 
         template<typename A, typename B>
         concept safe_totally_ordered_with
             = std::totally_ordered_with<A, B>
             && same_boolness<A, B>;
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_totally_ordered_with);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_totally_ordered_with);
 
         template<typename A>
         concept safe_unary_arithmetic = requires(const A & a)
@@ -1862,14 +1869,14 @@ namespace llmcpp
             { +a };
             { -a };
         } && !std::same_as<A, bool>;
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_unary_arithmetic);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_unary_arithmetic);
 
         template<typename A>
         concept safe_logical_notable = requires(const A & a)
         {
             { !a };
         };
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_logical_notable);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_logical_notable);
 
 
         template<typename A>
@@ -1877,7 +1884,7 @@ namespace llmcpp
         {
             { ~a };
         } && !std::same_as<llmcpp::decay_t<A>, bool>;
-        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_bitwise_notable);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_bitwise_notable);
 
         namespace visitor
         {
@@ -2074,20 +2081,14 @@ namespace llmcpp
             struct basic_equality
             {
                 template<typename LHS, typename RHS>
-                static constexpr bool safe_equality_comparable_with_v
-                {
-                    safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>
-                };
-
-                template<typename LHS, typename RHS>
-                    requires (safe_equality_comparable_with_v<LHS, RHS>)
+                    requires (unwrapped_safe_equality_comparable_with<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_equality_comparable_with_v<LHS, RHS>))
+                    requires (!(unwrapped_safe_equality_comparable_with<LHS, RHS>))
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2108,20 +2109,14 @@ namespace llmcpp
             struct basic_relational
             {
                 template<typename LHS, typename RHS>
-                static constexpr bool safe_totally_ordered_with_v
-                {
-                    safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>
-                };
-
-                template<typename LHS, typename RHS>
-                    requires (safe_totally_ordered_with_v<LHS, RHS>)
+                    requires (unwrapped_safe_totally_ordered_with<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_totally_ordered_with_v<LHS, RHS>))
+                    requires (!(unwrapped_safe_totally_ordered_with<LHS, RHS>))
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2284,7 +2279,7 @@ namespace llmcpp
 #undef LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT_
 #undef LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT
 #undef LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT
-#undef LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT
+#undef LLMCPP_DEFINE_FROM_CONCEPT
 #undef LLMCPP_SFINAE_FORWARD_RETURN
 #undef LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR
 #undef LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR
