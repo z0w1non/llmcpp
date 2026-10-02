@@ -4028,7 +4028,7 @@ namespace llmcpp
         {
             std::vector<std::string> encoded_images;
             encoded_images.reserve(paths.size());
-            const auto unary_operator = [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); };
+            const auto unary_operator{ [&cfg](std::string_view image_path) { return image_path_to_base64_encoded_string(image_path, cfg); } };
             boost::transform(paths, std::back_inserter(encoded_images), unary_operator);
             return encoded_images;
         }
@@ -6053,7 +6053,7 @@ namespace llmcpp
 
         ctx.set("phase", phases[phase_index]);
 
-        if (phase_index < phases.size() - 1)
+        if (phase_index + 1 < phases.size())
         {
             ctx.set("next_phase", phases[phase_index + 1]);
         }
@@ -6325,14 +6325,13 @@ namespace llmcpp
     {
         if (cfg.command_mode == command_mode::tg || cfg.command_mode == command_mode::kc)
         {
+            const std::string prompt{ filesystem::prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
             if (cfg.llm.mode == llm_mode::completions)
             {
-                const std::string prompt{ filesystem::prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
                 llm::completions_and_write_file(cfg, prompt, cfg.ctx);
             }
             else if (cfg.llm.mode == llm_mode::chat_completions)
             {
-                const std::string prompt{ filesystem::prompt_from_string_or_file_path(cfg.llm.prompt, cfg.llm.prompt_file, cfg) };
                 llm::chat_completions_and_write_file(cfg, prompt, cfg.ctx);
             }
         }
