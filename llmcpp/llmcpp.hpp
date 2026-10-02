@@ -4979,12 +4979,11 @@ namespace llmcpp
 
         std::vector<std::string> split_command_line_args(std::string_view args)
         {
-            const boost::escaped_list_separator<char> separator{ '\0', ' ', '"' };
-            const boost::tokenizer<
-                boost::escaped_list_separator<char>,
-                std::string_view::const_iterator,
-                std::string
-            > tokenizer{ args, separator };
+            using separator_type = boost::escaped_list_separator<char>;
+            using tokenizer_type = boost::tokenizer<separator_type, std::string_view::const_iterator, std::string>;
+
+            const separator_type separator{ '\0', ' ', '"' };
+            const tokenizer_type tokenizer{ args, separator };
 
             std::vector<std::string> result;
             for (const std::string& token : tokenizer)
