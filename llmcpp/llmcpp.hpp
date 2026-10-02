@@ -1793,11 +1793,15 @@ namespace llmcpp
         LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_##concept_name)
 
         template<typename A, typename B>
+        concept same_boolness = !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>);
+        LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(same_boolness);
+
+        template<typename A, typename B>
         concept safe_assignable_to =
             std::is_arithmetic_v<A>
             && std::is_arithmetic_v<B>
             && std::is_convertible_v<A, B>
-            && !(std::is_same_v<A, bool>^ std::is_same_v<B, bool>)
+            && same_boolness<A, B>
             && requires(A a) { B{ a }; };
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_assignable_to);
 
@@ -1816,7 +1820,7 @@ namespace llmcpp
             std::is_integral_v<A>
             && std::is_integral_v<B>
             && std::is_convertible_v<A, B>
-            && !(std::is_same_v<A, bool>^ std::is_same_v<B, bool>)
+            && same_boolness<A, B>
             && requires(A a) { B{ a }; };
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_bitwise_assignable_to);
 
@@ -1836,7 +1840,7 @@ namespace llmcpp
         concept safe_equality_comparable_with = requires(const A & a, const B & b)
         {
             { a == b } -> std::convertible_to<bool>;
-        } && !(std::same_as<llmcpp::decay_t<A>, bool>^ std::same_as<llmcpp::decay_t<B>, bool>);
+        } && same_boolness<A, B>;
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_equality_comparable_with);
 
         template<typename T>
@@ -1849,7 +1853,7 @@ namespace llmcpp
         template<typename A, typename B>
         concept safe_totally_ordered_with
             = std::totally_ordered_with<A, B>
-            && !(std::same_as<llmcpp::decay_t<A>, bool>^ std::same_as<llmcpp::decay_t<B>, bool>);
+            && same_boolness<A, B>;
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_totally_ordered_with);
 
         template<typename A>
@@ -1857,7 +1861,7 @@ namespace llmcpp
         {
             { +a };
             { -a };
-        } && !std::same_as<llmcpp::decay_t<A>, bool>;
+        } && !std::same_as<A, bool>;
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_unary_arithmetic);
 
         template<typename A>
@@ -2063,14 +2067,14 @@ namespace llmcpp
             struct basic_equality
             {
                 template<typename LHS, typename RHS>
-                    requires (safe_equality_comparable_with<LHS, RHS>)
+                    requires (safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_equality_comparable_with<LHS, RHS>))
+                    requires (!(safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>))
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2091,14 +2095,14 @@ namespace llmcpp
             struct basic_relational
             {
                 template<typename LHS, typename RHS>
-                    requires (safe_totally_ordered_with<LHS, RHS>)
+                    requires (safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_totally_ordered_with<LHS, RHS>))
+                    requires (!(safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>))
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2202,14 +2206,14 @@ namespace llmcpp
             struct basic_prefix_
             {
                 template<typename Operand>
-                    requires (Trait::template value<Operand>)
+                    requires (Trait::template value<llmcpp::decay_t<Operand>>)
                 value_reference_type operator ()(const Operand& operand) const
                 {
                     return Operator{}(unwrap(operand));
                 }
 
                 template<typename Operand>
-                    requires (!(Trait::template value<Operand>))
+                    requires (!(Trait::template value<llmcpp::decay_t<Operand>>))
                 [[noreturn]] value_reference_type operator ()(const Operand& operand) const
                 {
                     llmcpp::throw_exception(macro_exception{});
