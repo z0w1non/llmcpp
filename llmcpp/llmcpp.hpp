@@ -1788,8 +1788,8 @@ namespace llmcpp
             static constexpr bool value{ is_trait_name<Args ...>::value }; \
         };
 
-#define LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(concept_name)                 \
-        LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT_(is_##concept_name, concept_name) \
+#define LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(concept_name)        \
+        LLMCPP_DEFINE_IS_TRAIT_FROM_CONCEPT(concept_name)            \
         LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_##concept_name)
 
         template<typename A, typename B>
@@ -1840,7 +1840,7 @@ namespace llmcpp
         concept safe_equality_comparable_with = requires(const A & a, const B & b)
         {
             { a == b } -> std::convertible_to<bool>;
-        } && same_boolness<A, B>;
+        }&& same_boolness<A, B>;
         LLMCPP_DEFINE_ALL_IS_TRAIT_FROM_CONCEPT(safe_equality_comparable_with);
 
         template<typename T>
@@ -2035,14 +2035,21 @@ namespace llmcpp
             struct basic_bitwise
             {
                 template<typename LHS, typename RHS>
-                    requires (bitwise_operable<unwrap_type_t<LHS>>&& bitwise_operable<unwrap_type_t<RHS>>)
+                static constexpr bool bitwise_operable_v
+                {
+                    bitwise_operable<unwrap_type_t<LHS>>
+                    && bitwise_operable<unwrap_type_t<RHS>>
+                };
+
+                template<typename LHS, typename RHS>
+                    requires (bitwise_operable_v<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(bitwise_operable<unwrap_type_t<LHS>>&& bitwise_operable<unwrap_type_t<RHS>>))
+                    requires (!(bitwise_operable_v<LHS, RHS>))
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2067,14 +2074,20 @@ namespace llmcpp
             struct basic_equality
             {
                 template<typename LHS, typename RHS>
-                    requires (safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>)
+                static constexpr bool safe_equality_comparable_with_v
+                {
+                    safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>
+                };
+
+                template<typename LHS, typename RHS>
+                    requires (safe_equality_comparable_with_v<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_equality_comparable_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>))
+                    requires (!(safe_equality_comparable_with_v<LHS, RHS>))
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2095,14 +2108,20 @@ namespace llmcpp
             struct basic_relational
             {
                 template<typename LHS, typename RHS>
-                    requires (safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>)
+                static constexpr bool safe_totally_ordered_with_v
+                {
+                    safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>
+                };
+
+                template<typename LHS, typename RHS>
+                    requires (safe_totally_ordered_with_v<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(safe_totally_ordered_with<unwrap_type_t<LHS>, unwrap_type_t<RHS>>))
+                    requires (!(safe_totally_ordered_with_v<LHS, RHS>))
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
@@ -2126,7 +2145,7 @@ namespace llmcpp
             struct basic_arithmetic
             {
                 template<typename LHS, typename RHS>
-                static constexpr bool operable
+                static constexpr bool operable_v
                 {
                     requires(const LHS & lhs, const RHS & rhs) { Operator{}(unwrap(lhs), unwrap(rhs)); }
                         && !std::same_as<llmcpp::decay_t<LHS>, bool>
@@ -2134,7 +2153,7 @@ namespace llmcpp
                 };
 
                 template<typename LHS, typename RHS>
-                    requires (operable<LHS, RHS>)
+                    requires (operable_v<LHS, RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     if constexpr (ZeroCheck)
@@ -2152,7 +2171,7 @@ namespace llmcpp
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!operable<LHS, RHS>)
+                    requires (!operable_v<LHS, RHS>)
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
