@@ -3606,34 +3606,37 @@ namespace llmcpp
             return std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }.extension().string();
         }
 
+        namespace
+        {
+            std::string datetime_impl(const char* time_facet_format)
+            {
+                using boost::posix_time::ptime;
+                using boost::posix_time::second_clock;
+                using boost::posix_time::time_facet;
+
+                const ptime local_time{ second_clock::local_time() };
+                const time_facet* facet{ new time_facet(time_facet_format) };
+                std::ostringstream oss;
+                oss.imbue(std::locale(oss.getloc(), facet));
+                oss << local_time;
+                return oss.str();
+            }
+
+        } // namespace
+
         std::string date()
         {
-            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d") };
-            std::ostringstream oss;
-            oss.imbue(std::locale(oss.getloc(), facet));
-            oss << local_time;
-            return oss.str();
+            return datetime_impl("%Y%m%d");
         }
 
         std::string time()
         {
-            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%H%M%S") };
-            std::ostringstream oss;
-            oss.imbue(std::locale(oss.getloc(), facet));
-            oss << local_time;
-            return oss.str();
+            return datetime_impl("%H%M%S");
         }
 
         std::string datetime()
         {
-            const boost::posix_time::ptime local_time{ boost::posix_time::second_clock::local_time() };
-            const boost::posix_time::time_facet* facet{ new boost::posix_time::time_facet("%Y%m%d%H%M%S") };
-            std::ostringstream oss;
-            oss.imbue(std::locale(oss.getloc(), facet));
-            oss << local_time;
-            return oss.str();
+            return datetime_impl("%Y%m%d%H%M%S");
         }
 
         bool is_interactive_input()
