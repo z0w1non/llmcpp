@@ -6281,7 +6281,7 @@ namespace llmcpp
         {
             url.params().set(key, value);
         }
-        else if constexpr (std::is_same_v<std::remove_cvref_t<T>, bool>)
+        else if constexpr (std::is_same_v<std::decay_t<T>, bool>)
         {
             url.params().set(key, value ? "true" : "false");
         }
