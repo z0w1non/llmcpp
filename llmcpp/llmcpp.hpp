@@ -780,14 +780,11 @@ namespace llmcpp
     template<typename T>
     decltype(auto) unwrap(T&& arg);
 
-    namespace detail
-    {
-        template<typename T>
-        struct unwrap_type;
-    }
+    template<typename T>
+    struct unwrap_reference;
 
     template <typename T>
-    using unwrap_type_t = typename detail::unwrap_type<std::decay_t<T>>::type;
+    using unwrap_reference_t = typename unwrap_reference<T>::type;
 
     std::string value_to_string(const value_type& value);
 
@@ -1539,7 +1536,7 @@ namespace llmcpp
         template<typename T>
         std::string operator ()(const T& value_reference) const
         {
-            if constexpr (std::is_same_v<unwrap_type_t<T>, std::string>)
+            if constexpr (std::is_same_v<unwrap_reference_t<T>, std::string>)
             {
                 return unwrap(value_reference);
             }
@@ -1575,19 +1572,19 @@ namespace llmcpp
                 return ref.get();
             }
         };
-
-        template<typename T>
-        struct unwrap_type
-        {
-            using type = T;
-        };
-
-        template<typename T>
-        struct unwrap_type<std::reference_wrapper<T>>
-        {
-            using type = T;
-        };
     }
+
+    template<typename T>
+    struct unwrap_reference
+    {
+        using type = T;
+    };
+
+    template<typename T>
+    struct unwrap_reference<std::reference_wrapper<T>>
+    {
+        using type = T;
+    };
 
     template<typename T>
     decltype(auto) unwrap(T&& arg)
@@ -1596,7 +1593,7 @@ namespace llmcpp
     }
 
     template<typename T>
-    using decay_t = unwrap_type_t<std::decay_t<T>>;
+    using decay_t = unwrap_reference_t<std::decay_t<T>>;
 
     template<typename Result, typename Exception>
     const Result& get_or_throw(const value_type& value)
@@ -1782,9 +1779,9 @@ namespace llmcpp
         template<typename ... Args>                                               \
         concept decayed_##concept_name = concept_name<llmcpp::decay_t<Args> ...>;
 
-#define LLMCPP_DEFINE_UNWRAPPED_CONCEPT_FROM_CONCEPT(concept_name)                        \
-        template<typename ... Args>                                                       \
-        concept unwrapped_##concept_name = concept_name<llmcpp::unwrap_type_t<Args> ...>;
+#define LLMCPP_DEFINE_UNWRAPPED_CONCEPT_FROM_CONCEPT(concept_name)                             \
+        template<typename ... Args>                                                            \
+        concept unwrapped_##concept_name = concept_name<llmcpp::unwrap_reference_t<Args> ...>;
 
 #define LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_trait_name)           \
         struct lazy_##is_trait_name                                        \
@@ -2042,21 +2039,14 @@ namespace llmcpp
             struct basic_bitwise
             {
                 template<typename LHS, typename RHS>
-                static constexpr bool bitwise_operable_v
-                {
-                    bitwise_operable<unwrap_type_t<LHS>>
-                    && bitwise_operable<unwrap_type_t<RHS>>
-                };
-
-                template<typename LHS, typename RHS>
-                    requires (bitwise_operable_v<LHS, RHS>)
+                    requires (unwrapped_bitwise_operable<LHS>&& unwrapped_bitwise_operable<RHS>)
                 value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     return Operator{}(unwrap(lhs), unwrap(rhs));
                 }
 
                 template<typename LHS, typename RHS>
-                    requires (!(bitwise_operable_v<LHS, RHS>))
+                    requires (!(unwrapped_bitwise_operable<LHS>&& unwrapped_bitwise_operable<RHS>))
                 [[noreturn]] value_reference_type operator ()(const LHS& lhs, const RHS& rhs) const
                 {
                     llmcpp::throw_exception(macro_exception{});
