@@ -2951,7 +2951,7 @@ namespace llmcpp
             {
                 return true;
             }
-            for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
+            for (std::vector<logical_and_expression_type>::const_iterator iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
             {
                 const auto& rhs = *iter;
                 lhs = evaluate_logical_and_expression(rhs, cfg, ctx);
@@ -2978,7 +2978,7 @@ namespace llmcpp
             {
                 return false;
             }
-            for (auto iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
+            for (std::vector<or_expression_type>::const_iterator iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
             {
                 const auto& rhs = *iter;
                 lhs = evaluate_or_expression(rhs, cfg, ctx);
@@ -3336,7 +3336,8 @@ namespace llmcpp
 
     std::optional<builtin::macro_type> builtin::get_macro(std::string_view name)
     {
-        static const string_view_unordered_map<macro_type> macros
+        using map_type = string_view_unordered_map<macro_type>;
+        static const map_type macros
         {
             { "int", int_ },
             { "double", double_ },
@@ -3361,7 +3362,7 @@ namespace llmcpp
             { "extension", extension }
         };
 
-        if (const auto iter{ macros.find(name) }; iter != macros.end())
+        if (const map_type::const_iterator iter{ macros.find(name) }; iter != macros.end())
         {
             return iter->second;
         }
@@ -4091,7 +4092,8 @@ namespace llmcpp
 
         std::string_view extension_to_mime_type(std::string_view extension)
         {
-            static const string_view_unordered_map<std::string_view> map
+            using map_type = string_view_unordered_map<std::string_view>;
+            static const map_type map
             {
                 { ".jpg", "jpg" },
                 { ".jpeg", "jpg" },
@@ -4105,7 +4107,7 @@ namespace llmcpp
                 { ".tiff", "tiff" },
                 { ".ico", "x-icon" }
             };
-            if (const auto iter{ map.find(extension) }; iter != map.end())
+            if (const map_type::const_iterator iter{ map.find(extension) }; iter != map.end())
             {
                 return iter->second;
             }
@@ -5993,38 +5995,21 @@ namespace llmcpp
 
         boost::log::trivial::severity_level string_to_severity_level(std::string_view log_level)
         {
-            boost::log::trivial::severity_level severity_level;
-
-            if (log_level == "trace")
+            using map_type = string_unordered_map<boost::log::trivial::severity_level>;
+            static const map_type map
             {
-                severity_level = boost::log::trivial::trace;
-            }
-            else if (log_level == "debug")
+                { "trace", boost::log::trivial::trace },
+                { "debug", boost::log::trivial::debug },
+                { "info", boost::log::trivial::info },
+                { "warning", boost::log::trivial::warning },
+                { "error", boost::log::trivial::error },
+                { "fatal", boost::log::trivial::fatal }
+            };
+            if (const map_type::const_iterator iter{ map.find(log_level) }; iter != map.end())
             {
-                severity_level = boost::log::trivial::debug;
+                return iter->second;
             }
-            else if (log_level == "info")
-            {
-                severity_level = boost::log::trivial::info;
-            }
-            else if (log_level == "warning")
-            {
-                severity_level = boost::log::trivial::warning;
-            }
-            else if (log_level == "error")
-            {
-                severity_level = boost::log::trivial::error;
-            }
-            else if (log_level == "fatal")
-            {
-                severity_level = boost::log::trivial::fatal;
-            }
-            else
-            {
-                llmcpp::throw_exception(logic_error{} << error_info::description{ std::string{ log_level } });
-            }
-
-            return severity_level;
+            llmcpp::throw_exception(logic_error{} << error_info::description{ std::string{ log_level } });
         }
 
         void init_log(bool verbose, const std::optional<std::filesystem::path> log_file, boost::log::trivial::severity_level log_level)
@@ -6112,7 +6097,8 @@ namespace llmcpp
 
     std::string_view language_identifier_to_extension(std::string_view language_identifier)
     {
-        static const string_view_unordered_map<std::string_view> map
+        using map_type = string_view_unordered_map<std::string_view>;
+        static const map_type map
         {
             { "assembly", ".asm" },
             { "bash", ".sh" },
@@ -6174,7 +6160,7 @@ namespace llmcpp
             { "zsh", ".zsh" },
             { "plaintext", ".txt" }
         };
-        if (const auto iter{ map.find(language_identifier) }; iter != map.end())
+        if (const map_type::const_iterator iter{ map.find(language_identifier) }; iter != map.end())
         {
             return iter->second;
         }
