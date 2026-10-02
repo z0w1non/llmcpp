@@ -3874,7 +3874,7 @@ namespace llmcpp
             );
         }
         connected = true;
-        LLMCPP_LOG(info) << "Connect " << host << ":" << port;;
+        LLMCPP_LOG(info) << "Connect " << host << ":" << port;
     }
 
     void tcp::close() noexcept
