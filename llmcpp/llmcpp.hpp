@@ -2465,7 +2465,7 @@ namespace llmcpp
 
         void close() noexcept;
 
-        response_type request(request_type& request);
+        response_type request(const request_type& request);
 
         template <typename Rep, typename Period>
         tcp& expires_after(std::chrono::duration<Rep, Period> timeout)
@@ -3887,9 +3887,8 @@ namespace llmcpp
         }
     }
 
-    tcp::response_type tcp::request(tcp::request_type& request)
+    tcp::response_type tcp::request(const tcp::request_type& request)
     {
-        request.prepare_payload();
         boost::beast::http::write(tcp_stream, request, error_code);
         if (error_code)
         {
@@ -4222,11 +4221,12 @@ namespace llmcpp
             const std::string request_body{ params.get_request_for_completions(prompt, max_tokens).dump() };
             LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+            tcp::request_type request{ tcp::make_post_json_request(host, target, request_body) };
             if (!cfg.llm.api_key.empty())
             {
                 request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
             }
+            request.prepare_payload();
 
             const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
             LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
@@ -4256,12 +4256,12 @@ namespace llmcpp
                 LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
             }
 
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
-
+            tcp::request_type request{ tcp::make_post_json_request(host, target, request_body) };
             if (!cfg.llm.api_key.empty())
             {
                 request.set(boost::beast::http::field::authorization, ("Bearer ") + cfg.llm.api_key);
             }
+            request.prepare_payload();
 
             const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
             LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
@@ -4634,7 +4634,8 @@ namespace llmcpp
             LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
             const std::string target{ sd_mode_to_target(cfg.sd.mode, cfg) };
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+            tcp::request_type request{ tcp::make_post_json_request(host, target, request_body) };
+            request.prepare_payload();
 
             const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
             LLMCPP_LOG(trace) << "Receive JSON\n```\n" << response.body() << "\n```";
@@ -4692,7 +4693,8 @@ namespace llmcpp
                     "reference_audio_path", cfg.sb.reference_audio_path);
 
             LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_get_json_request(host, target.encoded_target()) };
+            tcp::request_type request{ tcp::make_get_json_request(host, target.encoded_target()) };
+            request.prepare_payload();
             return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
         }
     } // namespace sb
@@ -4749,11 +4751,11 @@ namespace llmcpp
             content_type.reserve(30 + boundary.size());
             content_type += "multipart/form-data; boundary=";
             content_type += boundary;
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, body) };
+            tcp::request_type request{ tcp::make_post_json_request(host, target, body) };
             request.set(boost::beast::http::field::content_type, content_type);
+            request.prepare_payload();
 
             const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
-
             nlohmann::json response_json{ nlohmann::json::parse(response.body()) };
 
             return response_json.at("name").get<std::string>();
@@ -4805,7 +4807,9 @@ namespace llmcpp
             const std::string request_body{ json.dump() };
             LLMCPP_LOG(info) << "Send JSON\n```\n" << request_body << "\n```";
 
-            boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+            tcp::request_type request{ tcp::make_post_json_request(host, target, request_body) };
+            request.prepare_payload();
+
             const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
             LLMCPP_LOG(info) << "Response: " << response.body();
 
@@ -5887,9 +5891,11 @@ namespace llmcpp
         const std::string request_body{ cfg.llm.backend->get_request_for_token_count(prompt).dump() };
         LLMCPP_LOG(trace) << "Send JSON\n```\n" << request_body << "\n```";
 
-        boost::beast::http::request<boost::beast::http::string_body> request{ tcp::make_post_json_request(host, target, request_body) };
+        tcp::request_type request{ tcp::make_post_json_request(host, target, request_body) };
+        request.prepare_payload();
 
         const tcp::response_type response{ tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request) };
+        LLMCPP_LOG(trace) << "Recieve JSON\n```\n" << response.body() << "\n```";
 
         return cfg.llm.backend->parse_response_for_token_count(response.body());
     }
