@@ -2977,7 +2977,7 @@ namespace llmcpp
             }
             for (std::vector<or_expression_type>::const_iterator iter{ expr.begin() + 1 }; iter != expr.end(); ++iter)
             {
-                const auto& rhs = *iter;
+                const or_expression_type& rhs = *iter;
                 lhs = evaluate_or_expression(rhs, cfg, ctx);
                 if (!static_cast_<bool>{}(lhs))
                 {
