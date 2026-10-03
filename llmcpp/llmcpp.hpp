@@ -572,7 +572,7 @@ namespace llmcpp
         std::string force_task_id;
         std::string sampler_index;
         std::string script_name;
-        std::vector<std::string> script_args;
+        nlohmann::json script_args;
         bool send_images{};
         bool save_images{};
         std::string infotext;
@@ -617,8 +617,8 @@ namespace llmcpp
         comments,
         force_task_id,
         /*sampler_index,*/
-        script_name,
-        script_args,
+        /*script_name,*/
+        /*script_args,*/
         send_images,
         save_images,
         infotext
@@ -5087,19 +5087,22 @@ namespace llmcpp
                 }
             };
 
-            const auto to_json_notifier
+            const auto make_to_json_notifier
             {
-                [&cfg](const std::string& str)
+                [](auto& ref)
                 {
-                    return nlohmann::json::parse(str);
+                    return [&ref](const std::string& str)
+                    {
+                        ref = nlohmann::json::parse(str);
+                    };
                 }
             };
 
             const auto make_unescape_string_notifier
             {
-                [&cfg](auto& ref)
+                [](auto& ref)
                 {
-                    return [&cfg, &ref](const auto& str)
+                    return [&ref](const auto& str)
                         {
                             ref = string_utils::unescape_string(str);
                         };
@@ -5108,9 +5111,9 @@ namespace llmcpp
 
             const auto make_unescape_strings_notifier
             {
-                [&cfg](auto& ref)
+                [](auto& ref)
                 {
-                    return [&cfg, &ref](const auto& strings)
+                    return [&ref](const auto& strings)
                         {
                             ref = string_utils::unescape_strings(strings);
                         };
@@ -5295,7 +5298,7 @@ namespace llmcpp
                 ("sd-s-tmax", po::value(&cfg.sd.common.s_tmax)->default_value(0), "SD s tmax")
                 ("sd-s-tmin", po::value(&cfg.sd.common.s_tmin)->default_value(0), "SD s tmin")
                 ("sd-s-noise", po::value(&cfg.sd.common.s_noise)->default_value(1), "SD s noise")
-                ("sd-override-settings", po::value(&cfg.sd.common.override_settings)->notifier(to_json_notifier), "SD override settings")
+                ("sd-override-settings", po::value<std::string>()->notifier(make_to_json_notifier(cfg.sd.common.override_settings)), "SD override settings")
                 ("sd-override-settings-restore-afterwards", po::bool_switch(&cfg.sd.common.override_settings_restore_afterwards)->default_value(true), "SD override settings restore afterwards")
                 ("sd-refiner-checkpoint", po::value(&cfg.sd.common.refiner_checkpoint)->default_value(""), "SD refiner checkpoint")
                 ("sd-refiner-switch-at", po::value(&cfg.sd.common.refiner_switch_at)->default_value(0.8, "0.8"), "SD refiner switch at")
@@ -5304,7 +5307,7 @@ namespace llmcpp
                 ("sd-force-task-id", po::value(&cfg.sd.common.force_task_id)->default_value(""), "SD force task id")
                 ("sd-sampler-index", po::value(&cfg.sd.common.sampler_index)->default_value(""), "SD sampler index")
                 ("sd-script-name", po::value(&cfg.sd.common.script_name)->default_value(""), "SD script name")
-                ("sd-script-args", po::value(&cfg.sd.common.script_args), "SD script_args")
+                ("sd-script-args", po::value<std::string>()->notifier(make_to_json_notifier(cfg.sd.common.script_args)), "SD script_args")
                 ("sd-send-images", po::bool_switch(&cfg.sd.common.send_images)->default_value(true), "SD send images")
                 ("sd-save-images", po::bool_switch(&cfg.sd.common.save_images)->default_value(false), "SD save images")
                 ("sd-ad-enable", po::bool_switch(&cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)->default_value(false), "SD ADetailer enable")
