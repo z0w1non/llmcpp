@@ -1797,33 +1797,33 @@ namespace llmcpp
         LLMCPP_DEFINE_LAZY_IS_TRAIT_FROM_IS_TRAIT(is_##concept_name)
 
         template<typename A, typename B>
-        concept same_boolness = !(std::is_same_v<A, bool> ^ std::is_same_v<B, bool>);
+        concept same_boolness = !(std::same_as<A, bool> ^ std::same_as<B, bool>);
         LLMCPP_DEFINE_FROM_CONCEPT(same_boolness);
-
-        template<typename A, typename B>
-        concept safe_assignable_to =
-            std::is_arithmetic_v<A>
-            && std::is_arithmetic_v<B>
-            && std::is_convertible_v<A, B>
-            && same_boolness<A, B>
-            && requires(A a) { B{ a }; };
-        LLMCPP_DEFINE_FROM_CONCEPT(safe_assignable_to);
 
         template<typename A, typename B>
         concept safe_arithmetic_assignable_to =
             std::is_arithmetic_v<A>
             && std::is_arithmetic_v<B>
-            && std::is_convertible_v<A, B>
-            && !std::is_same_v<A, bool>
-            && !std::is_same_v<B, bool>
+            && std::convertible_to<A, B>
+            && same_boolness<A, B>
             && requires(A a) { B{ a }; };
         LLMCPP_DEFINE_FROM_CONCEPT(safe_arithmetic_assignable_to);
+
+        template<typename A, typename B>
+        concept safe_non_bool_arithmetic_assignable_to =
+            std::is_arithmetic_v<A>
+            && std::is_arithmetic_v<B>
+            && std::convertible_to<A, B>
+            && !std::same_as<A, bool>
+            && !std::same_as<B, bool>
+            && requires(A a) { B{ a }; };
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_non_bool_arithmetic_assignable_to);
 
         template<typename A, typename B>
         concept safe_bitwise_assignable_to =
             std::is_integral_v<A>
             && std::is_integral_v<B>
-            && std::is_convertible_v<A, B>
+            && std::convertible_to<A, B>
             && same_boolness<A, B>
             && requires(A a) { B{ a }; };
         LLMCPP_DEFINE_FROM_CONCEPT(safe_bitwise_assignable_to);
@@ -1848,10 +1848,7 @@ namespace llmcpp
         LLMCPP_DEFINE_FROM_CONCEPT(safe_equality_comparable_with);
 
         template<typename T>
-        concept safe_equality_comparable = requires(const T & a, const T & b)
-        {
-            { a == b } -> std::convertible_to<bool>;
-        };
+        concept safe_equality_comparable = safe_equality_comparable_with<T, T>;
         LLMCPP_DEFINE_FROM_CONCEPT(safe_equality_comparable);
 
         template<typename A, typename B>
@@ -1869,19 +1866,19 @@ namespace llmcpp
         LLMCPP_DEFINE_FROM_CONCEPT(safe_unary_arithmetic);
 
         template<typename A>
-        concept safe_logical_notable = requires(const A & a)
+        concept safe_logical_not_operable = requires(const A & a)
         {
             { !a };
         };
-        LLMCPP_DEFINE_FROM_CONCEPT(safe_logical_notable);
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_logical_not_operable);
 
 
         template<typename A>
-        concept safe_bitwise_notable = requires(const A & a)
+        concept safe_bitwise_not_operable = requires(const A & a)
         {
             { ~a };
-        } && !std::same_as<llmcpp::decay_t<A>, bool>;
-        LLMCPP_DEFINE_FROM_CONCEPT(safe_bitwise_notable);
+        } && !std::same_as<A, bool>;
+        LLMCPP_DEFINE_FROM_CONCEPT(safe_bitwise_not_operable);
 
         namespace visitor
         {
@@ -1914,7 +1911,7 @@ namespace llmcpp
                             return unwrap(lhs) = unwrap(rhs);
                         }
                     }
-                    else if constexpr (safe_assignable_to<RHS_, LHS_>)
+                    else if constexpr (safe_arithmetic_assignable_to<RHS_, LHS_>)
                     {
                         if constexpr (requires { unwrap(lhs) = static_cast<LHS_>(unwrap(rhs)); })
                         {
@@ -2021,16 +2018,16 @@ namespace llmcpp
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                                 \
         using opecode = basic_visit<visitor::basic_assign<operators::opecode, trait, zero_check>>;
 
-        LLMCPP_DEFINE_FUNCTOR(+=, plus_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTOR(-=, minus_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTOR(*=, multiplies_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTOR(<<=, shift_left_assign, lazy_is_safe_arithmetic_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTOR(>>=, shift_right_assign, lazy_is_safe_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(+=, plus_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(-=, minus_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(*=, multiplies_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(<<=, shift_left_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
+        LLMCPP_DEFINE_FUNCTOR(>>=, shift_right_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
         LLMCPP_DEFINE_FUNCTOR(&=, and_assign, lazy_is_safe_bitwise_assignable_to, false);
         LLMCPP_DEFINE_FUNCTOR(^=, xor_assign, lazy_is_safe_bitwise_assignable_to, false);
         LLMCPP_DEFINE_FUNCTOR(|=, or_assign, lazy_is_safe_bitwise_assignable_to, false);
-        LLMCPP_DEFINE_FUNCTOR(/=, divides_assign, lazy_is_safe_arithmetic_assignable_to, true);
-        LLMCPP_DEFINE_FUNCTOR(%=, modulus_assign, lazy_is_safe_arithmetic_assignable_to, true);
+        LLMCPP_DEFINE_FUNCTOR(/=, divides_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, true);
+        LLMCPP_DEFINE_FUNCTOR(%=, modulus_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, true);
 #undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
@@ -2231,8 +2228,8 @@ namespace llmcpp
 
         LLMCPP_DEFINE_FUNCTOR(+, prefix_plus, lazy_is_safe_unary_arithmetic);
         LLMCPP_DEFINE_FUNCTOR(-, prefix_minus, lazy_is_safe_unary_arithmetic);
-        LLMCPP_DEFINE_FUNCTOR(!, logical_not, lazy_is_safe_logical_notable);
-        LLMCPP_DEFINE_FUNCTOR(~, bitwise_not, lazy_is_safe_bitwise_notable);
+        LLMCPP_DEFINE_FUNCTOR(!, logical_not, lazy_is_safe_logical_not_operable);
+        LLMCPP_DEFINE_FUNCTOR(~, bitwise_not, lazy_is_safe_bitwise_not_operable);
 #undef LLMCPP_DEFINE_FUNCTOR
 
         namespace visitor
