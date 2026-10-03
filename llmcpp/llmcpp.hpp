@@ -5100,9 +5100,9 @@ namespace llmcpp
                 [](auto& ref)
                 {
                     return [&ref](const auto& str)
-                        {
-                            ref = string_utils::unescape_string(str);
-                        };
+                    {
+                        ref = string_utils::unescape_string(str);
+                    };
                 }
             };
 
@@ -5111,9 +5111,9 @@ namespace llmcpp
                 [](auto& ref)
                 {
                     return [&ref](const auto& strings)
-                        {
-                            ref = string_utils::unescape_strings(strings);
-                        };
+                    {
+                        ref = string_utils::unescape_strings(strings);
+                    };
                 }
             };
 
@@ -5754,8 +5754,8 @@ namespace llmcpp
 
     image_info_type image_info_type::from_file(std::string_view path, const config& cfg)
     {
-        const std::string base64_image{ filesystem::image_path_to_base64_encoded_string(cfg.llm.image_file, cfg) };
-        const std::string mime_type{ filesystem::extension_to_mime_type(std::filesystem::path{ cfg.llm.image_file }.extension().string()) };
+        const std::string base64_image{ filesystem::image_path_to_base64_encoded_string(path, cfg) };
+        const std::string mime_type{ filesystem::extension_to_mime_type(std::filesystem::path{ path }.extension().string()) };
         return image_info_type{ base64_image, mime_type };
     }
 
