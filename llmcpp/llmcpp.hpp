@@ -476,7 +476,7 @@ namespace llmcpp
 
         struct arg
         {
-            std::string ad_model;;
+            std::string ad_model;
             std::string ad_model_classes;
             bool ad_tab_enable{};
             std::string ad_prompt;
@@ -492,7 +492,7 @@ namespace llmcpp
             std::string ad_mask_merge_invert;
             int ad_mask_blur{};
             double ad_denoising_strength{};
-            bool ad_inpaint_only_masked{};;
+            bool ad_inpaint_only_masked{};
             int ad_inpaint_only_masked_padding{};
             bool ad_use_inpaint_width_height{};
             int ad_inpaint_width{};
@@ -4558,7 +4558,7 @@ namespace llmcpp
             nlohmann::json json(cfg.sd.txt2img);
             if (!cfg.sd.txt2img.firstpass_image.empty())
             {
-                json["firstpass_image"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.txt2img.firstpass_image, cfg);;
+                json["firstpass_image"] = filesystem::image_path_to_base64_encoded_string(cfg.sd.txt2img.firstpass_image, cfg);
             }
             return json;
         }
