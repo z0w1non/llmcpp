@@ -4771,19 +4771,19 @@ namespace llmcpp
 
         std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite)
         {
-            const std::string image_data{ filesystem::read_binary_file_to_string(image_path, cfg) };
-            const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
-            const std::string boundary{ generate_boundary() };
-
-            const std::string body{ make_image_body(image_data, filename, boundary, overwrite) };
-            const std::string content_type{ make_image_content_type(boundary) };
-
             const std::string_view host{ cfg.cu.host };
             const std::string_view port{ cfg.cu.port };
             const std::string_view target{ cfg.cu.upload_image_target };
 
             tcp tcp;
             tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            const std::string image_data{ filesystem::read_binary_file_to_string(image_path, cfg) };
+            const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
+            const std::string boundary{ generate_boundary() };
+
+            const std::string body{ make_image_body(image_data, filename, boundary, overwrite) };
+            const std::string content_type{ make_image_content_type(boundary) };
 
             tcp::request_type request{ tcp::make_post_json_request(host, target, body) };
             request.set(boost::beast::http::field::content_type, content_type);
