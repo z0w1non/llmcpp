@@ -3596,7 +3596,7 @@ namespace llmcpp
         namespace
         {
             template<typename Function>
-            std::string path_impl(macro_argument_type args, Function function)
+            std::string apply_path_operation(macro_argument_type args, Function function)
             {
                 validate_arguments_size(args.arguments, 1, 1);
                 return function(std::filesystem::path{ get_or_throw<std::string>(args.arguments[0]) }).string();
@@ -3605,22 +3605,22 @@ namespace llmcpp
 
         value_type root(macro_argument_type args)
         {
-            return path_impl(args, [](const std::filesystem::path& path) { return path.root_path(); });
+            return apply_path_operation(args, [](const std::filesystem::path& path) { return path.root_path(); });
         }
 
         value_type parent(macro_argument_type args)
         {
-            return path_impl(args, [](const std::filesystem::path& path) { return path.parent_path(); });
+            return apply_path_operation(args, [](const std::filesystem::path& path) { return path.parent_path(); });
         }
 
         value_type stem(macro_argument_type args)
         {
-            return path_impl(args, [](const std::filesystem::path& path) { return path.stem(); });
+            return apply_path_operation(args, [](const std::filesystem::path& path) { return path.stem(); });
         }
 
         value_type extension(macro_argument_type args)
         {
-            return path_impl(args, [](const std::filesystem::path& path) { return path.extension(); });
+            return apply_path_operation(args, [](const std::filesystem::path& path) { return path.extension(); });
         }
 
         namespace
