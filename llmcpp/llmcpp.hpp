@@ -6359,15 +6359,17 @@ namespace llmcpp
     {
         if (cfg.seed == -1)
         {
-            cfg.tg.common.seed = random<std::uint32_t>(0);
-            cfg.kc.common.sampler_seed = random<std::uint32_t>(0, 999999);
-            cfg.sd.common.seed = random<std::uint32_t>(0);
+            cfg.tg.common.seed
+                = cfg.kc.common.sampler_seed
+                = cfg.sd.common.seed
+                = random<std::uint32_t>(0);
         }
         else
         {
-            cfg.tg.common.seed = cfg.seed;
-            cfg.kc.common.sampler_seed = cfg.seed;
-            cfg.sd.common.seed = cfg.seed;
+            cfg.tg.common.seed
+                = cfg.kc.common.sampler_seed
+                = cfg.sd.common.seed
+                = cfg.seed;
         }
     }
 
