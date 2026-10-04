@@ -1287,6 +1287,7 @@ namespace llmcpp
 
     namespace sb
     {
+        std::string make_request_url(const config& cfg, std::string_view text);
         std::string send_request(const config& cfg, std::string_view text);
     } // namespace sb
 
@@ -4671,16 +4672,10 @@ namespace llmcpp
 
     namespace sb
     {
-        std::string send_request(const config& cfg, std::string_view text)
+        std::string make_request_url(const config& cfg, std::string_view text)
         {
-            const std::string_view host{ cfg.sb.host };
-            const std::string_view port{ cfg.sb.port };
-
-            tcp tcp;
-            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
-
-            boost::urls::url target{ cfg.sb.target };
-            url_params_setter{ target }
+            boost::urls::url request_url{ cfg.sb.target };
+            url_params_setter{ request_url }
                 ("text", text)
                 ("sdp_ratio", cfg.sb.sdp_ratio)
                 ("noise", cfg.sb.noise)
@@ -4705,9 +4700,21 @@ namespace llmcpp
                     "style_weight", cfg.sb.style_weight)
                 .set_if(!cfg.sb.reference_audio_path.empty(),
                     "reference_audio_path", cfg.sb.reference_audio_path);
+            return std::string{ request_url.encoded_target() };
+        }
+
+        std::string send_request(const config& cfg, std::string_view text)
+        {
+            const std::string_view host{ cfg.sb.host };
+            const std::string_view port{ cfg.sb.port };
+
+            tcp tcp;
+            tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
+
+            const std::string target{ make_request_url(cfg, text) };
 
             LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
-            tcp::request_type request{ tcp::make_get_json_request(host, target.encoded_target()) };
+            tcp::request_type request{ tcp::make_get_json_request(host, target) };
             request.prepare_payload();
             return tcp.expires_after(std::chrono::seconds{ cfg.timeout_request }).request(request).body();
         }
