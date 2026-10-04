@@ -1287,7 +1287,7 @@ namespace llmcpp
 
     namespace sb
     {
-        std::string make_request_url(const config& cfg, std::string_view text);
+        std::string make_request_url(std::string_view target, const sb_parameters& params, std::string_view text);
         std::string send_request(const config& cfg, std::string_view text);
     } // namespace sb
 
@@ -4672,34 +4672,34 @@ namespace llmcpp
 
     namespace sb
     {
-        std::string make_request_url(const config& cfg, std::string_view text)
+        std::string make_request_url(std::string_view target, const sb_parameters& params, std::string_view text)
         {
-            boost::urls::url request_url{ cfg.sb.target };
+            boost::urls::url request_url{ target };
             url_params_setter{ request_url }
                 ("text", text)
-                ("sdp_ratio", cfg.sb.sdp_ratio)
-                ("noise", cfg.sb.noise)
-                ("noisew", cfg.sb.noisew)
-                ("length", cfg.sb.length)
-                ("language", cfg.sb.language)
-                ("auto_split", cfg.sb.auto_split)
-                ("split_interval", cfg.sb.split_interval)
-                .set_if_else(!cfg.sb.model_name.empty(),
-                    "model_name", cfg.sb.model_name,
-                    "model_id", cfg.sb.model_id)
-                .set_if_else(!cfg.sb.speaker_name.empty(),
-                    "speaker_name", cfg.sb.speaker_name,
-                    "speaker_id", cfg.sb.speaker_id)
-                .set_if(!cfg.sb.assist_text.empty(),
-                    "assist_text", cfg.sb.assist_text)
-                .set_if(!cfg.sb.assist_text.empty(),
-                    "assist_text_weight", cfg.sb.assist_text_weight)
-                .set_if(!cfg.sb.style.empty(),
-                    "style", cfg.sb.style)
-                .set_if(!cfg.sb.style.empty(),
-                    "style_weight", cfg.sb.style_weight)
-                .set_if(!cfg.sb.reference_audio_path.empty(),
-                    "reference_audio_path", cfg.sb.reference_audio_path);
+                ("sdp_ratio", params.sdp_ratio)
+                ("noise", params.noise)
+                ("noisew", params.noisew)
+                ("length", params.length)
+                ("language", params.language)
+                ("auto_split", params.auto_split)
+                ("split_interval", params.split_interval)
+                .set_if_else(!params.model_name.empty(),
+                    "model_name", params.model_name,
+                    "model_id", params.model_id)
+                .set_if_else(!params.speaker_name.empty(),
+                    "speaker_name", params.speaker_name,
+                    "speaker_id", params.speaker_id)
+                .set_if(!params.assist_text.empty(),
+                    "assist_text", params.assist_text)
+                .set_if(!params.assist_text.empty(),
+                    "assist_text_weight", params.assist_text_weight)
+                .set_if(!params.style.empty(),
+                    "style", params.style)
+                .set_if(!params.style.empty(),
+                    "style_weight", params.style_weight)
+                .set_if(!params.reference_audio_path.empty(),
+                    "reference_audio_path", params.reference_audio_path);
             return std::string{ request_url.encoded_target() };
         }
 
@@ -4711,7 +4711,7 @@ namespace llmcpp
             tcp tcp;
             tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-            const std::string target{ make_request_url(cfg, text) };
+            const std::string target{ make_request_url(cfg.sb.target, cfg.sb, text) };
 
             LLMCPP_LOG(info) << "Send target\n```\n" << target.c_str() << "\n```";
             tcp::request_type request{ tcp::make_get_json_request(host, target) };
