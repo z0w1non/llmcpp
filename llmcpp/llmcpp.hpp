@@ -3596,6 +3596,9 @@ namespace llmcpp
         namespace
         {
             template<typename Function>
+            concept path_to_path_operation = requires(Function function, const std::filesystem::path& path) { { function(path) } -> std::same_as<std::filesystem::path>; };
+
+            template<path_to_path_operation Function>
             std::string apply_path_operation(macro_argument_type args, Function function)
             {
                 validate_arguments_size(args.arguments, 1, 1);
