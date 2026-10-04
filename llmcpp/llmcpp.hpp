@@ -1882,10 +1882,10 @@ namespace llmcpp
 
         namespace visitor
         {
-            struct assign
+            struct assign_operator
             {
                 context& ctx;
-                assign(context& ctx)
+                assign_operator(context& ctx)
                     :ctx{ ctx }
                 {
                 }
@@ -1981,7 +1981,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator, typename Trait, bool ZeroCheck>
-            struct basic_assign
+            struct basic_assign_operator
             {
                 template<typename LHS, typename RHS>
                 value_reference_type operator ()(LHS& lhs, const RHS& rhs) const
@@ -2016,7 +2016,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, trait, zero_check)                               \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                                 \
-        using opecode = basic_visit<visitor::basic_assign<operators::opecode, trait, zero_check>>;
+        using opecode = basic_visit<visitor::basic_assign_operator<operators::opecode, trait, zero_check>>;
 
         LLMCPP_DEFINE_FUNCTOR(+=, plus_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
         LLMCPP_DEFINE_FUNCTOR(-=, minus_assign, lazy_is_safe_non_bool_arithmetic_assignable_to, false);
@@ -2033,7 +2033,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator>
-            struct basic_bitwise
+            struct basic_bitwise_operator
             {
                 template<typename LHS, typename RHS>
                     requires (unwrapped_bitwise_operable<LHS>&& unwrapped_bitwise_operable<RHS>)
@@ -2053,7 +2053,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);               \
-        using opecode = basic_visit<visitor::basic_bitwise<operators::opecode>>;
+        using opecode = basic_visit<visitor::basic_bitwise_operator<operators::opecode>>;
 
         LLMCPP_DEFINE_FUNCTOR(| , or_);
         LLMCPP_DEFINE_FUNCTOR(^, xor_);
@@ -2065,7 +2065,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator>
-            struct basic_equality
+            struct basic_equality_operator
             {
                 template<typename LHS, typename RHS>
                     requires (unwrapped_safe_equality_comparable_with<LHS, RHS>)
@@ -2084,7 +2084,7 @@ namespace llmcpp
         }
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                 \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                \
-        using opecode = basic_visit<visitor::basic_equality<operators::opecode>>;
+        using opecode = basic_visit<visitor::basic_equality_operator<operators::opecode>>;
 
         LLMCPP_DEFINE_FUNCTOR(== , equal);
         LLMCPP_DEFINE_FUNCTOR(!= , not_equal);
@@ -2093,7 +2093,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator>
-            struct basic_relational
+            struct basic_relational_operator
             {
                 template<typename LHS, typename RHS>
                     requires (unwrapped_safe_totally_ordered_with<LHS, RHS>)
@@ -2113,7 +2113,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                                   \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                  \
-        using opecode = basic_visit<visitor::basic_relational<operators::opecode>>;
+        using opecode = basic_visit<visitor::basic_relational_operator<operators::opecode>>;
 
         LLMCPP_DEFINE_FUNCTOR(< , less);
         LLMCPP_DEFINE_FUNCTOR(> , greater);
@@ -2124,7 +2124,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator, bool ZeroCheck>
-            struct basic_arithmetic
+            struct basic_arithmetic_operator
             {
                 template<typename LHS, typename RHS>
                 static constexpr bool operable_v
@@ -2163,7 +2163,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, zero_check)                                   \
         LLMCPP_DEFINE_BINARY_OPERATOR_FUNCTOR(operator_, opecode);                              \
-        using opecode = basic_visit<visitor::basic_arithmetic<operators::opecode, zero_check>>;
+        using opecode = basic_visit<visitor::basic_arithmetic_operator<operators::opecode, zero_check>>;
 
         LLMCPP_DEFINE_FUNCTOR(+, plus, false);
         LLMCPP_DEFINE_FUNCTOR(-, minus, false);
@@ -2175,7 +2175,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator>
-            struct basic_prefix
+            struct basic_prefix_operator
             {
                 template<typename Operand>
                     requires requires(Operand& operand) { Operator{}(unwrap(operand)); }
@@ -2195,7 +2195,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                               \
         LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode);              \
-        using opecode = basic_visit<visitor::basic_prefix<operators::opecode>>;
+        using opecode = basic_visit<visitor::basic_prefix_operator<operators::opecode>>;
 
         LLMCPP_DEFINE_FUNCTOR(++, prefix_increment);
         LLMCPP_DEFINE_FUNCTOR(--, prefix_decrement);
@@ -2204,7 +2204,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator, typename Trait>
-            struct basic_prefix_
+            struct basic_prefix_operator_
             {
                 template<typename Operand>
                     requires (Trait::template value<llmcpp::decay_t<Operand>>)
@@ -2224,7 +2224,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode, trait)                                \
         LLMCPP_DEFINE_PREFIX_OPERATOR_FUNCTOR(operator_, opecode);                      \
-        using opecode = basic_visit<visitor::basic_prefix_<operators::opecode, trait>>;
+        using opecode = basic_visit<visitor::basic_prefix_operator_<operators::opecode, trait>>;
 
         LLMCPP_DEFINE_FUNCTOR(+, prefix_plus, lazy_is_safe_unary_arithmetic);
         LLMCPP_DEFINE_FUNCTOR(-, prefix_minus, lazy_is_safe_unary_arithmetic);
@@ -2235,7 +2235,7 @@ namespace llmcpp
         namespace visitor
         {
             template<typename Operator>
-            struct basic_suffix
+            struct basic_suffix_operator
             {
                 template<typename Operand>
                     requires requires(Operand& operand) { Operator{}(unwrap(operand)); }
@@ -2255,7 +2255,7 @@ namespace llmcpp
 
 #define LLMCPP_DEFINE_FUNCTOR(operator_, opecode)                               \
         LLMCPP_DEFINE_SUFFIX_OPERATOR_FUNCTOR(operator_, opecode);              \
-        using opecode = basic_visit<visitor::basic_suffix<operators::opecode>>;
+        using opecode = basic_visit<visitor::basic_suffix_operator<operators::opecode>>;
 
         LLMCPP_DEFINE_FUNCTOR(++, suffix_increment);
         LLMCPP_DEFINE_FUNCTOR(--, suffix_decrement);
@@ -3232,7 +3232,7 @@ namespace llmcpp
 
         value_reference_type assign::operator()(value_reference_type& lhs, const value_reference_type& rhs) const
         {
-            return boost::apply_visitor(visitor::assign{ ctx }, lhs, rhs);
+            return boost::apply_visitor(visitor::assign_operator{ ctx }, lhs, rhs);
         }
 
         std::string node_visitor::operator()(const std::string& str) const
