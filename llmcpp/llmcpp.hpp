@@ -1293,6 +1293,8 @@ namespace llmcpp
     namespace cu
     {
         std::string generate_boundary();
+        std::string make_image_body(std::string_view image_data, std::string_view filename, std::string_view boundary, bool overwrite);
+        std::string make_image_content_type(std::string_view boundary);
         std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite = true);
         void upload_images(const config& cfg, context& ctx);
         void send_request(const config& cfg, std::string_view workflow);
@@ -4724,12 +4726,8 @@ namespace llmcpp
             return oss.str();
         }
 
-        std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite)
+        std::string make_image_body(std::string_view image_data, std::string_view filename, std::string_view boundary, bool overwrite)
         {
-            const std::string image_data{ filesystem::read_binary_file_to_string(image_path, cfg) };
-            const std::string boundary{ generate_boundary() };
-            const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
-
             std::string body;
             body.reserve(154 + image_data.size() + boundary.size() + filename.size());
 
@@ -4752,6 +4750,27 @@ namespace llmcpp
             body += boundary;
             body += "--\r\n";
 
+            return body;
+        }
+
+        std::string make_image_content_type(std::string_view boundary)
+        {
+            std::string content_type;
+            content_type.reserve(30 + boundary.size());
+            content_type += "multipart/form-data; boundary=";
+            content_type += boundary;
+            return content_type;
+        }
+
+        std::string upload_image(const config& cfg, std::string_view image_path, bool overwrite)
+        {
+            const std::string image_data{ filesystem::read_binary_file_to_string(image_path, cfg) };
+            const std::string filename{ std::filesystem::path{ image_path }.filename().string() };
+            const std::string boundary{ generate_boundary() };
+
+            const std::string body{ make_image_body(image_data, filename, boundary, overwrite) };
+            const std::string content_type{ make_image_content_type(boundary) };
+
             const std::string_view host{ cfg.cu.host };
             const std::string_view port{ cfg.cu.port };
             const std::string_view target{ cfg.cu.upload_image_target };
@@ -4759,10 +4778,6 @@ namespace llmcpp
             tcp tcp;
             tcp.expires_after(std::chrono::seconds{ cfg.timeout_connect }).connect(host, port);
 
-            std::string content_type;
-            content_type.reserve(30 + boundary.size());
-            content_type += "multipart/form-data; boundary=";
-            content_type += boundary;
             tcp::request_type request{ tcp::make_post_json_request(host, target, body) };
             request.set(boost::beast::http::field::content_type, content_type);
             request.prepare_payload();
