@@ -1281,6 +1281,8 @@ namespace llmcpp
         std::string make_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
         nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
+        nlohmann::json make_abg_remover_request();
+        nlohmann::json make_adetailer_request(const config& cfg);
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
         std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
     } // namespace sd
@@ -4586,6 +4588,42 @@ namespace llmcpp
             return json;
         }
 
+        nlohmann::json make_abg_remover_request()
+        {
+            nlohmann::json json(nlohmann::json::object());
+            json["script_name"] = "abg remover";
+            json["script_args"] =
+            {
+                false,
+                false,
+                false,
+                "#000000",
+                false
+            };
+            return json;
+        }
+
+        nlohmann::json make_adetailer_request(const config& cfg)
+        {
+            nlohmann::json json(nlohmann::json::object());
+            nlohmann::json alwayson_scripts{ nlohmann::json::object() };
+            nlohmann::json adetailer{ nlohmann::json::object() };
+            nlohmann::json object{ nlohmann::json::object() };
+            object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_model;
+            if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt.empty())
+            {
+                object["ad_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt;
+            }
+            if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt.empty())
+            {
+                object["ad_negative_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt;
+            }
+            adetailer["args"] = { true, false, object };
+            alwayson_scripts["ADetailer"] = adetailer;
+            json["alwayson_scripts"] = alwayson_scripts;
+            return json;
+        }
+
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json(cfg.sd.common);
@@ -4605,21 +4643,7 @@ namespace llmcpp
 
             if (cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)
             {
-                nlohmann::json alwayson_scripts{ nlohmann::json::object() };
-                nlohmann::json adetailer{ nlohmann::json::object() };
-                nlohmann::json object{ nlohmann::json::object() };
-                object["ad_model"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_model;
-                if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt.empty())
-                {
-                    object["ad_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_prompt;
-                }
-                if (!cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt.empty())
-                {
-                    object["ad_negative_prompt"] = cfg.sd.common.alwayson_scripts.adetailer_parameters.args1.ad_negative_prompt;
-                }
-                adetailer["args"] = { true, false, object };
-                alwayson_scripts["ADetailer"] = adetailer;
-                json["alwayson_scripts"] = alwayson_scripts;
+                json.update(make_adetailer_request(cfg));
             }
 
             if (cfg.sd.mode == sd_mode::txt2img)
@@ -4633,15 +4657,7 @@ namespace llmcpp
 
             if (cfg.sd.abg_remover_enable)
             {
-                json["script_name"] = "abg remover";
-                json["script_args"] =
-                {
-                    false,
-                    false,
-                    false,
-                    "#000000",
-                    false
-                };
+                json.update(make_abg_remover_request());
             }
 
             return json;
