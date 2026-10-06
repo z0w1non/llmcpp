@@ -5113,7 +5113,9 @@ namespace llmcpp
                 }
             };
 
-            const auto command_mode_notifier{ [&cfg](const std::string& value)
+            const auto command_mode_notifier
+            {
+                [&cfg](const std::string& value)
                 {
                     cfg.command_mode = string_to_command_mode(value);
 
