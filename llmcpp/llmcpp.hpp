@@ -764,7 +764,6 @@ namespace llmcpp
         bool preserve_subdirectories{};
     };
 
-
     using value_type = boost::variant<int, bool, char, double, std::string>;
 
     struct undefined_variable_type
@@ -862,11 +861,29 @@ namespace llmcpp
         std::vector<std::string> descriptions;
     };
 
-    BOOST_DEFINE_ENUM_CLASS(command_mode, tg, kc, sd, sb, cu, extract_png_parameters);
+    enum class command_mode
+    {
+        tg, kc, sd, sb, cu, extract_png_parameters, create_process, terminate_process
+    };
 
     command_mode string_to_command_mode(std::string_view name);
 
     int send_token_count_request(const config& cfg, std::string_view prompt);
+
+    struct png_parameters
+    {
+        std::string png_file;
+    };
+
+    struct process_parameters
+    {
+        std::string server_executable_file;
+        std::string server_arguments;
+        std::string server_host;
+        std::string server_port;
+        int server_max_retries{};
+        int server_wait_ms{};
+    };
 
     struct config
     {
@@ -884,17 +901,6 @@ namespace llmcpp
 
         int seed{};
 
-        bool create_process{};
-        bool terminate_process{};
-
-        std::string png_file;
-
-        std::string server_executable_file;
-        std::string server_arguments;
-        std::string server_host;
-        std::string server_port;
-        int server_max_retries;
-        int server_wait_ms;
         unsigned int timeout_connect{};
         unsigned int timeout_request{};
 
@@ -904,6 +910,8 @@ namespace llmcpp
         sd_parameters sd;
         sb_parameters sb;
         cu_parameters cu;
+        png_parameters png;
+        process_parameters proc;
 
         mutable cache_type lru_cache{ make_lru_cache_callback() };
         context ctx;
@@ -1281,8 +1289,8 @@ namespace llmcpp
         std::string make_png_parameters(const sd_parameters& parameters, std::string_view prompt, std::string_view negative_prompt);
         nlohmann::json make_txt2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
         nlohmann::json make_img2img_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
-        nlohmann::json make_abg_remover_request();
         nlohmann::json make_adetailer_request(const config& cfg);
+        nlohmann::json make_abg_remover_request();
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
         std::string send_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt);
     } // namespace sd
@@ -1374,7 +1382,6 @@ namespace llmcpp
     void set_seed(config& cfg);
     void create_process(const config& cfg);
     void terminate_process(const config& cfg);
-    void create_process_or_terminate(const config& cfg);
     void iterate(config& cfg);
     int exception_safe_main(int argc, char** argv) noexcept;
     int nowide_main(int argc, char** argv);
@@ -2591,10 +2598,22 @@ namespace llmcpp
 
     command_mode string_to_command_mode(std::string_view name)
     {
-        command_mode result{};
-        if (boost::describe::enum_from_string(name, result))
+        using map_type = string_view_unordered_map<command_mode>;
+        static const map_type macros
         {
-            return result;
+            { "tg", command_mode::tg },
+            { "kc", command_mode::kc },
+            { "sd", command_mode::sd },
+            { "sb", command_mode::sb },
+            { "cu", command_mode::cu },
+            { "extract-png-parameters", command_mode::extract_png_parameters },
+            { "create-process", command_mode::create_process },
+            { "terminate-process", command_mode::terminate_process }
+        };
+
+        if (const map_type::const_iterator iter{ macros.find(name) }; iter != macros.end())
+        {
+            return iter->second;
         }
         llmcpp::throw_exception(command_line_exception{} << error_info::description{ "Unknown mode string " + std::string{ name } });
     }
@@ -4588,21 +4607,6 @@ namespace llmcpp
             return json;
         }
 
-        nlohmann::json make_abg_remover_request()
-        {
-            nlohmann::json json(nlohmann::json::object());
-            json["script_name"] = "abg remover";
-            json["script_args"] =
-            {
-                false,
-                false,
-                false,
-                "#000000",
-                false
-            };
-            return json;
-        }
-
         nlohmann::json make_adetailer_request(const config& cfg)
         {
             nlohmann::json json(nlohmann::json::object());
@@ -4624,6 +4628,21 @@ namespace llmcpp
             return json;
         }
 
+        nlohmann::json make_abg_remover_request()
+        {
+            nlohmann::json json(nlohmann::json::object());
+            json["script_name"] = "abg remover";
+            json["script_args"] =
+            {
+                false,
+                false,
+                false,
+                "#000000",
+                false
+            };
+            return json;
+        }
+
         nlohmann::json make_request(const config& cfg, std::string_view prompt, std::string_view negative_prompt)
         {
             nlohmann::json json(cfg.sd.common);
@@ -4641,11 +4660,6 @@ namespace llmcpp
                 json["sampler_index"] = cfg.sd.common.sampler_index;
             }
 
-            if (cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)
-            {
-                json.update(make_adetailer_request(cfg));
-            }
-
             if (cfg.sd.mode == sd_mode::txt2img)
             {
                 json.update(make_txt2img_request(cfg, prompt, negative_prompt));
@@ -4653,6 +4667,11 @@ namespace llmcpp
             else if (cfg.sd.mode == sd_mode::img2img)
             {
                 json.update(make_img2img_request(cfg, prompt, negative_prompt));
+            }
+
+            if (cfg.sd.common.alwayson_scripts.adetailer_parameters.ad_enable)
+            {
+                json.update(make_adetailer_request(cfg));
             }
 
             if (cfg.sd.abg_remover_enable)
@@ -5169,7 +5188,7 @@ namespace llmcpp
             po::options_description options_description("Allowed options");
             options_description.add_options()
                 ("help,h", "produce help message")
-                ("mode", po::value<std::string>()->notifier(command_mode_notifier), "mode (tg | kc | sd | sb | cu | extract-png-parameters)")
+                ("mode", po::value<std::string>()->notifier(command_mode_notifier), "mode (tg | kc | sd | sb | cu | extract-png-parameters | create-process | terminate-process)")
                 ("base-path", po::value(&cfg.base_path)->default_value("."), "base path")
                 ("log-level", po::value<std::string>()->default_value("info")->notifier(log_level_notifier), "log level (trace|debug|info|warning|error|fatal)")
                 ("log-file", po::value(&cfg.log_file)->default_value("log"), "log file path")
@@ -5180,15 +5199,15 @@ namespace llmcpp
                 ("phases", po::value<std::vector<std::string>>()->multitoken()->default_value(std::vector<std::string>{ "" }, "")->notifier(make_unescape_strings_notifier(cfg.phases)), "phases name list")
                 ("seed", po::value(&cfg.seed)->default_value(-1), "seed value")
 
-                ("create-process", po::bool_switch(&cfg.create_process)->default_value(false), "create process switch")
-                ("terminate-process", po::bool_switch(&cfg.terminate_process)->default_value(false), "terminate process switch")
-                ("png-file", po::value(&cfg.png_file)->default_value(""), "for extract-png-parametesrs")
-                ("server-executable-file", po::value(&cfg.server_executable_file)->default_value(""), "server executable file")
-                ("server-arguments", po::value(&cfg.server_arguments), "server arguments")
-                ("server-host", po::value(&cfg.server_host)->default_value("localhost"), "server ip")
-                ("server-port", po::value(&cfg.server_port)->default_value("5000"), "server port")
-                ("server-max-retries", po::value(&cfg.server_max_retries)->default_value(60), "server max retries")
-                ("server-wait-ms", po::value(&cfg.server_wait_ms)->default_value(1000), "server wait ms")
+                ("png-file", po::value(&cfg.png.png_file), "for extract-png-parametesrs")
+
+                ("server-executable-file", po::value(&cfg.proc.server_executable_file)->default_value(""), "server executable file")
+                ("server-arguments", po::value(&cfg.proc.server_arguments), "server arguments")
+                ("server-host", po::value(&cfg.proc.server_host)->default_value("localhost"), "server ip")
+                ("server-port", po::value(&cfg.proc.server_port)->default_value("5000"), "server port")
+                ("server-max-retries", po::value(&cfg.proc.server_max_retries)->default_value(60), "server max retries")
+                ("server-wait-ms", po::value(&cfg.proc.server_wait_ms)->default_value(1000), "server wait ms")
+
                 ("timeout-connect", po::value(&cfg.timeout_connect)->default_value(10), "Time limit for establishing the connection (handshake completion)")
                 ("timeout-request", po::value(&cfg.timeout_request)->default_value(0), "Time limit from sending the request to completing the receipt of the response.")
 
@@ -6424,11 +6443,11 @@ namespace llmcpp
 
     void create_process(const config& cfg)
     {
-        if (!cfg.server_executable_file.empty())
+        if (!cfg.proc.server_executable_file.empty())
         {
-            const std::vector<std::string> arguments{ command_line::split_command_line_args(cfg.server_arguments) };
-            create_process_async(cfg.server_executable_file, arguments);
-            if (!wait_for_port(cfg.server_host, cfg.server_port, cfg.server_max_retries, cfg.server_wait_ms))
+            const std::vector<std::string> arguments{ command_line::split_command_line_args(cfg.proc.server_arguments) };
+            create_process_async(cfg.proc.server_executable_file, arguments);
+            if (!wait_for_port(cfg.proc.server_host, cfg.proc.server_port, cfg.proc.server_max_retries, cfg.proc.server_wait_ms))
             {
                 LLMCPP_LOG(warning) << "Connection timed out waiting for server response.";
             }
@@ -6437,24 +6456,12 @@ namespace llmcpp
 
     void terminate_process(const config& cfg)
     {
-        if (!cfg.server_executable_file.empty())
+        if (!cfg.proc.server_executable_file.empty())
         {
-            if (terminate_process_by_path(cfg.server_executable_file) == 0)
+            if (terminate_process_by_path(cfg.proc.server_executable_file) == 0)
             {
-                LLMCPP_LOG(warning) << "Failed to terminate process by executable file path (" << cfg.server_executable_file << ").";
+                LLMCPP_LOG(warning) << "Failed to terminate process by executable file path (" << cfg.proc.server_executable_file << ").";
             }
-        }
-    }
-
-    void create_process_or_terminate(const config& cfg)
-    {
-        if (cfg.create_process)
-        {
-            create_process(cfg);
-        }
-        else if (cfg.terminate_process)
-        {
-            terminate_process(cfg);
         }
     }
 
@@ -6502,16 +6509,20 @@ namespace llmcpp
             }
             command_line::after_parse(cfg);
 
-            if (cfg.create_process || cfg.terminate_process)
-            {
-                create_process_or_terminate(cfg);
-                return 0;
-            }
-
             if (cfg.command_mode == command_mode::extract_png_parameters)
             {
-                const std::string parameters{ tEXt::extract_parameters(filesystem::read_binary_file_to_string(cfg.png_file, cfg)) };
+                const std::string parameters{ tEXt::extract_parameters(filesystem::read_binary_file_to_string(cfg.png.png_file, cfg)) };
                 boost::nowide::cout << parameters << std::flush;
+                return 0;
+            }
+            else if (cfg.command_mode == command_mode::create_process)
+            {
+                create_process(cfg);
+                return 0;
+            }
+            else if (cfg.command_mode == command_mode::terminate_process)
+            {
+                terminate_process(cfg);
                 return 0;
             }
 
