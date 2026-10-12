@@ -31,11 +31,6 @@ llmcpp は、生成AIによりテキスト・画像・音声を生成する作�
 	* https://www.boost.org/
 * C++20+
 
-```
-vcpkg install boost
-vcpkg integrate install
-```
-
 ## 共通設定
 下記の設定は、対象とするバックエンドに依存せず共通して参照される。
 
