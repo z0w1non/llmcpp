@@ -28,7 +28,7 @@ llmcpp は、生成AIによりテキスト・画像・音声を生成する作�
 
 ## ビルド要求
 * Boost 1.88.0+
-	* https://www.boost.org/
+* Google Test
 * C++20+
 
 ## 共通設定
